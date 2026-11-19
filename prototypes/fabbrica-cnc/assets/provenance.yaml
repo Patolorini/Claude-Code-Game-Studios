@@ -9,3 +9,178 @@
 #   date: 2026-01-31
 #   ships: true               # false for a file only the build uses
 #   placeholder: true         # until it is replaced; leave the line out otherwise
+- path: assets/mach_T1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 8e056762-03b0-4233-9247-70ab15572d7f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Troncatrice Mk I", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_T2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 8e056762-03b0-4233-9247-70ab15572d7f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Troncatrice Mk II", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_T3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 8e056762-03b0-4233-9247-70ab15572d7f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Troncatrice Mk III", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_T4.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 8e056762-03b0-4233-9247-70ab15572d7f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Troncatrice Mk IV", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_T5.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 8e056762-03b0-4233-9247-70ab15572d7f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Troncatrice Mk V", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_L1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 25098134-ecea-4842-a03d-7042803d270c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Tornio Mk I", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_L2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 25098134-ecea-4842-a03d-7042803d270c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Tornio Mk II", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_L3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 25098134-ecea-4842-a03d-7042803d270c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Tornio Mk III", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_L4.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 25098134-ecea-4842-a03d-7042803d270c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Tornio Mk IV", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_L5.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 25098134-ecea-4842-a03d-7042803d270c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Tornio Mk V", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_F1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 8f9c55ea-1896-458b-adee-3fe4e43801a1)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Fresa Mk I", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_F2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 8f9c55ea-1896-458b-adee-3fe4e43801a1)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Fresa Mk II", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_F3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 8f9c55ea-1896-458b-adee-3fe4e43801a1)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Fresa Mk III", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_F4.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 8f9c55ea-1896-458b-adee-3fe4e43801a1)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Fresa Mk IV", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_F5.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 8f9c55ea-1896-458b-adee-3fe4e43801a1)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Fresa Mk V", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_D1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset a37edd28-2eff-42a0-a8d8-7d3f459bd953)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Foratrice Mk I", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_D2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset a37edd28-2eff-42a0-a8d8-7d3f459bd953)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Foratrice Mk II", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_D3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset a37edd28-2eff-42a0-a8d8-7d3f459bd953)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Foratrice Mk III", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_D4.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset a37edd28-2eff-42a0-a8d8-7d3f459bd953)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Foratrice Mk IV", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_D5.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset a37edd28-2eff-42a0-a8d8-7d3f459bd953)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Foratrice Mk V", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_X1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 5d3676fb-d10a-4830-bf0d-845df482324f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Centro di lavoro 5 assi Mk I", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_X2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 5d3676fb-d10a-4830-bf0d-845df482324f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Centro di lavoro 5 assi Mk II", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_X3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 5d3676fb-d10a-4830-bf0d-845df482324f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Centro di lavoro 5 assi Mk III", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_X4.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 5d3676fb-d10a-4830-bf0d-845df482324f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Centro di lavoro 5 assi Mk IV", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true
+- path: assets/mach_X5.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent background), one sheet of 5 generations per kind, cut by connected alpha (sheet asset 5d3676fb-d10a-4830-bf0d-845df482324f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Centro di lavoro 5 assi Mk V", url: "https://spritecook.ai"}
+  date: 2026-11-19
+  ships: true

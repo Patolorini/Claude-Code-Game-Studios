@@ -565,7 +565,28 @@ function cellsOf(m, c = m.c, r = m.r, mk = m.mk || 1, dir = m.dir || 0, type = m
 function placeMachineCells(m) { cellsOf(m).forEach(([c, r], i) => setCell(c, r, { kind: 'mach', m, main: i === 0 })); }
 function clearMachineCells(m) { for (const [c, r] of cellsOf(m)) { const o = cellAt(c, r); if (o && o.kind === 'mach' && o.m === m) clearCell(c, r); } }
 function fitsAt(c, r, mk, dir, self, type) { return cellsOf(null, c, r, mk, dir, type).every(([cc, rr]) => { if (!inShed(cc, rr)) return false; const o = cellAt(cc, rr); return !o || (self && o.kind === 'mach' && o.m === self); }); }
-const machineTopM = (type, mk = 1) => mk === 1 ? 34 + (type === 'F' || type === 'D' ? 8 : 0) : ({ T: [36, 44, 50, 54], L: [34, 42, 48, 52], F: [52, 58, 66, 70], D: [50, 56, 66, 58], X: [50, 56, 64, 66] }[type] || [40, 46, 56, 66])[mk - 2];
+const machineTopV = (type, mk = 1) => mk === 1 ? 34 + (type === 'F' || type === 'D' ? 8 : 0) : ({ T: [36, 44, 50, 54], L: [34, 42, 48, 52], F: [52, 58, 66, 70], D: [50, 56, 66, 58], X: [50, 56, 64, 66] }[type] || [40, 46, 56, 66])[mk - 2];
+// ---- Machine sprites (SpriteCook pixel art, assets/mach_<type><mk>.png): drawn on the footprint, the vector drawing stays as a fallback ----
+const MACH_IMG = {};
+function machImg(type, mk) { // the loaded sprite, or null while it loads or if it failed
+  const k = type + mk; let im = MACH_IMG[k];
+  if (!im) { im = MACH_IMG[k] = new Image(); im.onerror = () => { im.bad = true; }; im.src = 'assets/mach_' + k + '.png'; }
+  return !im.bad && im.complete && im.naturalWidth ? im : null;
+}
+function spriteTop(im, w, h) { const dh = im.naturalHeight * (w + h) * TW / 2 * tune.machSpriteFit / im.naturalWidth; return Math.max(20, Math.round(dh - (w + h) * TH / 2 + 2)); } // height of the sprite's top above the footprint centre
+function machineTopM(type, mk = 1) { const im = machImg(type, mk), [w, h] = fpDims(mk, 0, type); return im ? spriteTop(im, w, h) : machineTopV(type, mk); }
+function drawMachineSprite(im, col, row, w, h, dir, st, t, busy) {
+  const dw = (w + h) * TW / 2 * tune.machSpriteFit, dh = im.naturalHeight * dw / im.naturalWidth;
+  const cx = (iso(col, row + h)[0] + iso(col + w, row)[0]) / 2, by = iso(col + w, row + h)[1] - 1;
+  const flip = w > h || (w === h && dir % 2 === 1); // the art runs its long side to the lower left: mirror it when the long side runs to the lower right
+  const shake = busy ? Math.round(Math.sin(t * 40)) * 0.5 : 0;
+  ctx.save(); ctx.translate(cx + shake, by); if (flip) ctx.scale(-1, 1);
+  ctx.imageSmoothingEnabled = Math.abs(ctx.getTransform().a) * dw / im.naturalWidth < 1;
+  ctx.drawImage(im, -dw / 2, -dh, dw, dh); ctx.restore();
+  const top = spriteTop(im, w, h);
+  stackLight(col + w / 2, row + h / 2, top - 4, st, t); // the status light, on top of the art
+  return top;
+}
 const GEN = { // the look of each generation: paint, base, how much it shines
   2: { body: '#6f8270', top: '#7d8f7a', base: '#8a8478' },
   3: { body: '#eadcbc', top: '#d6c8a8', base: '#6e675c' },
@@ -664,6 +685,8 @@ function drawMachine(type, col, row, o = {}) {
   const c0 = col + 0.06, r0 = row + 0.06, c1 = col + w - 0.06, r1 = row + h - 0.06, cm = (c0 + c1) / 2, rm = (r0 + r1) / 2, longC = w >= h;
   const frontQ = (za, zb, a = 0.1, b = 0.1) => longC ? qL(c0 + (c1 - c0) * a, c1 - (c1 - c0) * b, r1, za, zb) : qR(c1, r0 + (r1 - r0) * a, r1 - (r1 - r0) * b, za, zb); // the long face toward the camera
   const frontAt = (u, z) => longC ? [c0 + (c1 - c0) * u, r1, z] : [c1, r0 + (r1 - r0) * u, z];
+  const im = o.vector ? null : machImg(type, mk);
+  if (im) return drawMachineSprite(im, col, row, w, h, dir, st, t, busy);
   let top;
   if (mk === 1) { // an old hand-cranked machine: cast iron on a wooden plinth, a belt to the motor, brass plate, handwheels
     box(c0, r0, c1, r1, 0, 5, '#7a5230'); line(iso(c0 + 0.3, r1, 0), iso(c0 + 0.3, r1, 5), '#4a2f1d', 1); line(iso(c1, r0 + 0.3, 0), iso(c1, r0 + 0.3, 5), '#4a2f1d', 1);
@@ -3746,6 +3769,7 @@ function tick() {
   drawFrame();
 }
 function drawFrame() { ctx.setTransform(VIEW_R, 0, 0, VIEW_R, 0, 0); scenes[scene].draw(); }
+ORDER.forEach(t => { for (let mk = 1; mk <= 5; mk++) machImg(t, mk); }); // start loading every machine sprite
 function frame() { tick(); requestAnimationFrame(frame); }
 function timer() { if (document.visibilityState === 'visible' && clock.now() - last > 0.1) tick(); }
 

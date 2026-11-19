@@ -191,6 +191,7 @@ window.CONFIG = {
   panSpeed: { value: 420, min: 50, max: 2000, step: 10 },    // px/s con le frecce
   workerSpeed: { value: 1.3, min: 0.2, max: 5, step: 0.1 },  // celle al secondo
   dayLength: { value: 525, min: 50, max: 3000, step: 5 },   // s reali di una giornata a x1: il turno di 8 ore (08-16) ne è l'80% = 7 minuti; a fine turno il tempo si ferma
+  machSpriteFit: { value: 0.96, min: 0.6, max: 1.2, step: 0.01 }, // larghezza degli sprite delle macchine rispetto all'ingombro sullo schermo
   backdropScale: { value: 2.5, min: 1, max: 6, step: 0.1 }, // celle di fabbrica per ogni cella della mappa: quanto è ingrandito il quartiere intorno
   perkSpeed: { value: 0.8, min: 0.3, max: 1, step: 0.05 },   // abilità 'più veloce': tempo per pezzo moltiplicato per questo
   perkQuality: { value: 0.15, min: 0, max: 1, step: 0.05 },  // abilità 'precisione': qualità aggiunta ai pezzi
