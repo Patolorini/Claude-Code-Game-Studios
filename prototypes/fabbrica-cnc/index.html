@@ -223,7 +223,7 @@ const recipeVal = seq => recipeOf(seq) ? tune['val_' + seq] : tune.val_scrap;
 const PHASES = ['Montaggio', 'Rete', 'Configurazione'];
 const TOOLS = [
   { key: 'W', name: 'Chiave dinamometrica', phase: 0, req: 'toolReqW', eff: l => `${boltTurnsAt(l)} giri per bullone` },
-  { key: 'C', name: 'Crimpatrice', phase: 1, req: 'toolReqC', eff: l => `${crimpTapsAt(l)} tocchi di crimpatura` },
+  { key: 'C', name: 'Crimpatrice', phase: 1, req: 'toolReqC', eff: l => `${crimpTapsAt(l)} tocchi, rete +${Math.round(netMax(l) * 100)}%` },
   { key: 'Te', name: 'Tester digitale', phase: 2, req: 'toolReqT', eff: l => `zona verde ${Math.round(zoneAt(l) * 100)}%${l > 1 ? ', ago più lento' : ''}` },
 ];
 const boltTurnsAt = l => Math.max(1, tune.boltTurns - (l - 1));
@@ -371,7 +371,8 @@ function wipeSave() { try { localStorage.removeItem(SAVE_KEY); } catch (_) { /* 
 
 // a machine is built in two steps (assembly, configuration) and works at once; networking is a later choice that raises its output
 const buildQ = m => avg([m.pct[0], m.pct[2]].filter(v => v != null)) / 100;
-const netBonus = m => m.netPct == null ? 0 : tune.netBonus * m.netPct / 100;
+const netMax = (l = state.tools.C) => tune.netBonus + tune.netBonusPerLvl * (l - 1); // the Crimpatrice raises what a network adds
+const netBonus = m => m.netPct == null ? 0 : netMax() * m.netPct / 100;
 const mult = m => tune.qualityBase + m.quality + netBonus(m);
 function makeMachine(type, c, r, dir, id, phase = 0, pct = [], netPct = null) {
   const m = { id: id || state.nextId++, type, c, r, dir, phase, pct: pct.slice(), netPct, cur: null, out: null, proc: 0 };
@@ -1401,7 +1402,7 @@ function drawMinigame(t) {
     text(`${tl.name} · liv. ${tlv}`, x + 250, y + 110, 20, '#f2c230', 'left');
     const how = [
       `Tocca i bulloni nell'ordine dei numeri (1, 2, 3...). Ogni bullone richiede ${boltTurnsAt(tlv)} giri di chiave. Un bullone sbagliato costa ${tune.mgPenalty.toFixed(0)} s.`,
-      `Trascina il cavo dal rack (a sinistra) alla macchina (a destra), girando intorno a pilastri, pallet e macchie d'olio. Poi crimpa il connettore con ${crimpTapsAt(tlv)} tocchi. In rete la macchina rende fino a +${Math.round(tune.netBonus * 100)}%.`,
+      `Trascina il cavo dal rack (a sinistra) alla macchina (a destra), girando intorno a pilastri, pallet e macchie d'olio. Poi crimpa il connettore con ${crimpTapsAt(tlv)} tocchi. In rete la macchina rende fino a +${Math.round(netMax() * 100)}%.`,
       `Ferma l'ago nella zona verde di ogni parametro: tocca lo schermo o premi Spazio. Fuori dalla zona costa ${tune.mgPenalty.toFixed(0)} s.`,
     ][mg.phase];
     wrapText(how, x + 250, y + 150, w - 300, 18, '#e6e1d3', 26);
@@ -1589,14 +1590,27 @@ function plan(R) { // what drawing this rectangle does: a new building, or an ex
     for (const [dc, dr] of [[0, 0], ...DIRS]) { const b = buildingAt(c + dc, r + dr); if (b) touched.add(b); }
   }
   const target = touched.size === 1 ? [...touched][0] : null;
+  // every other building must stay minGap free tiles away, room to walk and to lay belts between them
+  const near = state.buildings.some(b => b !== target && [...b.cells].some(bk => { const [bc, brr] = bk.split(',').map(Number); return [...tiles].some(k => { const [c, r] = k.split(',').map(Number); return Math.max(Math.abs(c - bc), Math.abs(r - brr)) <= tune.minGap; }); }));
   const fresh = [...tiles].filter(k => !target || !target.cells.has(k));
   const cost = fresh.length * tune.cellCost + (target ? 0 : buildingCost(state.buildings.length));
-  return { tiles, touched, target, fresh, cost };
+  // how wide and deep the new part meets the building: the longest run of shared edge, and the part's size across it
+  let join = { w: 0, d: 0 };
+  if (target) for (const [dc, dr] of DIRS) {
+    const along = dc ? 'r' : 'c', touch = fresh.map(k => k.split(',').map(Number)).filter(([c, r]) => target.cells.has(K(c + dc, r + dr)));
+    const vals = [...new Set(touch.map(([c, r]) => along === 'r' ? r : c))].sort((a, b) => a - b);
+    let run = 0, best = 0; vals.forEach((v, i) => { run = i && v === vals[i - 1] + 1 ? run + 1 : 1; best = Math.max(best, run); });
+    const depth = new Set(fresh.map(k => k.split(',').map(Number)[dc ? 0 : 1])).size;
+    if (best > join.w || (best === join.w && depth > join.d)) join = { w: best, d: depth };
+  }
+  return { tiles, touched, target, fresh, cost, near, join };
 }
 function drawCheck(R) { // why a drawn rectangle cannot be built, or '' when it can
   const D = WORLD(), P = plan(R);
   if (R.bc < 0 || R.br < 0 || R.bc + R.w > D.c || R.br + R.h > D.r) return 'Esce dal prato';
   if (P.touched.size > 1) return 'Tocca due capannoni diversi';
+  if (P.near) return `Lascia almeno ${tune.minGap} casell${tune.minGap > 1 ? 'e' : 'a'} di prato tra due capannoni`;
+  if (P.target && P.fresh.length && (P.join.w < tune.joinWidth || P.join.d < tune.joinDepth)) return `Collegamento troppo stretto: serve un passaggio di almeno ${tune.joinWidth}×${tune.joinDepth} per i nastri`;
   if (!P.target) {
     const n = state.buildings.length;
     if (n >= tune.maxBuildings) return 'Hai già tutti i capannoni separati possibili: attaccalo a uno esistente';

@@ -115,7 +115,8 @@ window.CONFIG = {
 
   rackCost: { value: 400, min: 0, max: 5000, step: 10 },      // Rack di rete in più (il primo di ogni capannone è gratis)
   rackLvl: { value: 3, min: 1, max: 10, step: 1 },           // livello che sblocca il Rack di rete
-  netBonus: { value: 0.3, min: 0, max: 2, step: 0.05 },       // resa in più di una macchina in rete al 100% (0.3 = +30%)
+  netBonus: { value: 0.1, min: 0, max: 2, step: 0.01 },       // resa in più di una macchina in rete al 100%, all'inizio (0.1 = +10%)
+  netBonusPerLvl: { value: 0.05, min: 0, max: 1, step: 0.01 }, // in più per ogni livello della Crimpatrice oltre il primo
 
   // ---- Esterno: prato e capannoni disegnati dal giocatore ----
   worldCols: { value: 30, min: 10, max: 60, step: 1 },        // larghezza del prato (caselle)
@@ -125,6 +126,9 @@ window.CONFIG = {
   areaBase: { value: 30, min: 9, max: 200, step: 1 },         // celle massime di un capannone (con tutte le sue parti) al livello 1
   areaPerLvl: { value: 12, min: 0, max: 50, step: 1 },        // celle massime in più per ogni livello
   minSide: { value: 3, min: 2, max: 6, step: 1 },             // lato minimo di un capannone
+  minGap: { value: 1, min: 1, max: 6, step: 1 },              // caselle di prato libero tra due capannoni separati (anche in diagonale)
+  joinWidth: { value: 3, min: 1, max: 6, step: 1 },           // un pezzo attaccato deve toccare il capannone per almeno tante celle di fila
+  joinDepth: { value: 2, min: 1, max: 6, step: 1 },           // e sporgere almeno tante celle: un passaggio 3×2 per i nastri
   maxCols: { value: 14, min: 4, max: 14, step: 1 },           // lato massimo (colonne)
   maxRows: { value: 10, min: 4, max: 10, step: 1 },           // lato massimo (file)
   maxBuildings: { value: 4, min: 1, max: 4, step: 1 },        // capannoni separati (quelli attaccati diventano uno solo); building2..4 qui sotto

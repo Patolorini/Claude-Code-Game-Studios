@@ -16,6 +16,8 @@ After play: ci ho giocato, guarda il gioco Satisfactory e prendi spunto da li su
 After play: Fai che il gioco parte da prima di creare l’intera fabbrica il giocatore parte con un prato pulito stile clash of clans e deve creare le mura così puo fare più edifici, hai inizialmente la visuale dall’alto e cliccando sopra quell’edificio ci entri e puoi iniziare a creare la tua fabbrica piazzano i macchinare, il rack, ecc.
 After play: Togli le mura e metti la possibilità di creare da capo il capannone su come mettere i muri del capannone ovviamente più è grande e più costa metti un limite iniziale che con l’avanzare dei livelli puoi ingrandire il capannone, inizialmente metti un tutorial così puoi partire dagl’inizi per fare un po di soldi per poi andare avanti
 After play: Metti la possibilità di creare più capannoni e collegarli tra loro tipo creare delle creazioni ad U, inoltre metti che il rack di rete si sblocca dopo un po’ cosi e puoi decidere tu quando collegare le macchine in rete in modo che il mini gioco non parte subito ma decide il giocatore
+After play: Tra un capannone e l’altro se non c’é spazio per passare con i nastri non puoi lasciarlo fare al giocatore per non avere bug visivi , mentre il collegamento in rete garantisce alla macchina inizialmente il 10% in più di guadagno
+After play: Lascia la possibilità di creare come si vuole il capannone ma avvisa il giocatore quando manca lo spazio per far passare i nastri deve avere almeno un collegamento di un 3x2 tra un capannone e l’altro
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 
@@ -53,9 +55,9 @@ Nessun fallimento *(you said)*. La sfida è di ottimizzazione: verso il 3°-5° 
 - Nessun fallimento *(you said)*: si gioca e si cresce, con salvataggio automatico.
 
 ## Features
-- [x] Esterno: prato pulito visto dall'alto dove disegni tu le pareti del capannone trascinando rettangoli: uno attaccato a un capannone lo allarga (forme a L, a U), uno staccato ne crea un altro (fino a 4); più è grande più costa, limite di celle che cresce col livello; toccandone uno ci entri
+- [x] Esterno: prato pulito visto dall'alto dove disegni tu le pareti del capannone trascinando rettangoli: uno attaccato a un capannone lo allarga (forme a L, a U), uno staccato ne crea un altro (fino a 4, staccati di almeno una casella); un pezzo attaccato deve avere un collegamento largo almeno 3×2 per far passare i nastri, altrimenti il gioco avvisa e non lo costruisce; più è grande più costa, limite di celle che cresce col livello; toccandone uno ci entri
 - [x] Dentro ogni capannone si parte vuoti: Magazzino e Cassa da piazzare (il primo di ognuno gratis); il Rack di rete si sblocca al livello 3
-- [x] Una macchina si costruisce con Montaggio e Configurazione e lavora subito; il collegamento in rete (minigioco Rete) lo sceglie il giocatore dalla macchina e la fa rendere fino a +30%
+- [x] Una macchina si costruisce con Montaggio e Configurazione e lavora subito; il collegamento in rete (minigioco Rete) lo sceglie il giocatore dalla macchina e la fa rendere +10% all'inizio (fino a +25% con la Crimpatrice al massimo)
 - [x] Capannone isometrico a griglia con trascinamento e zoom, piazzamento libero con anteprima e rotazione dell'uscita
 - [x] Nastri trasportatori posati trascinando, Magazzini barre e Casse vendita acquistabili: ogni giocatore disegna le sue linee
 - [x] Tutorial iniziale: l'operaio-guida e le frecce accompagnano dal disegno del capannone alle prime vendite
