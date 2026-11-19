@@ -213,6 +213,9 @@ window.CONFIG = {
   barCost: { value: 1, min: 0, max: 100, step: 1 },           // monete per barra ordinata
   barsPerCell: { value: 20, min: 1, max: 100, step: 1 },      // barre che stanno in una cella della zona magazzino
   deliveryHours: { value: 2, min: 0, max: 24, step: 0.5 },    // ore di gioco perché arrivi un ordine
+  storeBase: { value: 30, min: 0, max: 500, step: 5 },        // pezzi finiti che il magazzino tiene da parte nella prima sede
+  storePerStage: { value: 30, min: 0, max: 500, step: 5 },    // in più per ogni sede successiva
+  dialGrace: { value: 0.03, min: 0, max: 0.2, step: 0.01 },  // tolleranza ai bordi della zona verde dei manometri
   unloadTime: { value: 3.5, min: 0.5, max: 15, step: 0.5 }, // secondi reali che il camion impiega a scaricare
   autoBelow: { value: 0.25, min: 0, max: 0.9, step: 0.05 },   // il riordino automatico scatta sotto questa quota del magazzino
   annex0W: { value: 2, min: 1, max: 6, step: 1 }, officeW0: { value: 2, min: 1, max: 8, step: 1 }, office0H: { value: 1, min: 1, max: 6, step: 1 }, // per sede: colonne dell'ala magazzino a destra; larghezza e profondità dell'ufficio staccato davanti
