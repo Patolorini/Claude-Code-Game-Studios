@@ -12,11 +12,16 @@ Vorrei creare un gioco per telefono con visuale stile clash of clans ma con la g
 7. Obiettivo: l`obbiettivo sarà nel tempo raggiungendo il massimo livello e la fabbrica più grande
 8. Fetta: Fai fin dove riesci con quello che ti ho scritto sopra
 
+After play: ci ho giocato, guarda il gioco Satisfactory e prendi spunto da li su come rendere più libero il piazzamento dei macchinari e della catena di costruzione così ogni giocatore può crearsi la fabbrica come vuole, attenzione però il capannone è espandibile avanzando di livello e acquistando la nuova parte quindi ognuno deve fare attenzione agli spazi tenendo conto comunque dei limiti del capannone/fabbrica
+After play: Fai che il gioco parte da prima di creare l’intera fabbrica il giocatore parte con un prato pulito stile clash of clans e deve creare le mura così puo fare più edifici, hai inizialmente la visuale dall’alto e cliccando sopra quell’edificio ci entri e puoi iniziare a creare la tua fabbrica piazzano i macchinare, il rack, ecc.
+After play: Togli le mura e metti la possibilità di creare da capo il capannone su come mettere i muri del capannone ovviamente più è grande e più costa metti un limite iniziale che con l’avanzare dei livelli puoi ingrandire il capannone, inizialmente metti un tutorial così puoi partire dagl’inizi per fare un po di soldi per poi andare avanti
+After play: Metti la possibilità di creare più capannoni e collegarli tra loro tipo creare delle creazioni ad U, inoltre metti che il rack di rete si sblocca dopo un po’ cosi e puoi decidere tu quando collegare le macchine in rete in modo che il mini gioco non parte subito ma decide il giocatore
+
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 
 **Genre:** management / tycoon con minigiochi (a catena di produzione)
 
-**Controls:** tap per selezionare e piazzare, trascina per muovere la visuale, rotellina o pizzico per lo zoom; nei minigiochi tap e trascinamento *(inferred (strong))*. Col mouse funziona allo stesso modo.
+**Controls:** tap per selezionare e piazzare (E o il pulsante Ruota gira l'uscita), strumenti Nastro (trascina per posare), Ruota e Demolisci (tasti 1-3), trascina per muovere la visuale, rotellina o pizzico per lo zoom; nei minigiochi tap e trascinamento *(inferred (strong))*. Col mouse funziona allo stesso modo.
 
 **Question:** montare, cablare e configurare ogni macchina con i minigiochi, e poi scoprire quale ordine di macchine produce il pezzo migliore, regge come loop rilassante per una sessione di 15-20 minuti? *(guessed)*
 
@@ -26,10 +31,11 @@ Vorrei creare un gioco per telefono con visuale stile clash of clans ma con la g
 
 ## Look and references
 - Look: fabbrica isometrica in stile base-builder mobile. Il capannone ha pavimento in cemento a piastrelle grigio-azzurre, strisce di sicurezza gialle e nere ai bordi delle celle, muri in mattoni rossi e lucernari. Le macchine CNC sono disegnate come blocchi isometrici con carenatura bianca/grigio chiaro, porta in vetro, pannello di controllo e una spia di stato (verde se lavora, gialla se attende, grigia se spenta). I cavi di rete blu corrono a terra fino al rack del server. Gli operai sono piccoli e in pixel art (sprite 16×16 ingranditi senza sfocatura), con tuta blu e casco giallo, e camminano tra le macchine. Palette: cemento grigio-azzurro (fondo), giallo sicurezza (selezione e accenti), verde (soldi e successo), blu rete (cavi e connessioni), arancione (pezzi in uscita). Dettaglio distintivo: ogni pezzo finito esce dalla macchina e scivola sul nastro fino alla successiva, e sopra l'ultima sale una moneta. Ogni figura è disegnata: niente emoji, niente cerchi semplici.
-- References: Clash of Clans (la visuale isometrica della base e gli edifici dettagliati da toccare); Hay Day (il ritmo calmo, le produzioni a catena, la soddisfazione del raccogliere).
+- References: Clash of Clans (la visuale isometrica della base e gli edifici dettagliati da toccare); Hay Day (il ritmo calmo, le produzioni a catena, la soddisfazione del raccogliere); Satisfactory (il piazzamento libero delle macchine e dei nastri: ognuno disegna la sua catena).
 - View: 2.5D isometrica · Camera: isometrica dall'alto, trascinamento e zoom.
 
 ## First minute
+(After play) Si apre su un prato pulito: l'operaio-guida chiede di disegnare il capannone; si trascina un rettangolo (6×5 consigliato), lo si tocca per entrare e si piazzano Rack, Magazzino e Cassa gratis; poi la Troncatrice, i tre minigiochi e i nastri dal Magazzino alla Cassa. Prima versione:
 Si apre su un capannone quasi vuoto, con un operaio pixel che saluta e 500 monete. Una freccia indica il negozio: compri la Troncatrice CNC e la piazzi su una cella (il fantasma verde mostra dove va, si sente il "clack"). Parte il minigioco Montaggio: tocchi i bulloni nell'ordine indicato prima che il tempo finisca, e il risultato dà una percentuale, per esempio 92%. Poi il minigioco Rete: trascini il cavo dal rack alla macchina su una griglia, girando intorno agli ostacoli. Poi il minigioco Configurazione: fermi un ago su una zona verde per impostare velocità e avanzamento. La macchina si accende, sforna barre tagliate e salgono le prime monete. Con quei soldi compri il Tornio CNC, lo metti dopo la troncatrice sul nastro e il pezzo cambia in "Perno tornito", che vale il triplo: è qui che si capisce il gioco.
 
 ## Challenge
@@ -47,10 +53,15 @@ Nessun fallimento *(you said)*. La sfida è di ottimizzazione: verso il 3°-5° 
 - Nessun fallimento *(you said)*: si gioca e si cresce, con salvataggio automatico.
 
 ## Features
-- [x] Capannone isometrico a griglia con trascinamento e zoom, piazzamento con anteprima
+- [x] Esterno: prato pulito visto dall'alto dove disegni tu le pareti del capannone trascinando rettangoli: uno attaccato a un capannone lo allarga (forme a L, a U), uno staccato ne crea un altro (fino a 4); più è grande più costa, limite di celle che cresce col livello; toccandone uno ci entri
+- [x] Dentro ogni capannone si parte vuoti: Magazzino e Cassa da piazzare (il primo di ognuno gratis); il Rack di rete si sblocca al livello 3
+- [x] Una macchina si costruisce con Montaggio e Configurazione e lavora subito; il collegamento in rete (minigioco Rete) lo sceglie il giocatore dalla macchina e la fa rendere fino a +30%
+- [x] Capannone isometrico a griglia con trascinamento e zoom, piazzamento libero con anteprima e rotazione dell'uscita
+- [x] Nastri trasportatori posati trascinando, Magazzini barre e Casse vendita acquistabili: ogni giocatore disegna le sue linee
+- [x] Tutorial iniziale: l'operaio-guida e le frecce accompagnano dal disegno del capannone alle prime vendite
 - [x] 5 macchine CNC sbloccabili per livello: Troncatrice, Tornio, Fresa, Foratrice, Centro di lavoro 5 assi *(guessed)*
-- [x] Linee di produzione: l'ordine delle macchine decide il pezzo (ricette), con un ricettario che si riempie scoprendole
-- [x] 3 minigiochi per macchina: Montaggio (bulloni in ordine), Rete (percorso del cavo su griglia), Configurazione (ago nella zona verde); la percentuale dipende dal tempo
+- [x] Linee di produzione: l'ordine in cui il pezzo attraversa le macchine decide il pezzo (ricette), con un ricettario che si riempie scoprendole
+- [x] 3 minigiochi: Montaggio (bulloni in ordine) e Configurazione (ago nella zona verde) per costruire, Rete (percorso del cavo su griglia) quando il giocatore decide; la percentuale dipende dal tempo
 - [x] Livelli/XP che sbloccano macchine e ampliamenti del capannone
 - [x] Attrezzi potenziabili (Chiave, Crimpatrice, Tester) che danno più tempo nel loro minigioco
 - [x] Monete che salgono dai pezzi, entrate al minuto visibili, prossimo obiettivo sempre a schermo
@@ -64,7 +75,13 @@ Nessun fallimento *(you said)*. La sfida è di ottimizzazione: verso il 3°-5° 
 - ordine delle macchine che dà pezzi diversi (puzzle) · in the slice
 - sistema a livelli che sblocca le macchine · in the slice
 - attrezzi potenziabili che velocizzano i minigiochi · in the slice
-- fabbrica sempre più grande · thin stand-in *(guessed)*
+- fabbrica sempre più grande · in the slice
+- piazzamento libero di macchine e catena di costruzione (nastri) · in the slice
+- capannone espandibile per livello e acquisto, con limiti di spazio · in the slice
+- prato esterno dove si disegnano i capannoni, si entra toccando un edificio · in the slice
+- tutorial iniziale per fare i primi soldi · in the slice
+- rack di rete piazzato dal giocatore, sbloccato al livello 3, rete a scelta del giocatore · in the slice
+- capannoni collegati tra loro in forme a U · in the slice
 
 ## Keep
 -

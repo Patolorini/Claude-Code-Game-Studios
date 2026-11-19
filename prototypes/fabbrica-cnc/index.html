@@ -32,10 +32,10 @@ const PIXEL = false;            // the canvas stays smooth; the workers are draw
 const FONT = '"Trebuchet MS", Verdana, sans-serif';
 const TITLE = 'Fabbrica CNC';
 const CONTROLS = [
-  'Tocca o clicca: compra, piazza e costruisci',
+  'Fuori: disegna i tuoi capannoni trascinando sul prato · toccane uno per entrarci (X per uscire)',
   'Trascina: sposta la visuale  ·  Rotella o pizzico: zoom',
-  'Frecce: sposta  ·  + / -: zoom  ·  B negozio  ·  R ricette  ·  T attrezzi',
-  'Spazio: ferma l\'ago  ·  P: pausa  ·  M: audio',
+  '1 Nastro · 2 Ruota · 3 Demolisci · E gira il pezzo · B negozio · R ricette · T attrezzi',
+  'Frecce: sposta · + / -: zoom · Spazio: ferma l\'ago · P: pausa · M: audio',
 ];
 const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
 const CHEAP = params.get('render') === 'cheap';
@@ -114,7 +114,8 @@ function logical(e) {
   const rc = canvas.getBoundingClientRect();
   return { x: (e.clientX - rc.left) * W / rc.width, y: (e.clientY - rc.top) * H / rc.height };
 }
-function capturesDrag() { return scene !== 'play' || !!state.mg || !!state.panel; }
+function capturesDrag() { return scene !== 'play' || !!state.mg || !!state.panel || !!state.beltDrag || !!state.wallDrag; }
+function overButton(x, y) { return ui.buttons.some(b => b.w < W && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h); }
 canvas.addEventListener('pointerdown', e => {
   startAudio();
   const p = logical(e);
@@ -122,7 +123,11 @@ canvas.addEventListener('pointerdown', e => {
   ptr.x = p.x; ptr.y = p.y; ptr.down = true; ptr.inside = true;
   if (ptrs.size === 2) {
     const [a, b] = [...ptrs.values()];
-    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: cam.zoom };
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: cam.zoom, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+    if (state) state.beltDrag = null;
+  } else if (scene === 'play' && !state.mg && !state.panel && !overButton(p.x, p.y)) {
+    if (F && state.tool === 'belt') state.beltDrag = { last: null };
+    else if (!F && state.wtool === 'draw') state.wallDrag = { a: null, b: null };
   }
   try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* old browsers */ }
 });
@@ -131,9 +136,10 @@ canvas.addEventListener('pointermove', e => {
   const q = ptrs.get(e.pointerId); if (!q) return;
   const dx = p.x - q.x, dy = p.y - q.y; q.x = p.x; q.y = p.y;
   if (Math.hypot(p.x - q.sx, p.y - q.sy) > 10) q.moved = true;
-  if (pinch && ptrs.size >= 2) {
-    const [a, b] = [...ptrs.values()];
+  if (pinch && ptrs.size >= 2) { // two fingers: zoom and pan together
+    const [a, b] = [...ptrs.values()], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     setZoom(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, pinch.d));
+    cam.x -= (mx - pinch.mx) / cam.zoom; cam.y -= (my - pinch.my) / cam.zoom; pinch.mx = mx; pinch.my = my; clampCam();
     q.moved = true; return;
   }
   if (q.moved && !capturesDrag()) { cam.x -= dx / cam.zoom; cam.y -= dy / cam.zoom; clampCam(); }
@@ -226,92 +232,150 @@ const zoneAt = l => tune.zoneBase + tune.zonePerLvl * (l - 1);
 const needleAt = l => tune.needleSpeed * Math.max(0.2, 1 - tune.needleSlowPerLvl * (l - 1));
 const toolCost = l => tune['toolCost' + (l + 1)]; // cost to go from l to l+1
 const toolReq = (t, l) => tune[t.req] + (l - 1) * tune.toolReqStep;
-const EXPANSIONS = [
-  { id: 'line2', name: 'Linea 2', desc: 'Il capannone si allarga: nuova linea e nuovo operaio', cost: () => tune.line2Cost, lvl: () => tune.line2Lvl, done: () => state.linesOpen >= 2, can: () => true, apply() { state.linesOpen = 2; } },
-  { id: 'long', name: 'Linee lunghe', desc: 'Ogni linea passa da 4 a 5 posti macchina', cost: () => tune.longCost, lvl: () => tune.longLvl, done: () => state.slotsPerLine >= 5, can: () => true, apply() { state.slotsPerLine = 5; } },
-  { id: 'line3', name: 'Linea 3', desc: 'Terza campata del capannone: nuova linea', cost: () => tune.line3Cost, lvl: () => tune.line3Lvl, done: () => state.linesOpen >= 3, can: () => state.linesOpen >= 2, apply() { state.linesOpen = 3; } },
-];
-const COLS = 8, MAXROWS = 7, CRATE_COL = 6, RACK = { c: 7, r: 0 };
-const lineRow = i => 1 + 2 * i;
-const openRows = () => 1 + 2 * state.linesOpen;
+// Two places: outside, a meadow where walls enclose land and factory buildings stand; inside each
+// building, a grid shed (F) where machines, belts, stores, crates and the rack are placed.
+const LOT = { c: 14, r: 10 };
+const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]]; // output directions: +c, +r, -c, -r
+const K = (c, r) => c + ',' + r;
+let F = null; // the building whose factory is being worked on (drawn, updated or edited)
+// A building is a set of meadow tiles (any shape: rectangles drawn touching it join it); inside,
+// each tile is one cell of its floor, at the same coordinates.
+const inShed = (c, r) => F.cells.has(K(c, r));
+const cellList = b => [...b.cells].map(k => k.split(',').map(Number));
+function bboxOf(cells) { let c0 = 1e9, r0 = 1e9, c1 = -1e9, r1 = -1e9; for (const k of cells) { const [c, r] = k.split(',').map(Number); c0 = Math.min(c0, c); r0 = Math.min(r0, r); c1 = Math.max(c1, c + 1); r1 = Math.max(r1, r + 1); } return { c0, r0, c1, r1 }; }
+const rectCells = (bc, br, w, h) => { const s = new Set(); for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) s.add(K(bc + i, br + j)); return s; };
+const cellAt = (c, r) => F.grid[K(c, r)];
+const LOGI = {
+  rack: { name: 'Rack di rete', desc: 'Il cuore della rete: senza rack le macchine non si collegano', base: () => tune.rackCost },
+  src: { name: 'Magazzino barre', desc: 'Sforna una barra grezza dal lato della freccia', base: () => tune.sourceCost },
+  crate: { name: 'Cassa vendita', desc: 'Vende ogni pezzo che ci entra, da qualsiasi lato', base: () => tune.crateCost },
+};
+const WORLD = () => ({ c: tune.worldCols, r: tune.worldRows });
+const buildingCost = n => n === 0 ? 0 : tune['building' + (n + 1) + 'Cost'];
+const buildingLvl = n => n === 0 ? 1 : tune['building' + (n + 1) + 'Lvl'];
+const anyB = f => state.buildings.some(f);
+const hasKind = (b, k) => Object.values(b.grid).some(o => o.kind === k);
 
 const GOALS = [
-  { text: 'Compra la Troncatrice CNC nel Negozio e piazzala', done: () => allMachines().length >= 1 },
-  { text: 'Costruiscila: montaggio, rete e configurazione', done: () => allMachines().some(m => m.phase >= 3) },
+  { text: 'Disegna il tuo capannone: trascina un rettangolo sul prato', done: () => state.buildings.length >= 1 },
+  { text: 'Tocca il capannone per entrarci', done: () => state.entered },
+  { text: 'Piazza un Magazzino barre e una Cassa (Negozio > Logistica)', done: () => anyB(b => hasKind(b, 'src') && hasKind(b, 'crate')) },
+  { text: 'Compra la Troncatrice e piazzala nel capannone', done: () => allMachines().length >= 1 },
+  { text: 'Costruiscila: montaggio e configurazione', done: () => built('T') },
+  { text: 'Nastri: collega Magazzino > Troncatrice > Cassa', done: () => state.found.includes('T') },
   { text: 'Vendi i tuoi primi 5 pezzi', done: () => state.sold >= 5, prog: () => [state.sold, 5] },
-  { text: 'Metti un Tornio DOPO la Troncatrice: Perno tornito', done: () => state.found.includes('TL') },
-  { text: 'Raggiungi il livello 3 e costruisci la Fresa', done: () => allMachines().some(m => m.type === 'F' && m.phase >= 3) },
+  { text: 'Metti un Tornio DOPO la Troncatrice', done: () => state.found.includes('TL') },
+  { text: `Livello ${CONFIG.rackLvl.value}: piazza il Rack di rete (Negozio > Logistica)`, done: () => anyB(b => hasKind(b, 'rack')) },
+  { text: 'Collega una macchina in rete: toccala > Collega in rete', done: () => allMachines().some(m => m.netPct != null) },
+  { text: 'Costruisci la Fresa CNC', done: () => built('F') },
   { text: 'Scopri una ricetta con 3 macchine', done: () => state.found.some(s => s.length >= 3) },
+  { text: 'Allarga un capannone: disegna un rettangolo attaccato a lui', done: () => anyB(b => b.grown) },
   { text: 'Potenzia un attrezzo', done: () => state.tools.W + state.tools.C + state.tools.Te > 3 },
-  { text: 'Amplia il capannone: apri la Linea 2', done: () => state.linesOpen >= 2 },
   { text: 'Scopri 6 ricette', done: () => state.found.length >= 6, prog: () => [state.found.length, 6] },
-  { text: 'Costruisci la Foratrice CNC', done: () => allMachines().some(m => m.type === 'D' && m.phase >= 3) },
+  { text: 'Fai un capannone a forma di U', done: () => anyB(b => isU(b)) },
+  { text: 'Costruisci la Foratrice CNC', done: () => built('D') },
   { text: 'Produci l\'Albero motore (4 macchine)', done: () => state.found.includes('TLFD') },
-  { text: 'Costruisci il Centro di lavoro 5 assi', done: () => allMachines().some(m => m.type === 'X' && m.phase >= 3) },
-  { text: 'Apri la Linea 3', done: () => state.linesOpen >= 3 },
+  { text: 'Disegna un secondo capannone separato', done: () => state.buildings.length >= 2 },
+  { text: 'Costruisci il Centro di lavoro 5 assi', done: () => built('X') },
   { text: 'Produci la Pala aeronautica (5 macchine)', done: () => state.found.includes('TLFDX') },
   { text: 'Raggiungi il livello massimo', done: () => state.level >= tune.maxLevel, prog: () => [state.level, tune.maxLevel] },
   { text: 'Scopri tutte le 15 ricette', done: () => state.found.length >= RECIPES.length, prog: () => [state.found.length, RECIPES.length] },
 ];
+function isU(b) { // a notch: some column or row of the bounding box has an outside gap with building on both ends
+  const bb = bboxOf(b.cells), has = (c, r) => b.cells.has(K(c, r));
+  for (let c = bb.c0; c < bb.c1; c++) { let seen = false, gap = false; for (let r = bb.r0; r < bb.r1; r++) { if (has(c, r)) { if (gap && seen) return true; seen = true; } else if (seen) gap = true; } }
+  for (let r = bb.r0; r < bb.r1; r++) { let seen = false, gap = false; for (let c = bb.c0; c < bb.c1; c++) { if (has(c, r)) { if (gap && seen) return true; seen = true; } else if (seen) gap = true; } }
+  return false;
+}
 
 // ---- State ------------------------------------------------------------------------------
 let scene, state;
 const cam = { x: 0, y: 0, zoom: 1.75 };
 let ui = { buttons: [], named: {} };
 let confirmNew = 0;
-const SAVE_KEY = 'fabbricaCNC_v1';
+const SAVE_KEY = 'fabbricaCNC_v5';
 
-function newLines() { return [0, 1, 2].map(() => ({ slots: [null, null, null, null, null], pieces: [], spawnT: 0 })); }
 function reset() {
   seed = Number(params.get('seed')) || CONFIG.seed;
   state = {
     t: 0, score: 0, gained: '',
     coins: tune.startCoins, xp: 0, level: 1, sold: 0, earned: 0,
-    tools: { W: 1, C: 1, Te: 1 }, linesOpen: 1, slotsPerLine: 4,
-    lines: newLines(), found: [], goal: 0, nextId: 1,
-    panel: null, shopTab: 0, sel: null, mg: null, placing: null, hover: null,
-    floats: [], toasts: [], banner: null, incomeLog: [], workers: [], saveT: 0, welcome: 4.5,
+    tools: { W: 1, C: 1, Te: 1 }, beltsLaid: 0, found: [], goal: 0, nextId: 1,
+    buildings: [], cur: null, entered: false, wcam: null,
+    wtool: null, wplacing: null, wallDrag: null,
+    panel: null, shopTab: 0, sel: null, mg: null, placing: null, tool: null, demo: null, beltDrag: null,
+    floats: [], toasts: [], banner: null, incomeLog: [], saveT: 0, welcome: 6,
   };
-  for (let i = 0; i < tune.workers; i++) addWorker(i === 0);
-  centerCam();
+  F = null;
+  centerWorldCam();
 }
+function newBuilding(cells) {
+  const b = { id: state.nextId++, name: `Capannone ${state.buildings.length + 1}`, cells: new Set(cells), grown: false, grid: {}, machines: [], workers: [], lastSale: -9 };
+  state.buildings.push(b);
+  const keep = F; F = b; staffUp(true); F = keep;
+  return b;
+}
+function setCell(c, r, o) { o.c = c; o.r = r; F.grid[K(c, r)] = o; return o; }
+function clearCell(c, r) { delete F.grid[K(c, r)]; }
+function staffUp(first) { while (F.workers.length < Math.max(tune.workers, Math.floor(F.cells.size / tune.cellsPerWorker))) addWorker(first && F.workers.length === 0); }
 function addWorker(first) {
-  const c = first ? 3.5 : 1.5 + rng() * 5, r = 2.5;
-  state.workers.push({ c, r, path: [], dir: 1, walkT: 0, idleT: 1 + rng() * 2, task: null, wave: first ? 4.5 : 0 });
+  const cells = walkCells(), pick = cells[Math.floor((first ? 0.5 : rng()) * cells.length)] || [0, 0];
+  F.workers.push({ c: pick[0] + 0.5, r: pick[1] + 0.5, path: [], dir: 1, walkT: 0, idleT: 1 + rng() * 2, task: null, wave: first ? 4.5 : 0 });
 }
-function allMachines() { const a = []; state.lines.forEach(L => L.slots.forEach(m => { if (m) a.push(m); })); return a; }
+function allMachines() { return state.buildings.flatMap(b => b.machines); }
+function built(t) { return allMachines().some(m => m.type === t && m.phase >= 2); }
+function countKind(k) { let n = 0; for (const o of Object.values(F.grid)) if (o.kind === k) n++; return n; }
 function owned(t) { return allMachines().filter(m => m.type === t).length; }
 function costOf(t) { return Math.round(mcfg('cost', t) * (1 + tune.copyMult * owned(t))); }
+// the first rack, store and crate of each building are free
+function logiCost(k) { const n = countKind(k); return n === 0 ? 0 : Math.round(LOGI[k].base() * (1 + tune.logisticsCopyMult * (n - 1))); }
+function freeCells() { let n = 0; for (const [c, r] of cellList(F)) { const o = cellAt(c, r); if (!o || o.kind === 'belt') n++; } return n; }
 function levelXp(L) { return L <= 1 ? 0 : Math.round(tune.xpBase * Math.pow(L - 1, tune.xpExp)); }
 
 function serialize() {
   return JSON.stringify({
-    v: 1, coins: state.coins, xp: state.xp, level: state.level, sold: state.sold, earned: state.earned,
-    tools: state.tools, linesOpen: state.linesOpen, slotsPerLine: state.slotsPerLine, found: state.found,
-    goal: state.goal, nextId: state.nextId, workers: state.workers.length,
-    lines: state.lines.map(L => L.slots.map(m => m ? { id: m.id, type: m.type, phase: m.phase, pct: m.pct } : null)),
+    v: 5, coins: state.coins, xp: state.xp, level: state.level, sold: state.sold, earned: state.earned,
+    tools: state.tools, beltsLaid: state.beltsLaid, found: state.found, goal: state.goal, nextId: state.nextId,
+    entered: state.entered,
+    buildings: state.buildings.map(b => ({
+      id: b.id, name: b.name, tiles: [...b.cells], grown: b.grown, workers: b.workers.length,
+      cells: Object.values(b.grid).map(o => o.kind === 'mach'
+        ? { k: 'mach', c: o.c, r: o.r, id: o.m.id, type: o.m.type, dir: o.m.dir, phase: o.m.phase, pct: o.m.pct, net: o.m.netPct }
+        : { k: o.kind, c: o.c, r: o.r, dir: o.dir }),
+    })),
   });
 }
 function save() { try { localStorage.setItem(SAVE_KEY, serialize()); } catch (_) { /* storage blocked: play on */ } }
 function hasSave() { try { return !!localStorage.getItem(SAVE_KEY); } catch (_) { return false; } }
 function load() {
   let d; try { d = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (_) { return false; }
-  if (!d || d.v !== 1) return false;
+  if (!d || d.v !== 5) return false;
   reset();
-  Object.assign(state, { coins: d.coins, xp: d.xp, level: d.level, sold: d.sold, earned: d.earned || 0, tools: d.tools, linesOpen: d.linesOpen, slotsPerLine: d.slotsPerLine, found: d.found, goal: d.goal, nextId: d.nextId, welcome: 0 });
-  d.lines.forEach((sl, li) => sl.forEach((m, si) => {
-    if (m) state.lines[li].slots[si] = makeMachine(m.type, li, si, m.id, m.phase, m.pct);
-  }));
-  state.workers = [];
-  for (let i = 0; i < (d.workers || tune.workers); i++) addWorker(false);
-  centerCam();
+  Object.assign(state, { coins: d.coins, xp: d.xp, level: d.level, sold: d.sold, earned: d.earned || 0, tools: d.tools, beltsLaid: d.beltsLaid || 0, found: d.found, goal: d.goal, nextId: d.nextId, entered: !!d.entered, welcome: 0 });
+  for (const bd of d.buildings) {
+    const b = { id: bd.id, name: bd.name, cells: new Set(bd.tiles), grown: !!bd.grown, grid: {}, machines: [], workers: [], lastSale: -9 };
+    state.buildings.push(b); F = b;
+    for (const o of bd.cells) {
+      if (o.k === 'mach') { const m = makeMachine(o.type, o.c, o.r, o.dir, o.id, o.phase, o.pct, o.net ?? null); b.machines.push(m); setCell(o.c, o.r, { kind: 'mach', m }); }
+      else if (o.k === 'belt') setCell(o.c, o.r, { kind: 'belt', dir: o.dir, item: null });
+      else if (o.k === 'src') setCell(o.c, o.r, { kind: 'src', dir: o.dir, t: 0.5 });
+      else if (o.k === 'crate') setCell(o.c, o.r, { kind: 'crate', last: null, bump: 0 });
+      else setCell(o.c, o.r, { kind: o.k });
+    }
+    for (let i = 0; i < (bd.workers || tune.workers); i++) addWorker(false);
+  }
+  F = null; centerWorldCam();
   return true;
 }
 function wipeSave() { try { localStorage.removeItem(SAVE_KEY); } catch (_) { /* nothing to wipe */ } }
 
-function makeMachine(type, line, slot, id, phase = 0, pct = []) {
-  const m = { id: id || state.nextId++, type, line, slot, phase, pct: pct.slice(), busy: null, work: 0 };
-  m.quality = phase >= 3 ? avg(m.pct) / 100 : 0;
+// a machine is built in two steps (assembly, configuration) and works at once; networking is a later choice that raises its output
+const buildQ = m => avg([m.pct[0], m.pct[2]].filter(v => v != null)) / 100;
+const netBonus = m => m.netPct == null ? 0 : tune.netBonus * m.netPct / 100;
+const mult = m => tune.qualityBase + m.quality + netBonus(m);
+function makeMachine(type, c, r, dir, id, phase = 0, pct = [], netPct = null) {
+  const m = { id: id || state.nextId++, type, c, r, dir, phase, pct: pct.slice(), netPct, cur: null, out: null, proc: 0 };
+  m.quality = phase >= 2 ? buildQ(m) : 0;
   return m;
 }
 const avg = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0;
@@ -326,11 +390,18 @@ function toCell(sx, sy) {
   return [(wx / (TW / 2) + wy / (TH / 2)) / 2, (wy / (TH / 2) - wx / (TW / 2)) / 2];
 }
 function setZoom(z) { cam.zoom = Math.max(tune.zoomMin, Math.min(tune.zoomMax, z)); clampCam(); }
-function clampCam() { cam.x = Math.max(-260, Math.min(320, cam.x)); cam.y = Math.max(-60, Math.min(300, cam.y)); }
+function clampCam() {
+  const bb = F ? bboxOf(F.cells) : { c0: 0, r0: 0, c1: WORLD().c, r1: WORLD().r };
+  const xs = [iso(bb.c0, bb.r1)[0], iso(bb.c1, bb.r0)[0]], ys = [iso(bb.c0, bb.r0)[1], iso(bb.c1, bb.r1)[1]];
+  cam.x = Math.max(xs[0] - 160, Math.min(xs[1] + 160, cam.x)); cam.y = Math.max(ys[0] - 160, Math.min(ys[1] + 100, cam.y));
+}
 function centerCam() {
-  const rows = openRows();
-  const [x, y] = iso(COLS / 2, rows / 2, 0);
-  cam.x = x; cam.y = y - 30; cam.zoom = tune.zoomStart - (state.linesOpen - 1) * 0.3; clampCam();
+  const bb = bboxOf(F.cells), [x, y] = iso((bb.c0 + bb.c1) / 2, (bb.r0 + bb.r1) / 2, 0);
+  cam.x = x; cam.y = y - 24; cam.zoom = Math.max(tune.zoomMin, tune.zoomStart * Math.min(1, 11 / (bb.c1 - bb.c0 + bb.r1 - bb.r0))); clampCam();
+}
+function centerWorldCam() {
+  const D = WORLD(), [x, y] = iso(D.c / 2, D.r / 2, 0);
+  cam.x = x; cam.y = y; cam.zoom = tune.worldZoom; clampCam();
 }
 
 // ---- Drawing primitives (world space) ---------------------------------------------------
@@ -518,33 +589,17 @@ function drawPiece(ops, c, r) {
 
 // ---- Factory: floor, walls, belts, fixtures -----------------------------------------------
 function drawGround() {
-  const g = ctx.createLinearGradient(0, -400, 0, 500); g.addColorStop(0, '#22303d'); g.addColorStop(1, '#3a4652');
-  ctx.fillStyle = g; ctx.fillRect(-2000, -2000, 4000, 4000);
-  poly([iso(-2, -1), iso(COLS + 2, -1), iso(COLS + 2, MAXROWS + 2), iso(-2, MAXROWS + 2)], '#4d5a45');
-  // grass tufts drawn as small pixel blocks
-  for (let i = 0; i < 60; i++) {
-    const c = -1.8 + ((i * 7.31) % (COLS + 3.6)), r = -0.8 + ((i * 3.97) % (MAXROWS + 2.6));
-    if (c > -0.2 && c < COLS + 0.2 && r > -0.2 && r < MAXROWS + 0.2) continue;
-    const p = iso(c, r); ctx.fillStyle = '#5f7052'; ctx.fillRect(Math.round(p[0]), Math.round(p[1]), 4, 2); ctx.fillRect(Math.round(p[0]) + 1, Math.round(p[1]) - 2, 2, 2);
-  }
-  // the lot reserved for expansions
-  poly([iso(0, 0), iso(COLS, 0), iso(COLS, MAXROWS), iso(0, MAXROWS)], '#5d6366');
-  ctx.setLineDash([6, 5]); poly([iso(0.1, 0.1), iso(COLS - 0.1, 0.1), iso(COLS - 0.1, MAXROWS - 0.1), iso(0.1, MAXROWS - 0.1)], null, '#e8e2c8', 1.5); ctx.setLineDash([]);
+  const g = ctx.createLinearGradient(0, -600, 0, 900); g.addColorStop(0, '#22303d'); g.addColorStop(1, '#3a4652');
+  ctx.fillStyle = g; ctx.fillRect(-5000, -5000, 10000, 10000);
+  const bb = bboxOf(F.cells);
+  poly([iso(bb.c0 - 4, bb.r0 - 4), iso(bb.c1 + 4, bb.r0 - 4), iso(bb.c1 + 4, bb.r1 + 4), iso(bb.c0 - 4, bb.r1 + 4)], '#4d6a45');
 }
-function drawFloor(t) {
-  const R = openRows();
-  // slab edges
-  poly([iso(0, R, 0), iso(COLS, R, 0), iso(COLS, R, -7), iso(0, R, -7)], '#6b7780', EDGE);
-  poly([iso(COLS, 0, 0), iso(COLS, R, 0), iso(COLS, R, -7), iso(COLS, 0, -7)], '#56616a', EDGE);
-  for (let r = 0; r < R; r++) for (let c = 0; c < COLS; c++) {
-    poly(qT(c, r, c + 1, r + 1, 0), (c + r) % 2 ? '#93a6b3' : '#8a9eab', 'rgba(60,75,88,0.35)');
+function drawFloor() {
+  for (const [c, r] of cellList(F)) {
+    if (!inShed(c, r + 1)) poly([iso(c, r + 1, 0), iso(c + 1, r + 1, 0), iso(c + 1, r + 1, -7), iso(c, r + 1, -7)], '#6b7780', EDGE);
+    if (!inShed(c + 1, r)) poly([iso(c + 1, r, 0), iso(c + 1, r + 1, 0), iso(c + 1, r + 1, -7), iso(c + 1, r, -7)], '#56616a', EDGE);
   }
-  // walkway arrows painted on the floor
-  for (let i = 0; i < state.linesOpen; i++) {
-    const rr = lineRow(i) + 1.5;
-    if (rr >= R) continue;
-    for (let c = 1; c < COLS - 1; c += 2) poly([iso(c + 0.3, rr - 0.08), iso(c + 0.6, rr - 0.08), iso(c + 0.7, rr), iso(c + 0.6, rr + 0.08), iso(c + 0.3, rr + 0.08), iso(c + 0.4, rr)], 'rgba(242,194,48,0.35)');
-  }
+  for (const [c, r] of cellList(F)) poly(qT(c, r, c + 1, r + 1, 0), (c + r) % 2 ? '#93a6b3' : '#8a9eab', 'rgba(60,75,88,0.35)');
 }
 function brickWall(pts, len, along, base, hgt, dark) {
   poly(pts, dark ? '#8f4232' : '#a84f3a', EDGE);
@@ -554,39 +609,41 @@ function brickWall(pts, len, along, base, hgt, dark) {
     for (let u = (k % 2) * 0.17; u < len; u += 0.34) { const p = along(u, z - 7), q = along(u, z); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }
   }
 }
-function drawWalls() {
-  const R = openRows(), Hh = 74;
-  // back-right wall (r = 0) and back-left wall (c = 0)
-  brickWall([iso(0, 0, 0), iso(COLS, 0, 0), iso(COLS, 0, Hh), iso(0, 0, Hh)], COLS, (u, z) => iso(u, 0, z), 0, Hh, false);
-  brickWall([iso(0, 0, 0), iso(0, R, 0), iso(0, R, Hh), iso(0, 0, Hh)], R, (u, z) => iso(0, u, z), 0, Hh, true);
-  for (let c = 0.6; c < COLS - 0.5; c += 2) { poly(qL(c, c + 0.9, 0, 44, 64), '#a9d8ee', '#4a2a22', 2); line(iso(c + 0.45, 0, 44), iso(c + 0.45, 0, 64), '#4a2a22', 1.5); }
-  for (let r = 0.6; r < R - 0.5; r += 2) { poly(qR(0, r, r + 0.9, 44, 64), '#8fc2da', '#4a2a22', 2); line(iso(0, r + 0.45, 44), iso(0, r + 0.45, 64), '#4a2a22', 1.5); }
-  poly([iso(-0.15, -0.15, Hh), iso(COLS, -0.15, Hh), iso(COLS, 0, Hh), iso(0, 0, Hh), iso(0, R, Hh), iso(-0.15, R, Hh)], '#6e3326', EDGE);
-  // hazard stripe at the foot of the walls
-  for (let c = 0; c < COLS; c += 0.25) poly(qL(c, c + 0.25, 0, 0, 4), (c * 4) % 2 ? '#2b2b2b' : '#f2c230');
-  for (let r = 0; r < R; r += 0.25) poly(qR(0, r, r + 0.25, 0, 4), (r * 4) % 2 ? '#262626' : '#d9ad2a');
-  // company sign
-  poly(qL(2.6, 5.4, 0, 30, 40), '#2c3540', '#f2c230', 1.5);
-}
-function drawBelt(li, t) {
-  const r = lineRow(li) + 0.5, c0 = 0.55, c1 = CRATE_COL + 0.4;
-  for (let c = c0; c < c1 - 0.01; c += 0.25) {
-    const k = Math.round((c - c0) * 4) % 2;
-    poly(qT(c, r - 0.25, Math.min(c + 0.25, c1), r - 0.19, 0), k ? '#262626' : '#f2c230');
-    poly(qT(c, r + 0.19, Math.min(c + 0.25, c1), r + 0.25, 0), k ? '#262626' : '#f2c230');
+const WALL_H = 32; // inside, the walls are cut low so every cell stays in view
+function wallSegs() { // the back edges of the floor: a short brick wall on each
+  const out = [];
+  for (const [c, r] of cellList(F)) {
+    if (!inShed(c, r - 1)) out.push({ d: c + r + 0.2, f: () => { brickWall(qL(c, c + 1, r, 0, WALL_H), 1, (u, z) => iso(c + u, r, z), 0, WALL_H, false); poly(qL(c, c + 1, r, 0, 4), '#f2c230'); poly([iso(c, r - 0.12, WALL_H), iso(c + 1, r - 0.12, WALL_H), iso(c + 1, r, WALL_H), iso(c, r, WALL_H)], '#6e3326', EDGE); } });
+    if (!inShed(c - 1, r)) out.push({ d: c + r + 0.2, f: () => { brickWall(qR(c, r, r + 1, 0, WALL_H), 1, (u, z) => iso(c, r + u, z), 0, WALL_H, true); poly(qR(c, r, r + 1, 0, 4), '#d9ad2a'); poly([iso(c - 0.12, r, WALL_H), iso(c, r, WALL_H), iso(c, r + 1, WALL_H), iso(c - 0.12, r + 1, WALL_H)], '#6e3326', EDGE); } });
   }
-  box(c0, r - 0.15, c1, r + 0.15, 0, 6, '#3b4046');
-  const ph = (t * tune.beltSpeed) % 0.25;
-  for (let c = c0 + ph; c < c1; c += 0.25) line(iso(c, r - 0.14, 6), iso(c, r + 0.14, 6), '#5a6168', 1);
+  return out;
 }
-function drawFeeder(li) {
-  const c = 0.5, r = lineRow(li) + 0.5;
+function beltPt(o, a, b, z) { const [dx, dr] = DIRS[o.dir]; return iso(o.c + 0.5 + dx * a - dr * b, o.r + 0.5 + dr * a + dx * b, z); }
+function drawBelt(o, t) {
+  const [dx, dr] = DIRS[o.dir], w = 0.3, ax = Math.abs(dx), ar = Math.abs(dr);
+  box(o.c + 0.5 - ax * 0.5 - ar * w, o.r + 0.5 - ar * 0.5 - ax * w, o.c + 0.5 + ax * 0.5 + ar * w, o.r + 0.5 + ar * 0.5 + ax * w, 0, 5, '#3b4046');
+  for (const s of [1, -1]) poly([beltPt(o, -0.5, s * w, 5), beltPt(o, 0.5, s * w, 5), beltPt(o, 0.5, s * (w - 0.06), 5), beltPt(o, -0.5, s * (w - 0.06), 5)], '#f2c230');
+  const ph = (t * tune.beltSpeed) % 0.5;
+  ctx.strokeStyle = '#8a939b'; ctx.lineWidth = 2;
+  for (let a = -0.5 + ph; a < 0.5; a += 0.5) {
+    if (a < -0.38 || a > 0.42) continue;
+    const p1 = beltPt(o, a - 0.1, -0.17, 5), p2 = beltPt(o, a + 0.04, 0, 5), p3 = beltPt(o, a - 0.1, 0.17, 5);
+    ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.lineTo(p3[0], p3[1]); ctx.stroke();
+  }
+}
+function drawOutArrow(c, r, dir, col = '#f2c230') { // where a machine or store sends its parts
+  const [dx, dr] = DIRS[dir], cx = c + 0.5 + dx * 0.6, cr = r + 0.5 + dr * 0.6;
+  const P = (a, b) => iso(cx + dx * a - dr * b, cr + dr * a + dx * b, 6);
+  poly([P(0.17, 0), P(-0.1, 0.17), P(-0.1, -0.17)], col, '#2b2b2b', 1.5);
+}
+function drawSource(col, row) {
+  const c = col + 0.5, r = row + 0.5;
   box(c - 0.38, r - 0.32, c + 0.38, r + 0.32, 0, 3, '#4a525a');
   for (const [dc, dr] of [[-0.34, -0.28], [0.3, -0.28], [-0.34, 0.24], [0.3, 0.24]]) box(c + dc, r + dr, c + dc + 0.05, r + dr + 0.05, 3, 26, '#3d8fd6');
   for (let k = 0; k < 3; k++) for (let j = 0; j < 4; j++) box(c - 0.3, r - 0.22 + j * 0.12, c + 0.3, r - 0.15 + j * 0.12, 6 + k * 6, 10 + k * 6, '#a7b0b8', 'rgba(40,46,52,0.5)');
 }
-function drawCrate(li, t, bump) {
-  const c = CRATE_COL + 0.5, r = lineRow(li) + 0.5;
+function drawCrateAt(col, row, bump) {
+  const c = col + 0.5, r = row + 0.5;
   box(c - 0.36, r - 0.34, c + 0.36, r + 0.34, 0, 4, '#8a6a3e');
   const h = 20 + bump * 3;
   box(c - 0.32, r - 0.3, c + 0.32, r + 0.3, 4, h, '#b07a3e');
@@ -595,65 +652,50 @@ function drawCrate(li, t, bump) {
   poly(qT(c - 0.26, r - 0.24, c + 0.26, r + 0.24, h), '#5a3c1c');
   for (let i = 0; i < 3; i++) box(c - 0.18 + i * 0.1, r - 0.1 + i * 0.05, c - 0.08 + i * 0.1, r - 0.02 + i * 0.05, h - 3, h + 1, '#f0923a');
 }
-function drawRack(t) {
-  const c = RACK.c + 0.5, r = RACK.r + 0.5;
+function drawRack(col, row, t) {
+  const c = col + 0.5, r = row + 0.5;
   box(c - 0.3, r - 0.3, c + 0.3, r + 0.3, 0, 60, '#262c33');
   poly(qL(c - 0.26, c + 0.26, r + 0.3, 6, 56), '#1a1f24', '#3a434c');
-  for (let k = 0; k < 8; k++) {
-    for (let j = 0; j < 4; j++) {
-      const on = ((k * 3 + j + Math.floor(t * 4)) % 5) !== 0;
-      const p = iso(c - 0.2 + j * 0.1, r + 0.3, 10 + k * 5.5);
-      ctx.fillStyle = on ? (j === 3 ? '#5bc7ff' : '#4fdc7a') : '#244a30'; ctx.fillRect(p[0], p[1] - 1, 2, 2);
-    }
+  for (let k = 0; k < 8; k++) for (let j = 0; j < 4; j++) {
+    const on = ((k * 3 + j + Math.floor(t * 4)) % 5) !== 0, p = iso(c - 0.2 + j * 0.1, r + 0.3, 10 + k * 5.5);
+    ctx.fillStyle = on ? (j === 3 ? '#5bc7ff' : '#4fdc7a') : '#244a30'; ctx.fillRect(p[0], p[1] - 1, 2, 2);
   }
   const p = iso(c, r + 0.3, 66); textW('RETE', p[0], p[1], 7, '#5bc7ff');
 }
 function textW(s, x, y, size, c) { ctx.font = `bold ${size}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = c; ctx.fillText(s, x, y); }
-function cablePath(m) {
-  const row = lineRow(m.line), off = m.slot * 0.035;
-  const rr = row + 0.86 + off * 0.5;
-  return [[RACK.c + 0.55 - off, RACK.r + 0.8], [RACK.c + 0.55 - off, rr], [m.slot + 1.5, rr], [m.slot + 1.5, row + 0.86]];
-}
-function drawCables() {
-  for (const m of allMachines()) {
-    if (m.phase < 2) continue;
-    const pts = cablePath(m).map(([c, r]) => iso(c, r, 0.6));
+function rackOf(b) { return Object.values(b.grid).find(o => o.kind === 'rack'); }
+function drawCables() { // network cables from the rack: across, then along, to each networked machine
+  const rk = rackOf(F); if (!rk) return;
+  F.machines.forEach((m, i) => {
+    if (m.netPct == null) return;
+    const off = (i % 6) * 0.05;
+    const pts = [[rk.c + 0.5 + off, rk.r + 0.8], [rk.c + 0.5 + off, m.r + 0.12 + off], [m.c + 0.42 + off, m.r + 0.12 + off], [m.c + 0.42 + off, m.r + 0.3]].map(([c, r]) => iso(c, r, 0.6));
     ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const p of pts.slice(1)) ctx.lineTo(p[0], p[1]);
     ctx.strokeStyle = '#1d3e78'; ctx.lineWidth = 3.2; ctx.stroke(); ctx.strokeStyle = '#3d8fd6'; ctx.lineWidth = 1.8; ctx.stroke();
-  }
+  });
 }
-function drawSlots(t) {
-  for (let li = 0; li < state.linesOpen; li++) for (let s = 0; s < state.slotsPerLine; s++) {
-    const m = state.lines[li].slots[s], c = s + 1, r = lineRow(li);
-    const free = !m || (state.placing && state.placing.m === m);
-    if (!free && !state.placing) continue;
-    const pts = qT(c + 0.08, r + 0.08, c + 0.92, r + 0.92, 0.5);
-    if (state.placing) {
-      const target = !m || state.placing.m;
-      if (target) poly(pts, `rgba(80,220,120,${0.22 + 0.14 * Math.sin(t * 5)})`, '#5be38f', 2);
-    } else { ctx.setLineDash([4, 4]); poly(pts, null, 'rgba(255,255,255,0.45)', 1.2); ctx.setLineDash([]); }
+function hoverCell() { if (!ptr.inside) return null; const [cf, rf] = toCell(ptr.x, ptr.y); return [Math.floor(cf), Math.floor(rf)]; }
+function drawCellMarks(t) {
+  if (state.placing) { // every cell where it can go, and the one under the pointer
+    for (const [c, r] of cellList(F)) if (canPlaceAt(c, r, state.placing)) poly(qT(c + 0.08, r + 0.08, c + 0.92, r + 0.92, 0.5), `rgba(80,220,120,${0.1 + 0.06 * Math.sin(t * 5)})`, 'rgba(91,227,143,0.5)', 1);
+    const h = hoverCell();
+    if (h && inShed(h[0], h[1])) { const ok = canPlaceAt(h[0], h[1], state.placing); poly(qT(h[0] + 0.04, h[1] + 0.04, h[0] + 0.96, h[1] + 0.96, 0.6), ok ? 'rgba(80,220,120,0.35)' : 'rgba(216,67,58,0.4)', ok ? '#5be38f' : '#d8433a', 2); }
   }
-}
-function drawLockedSign(li) {
-  const c = 3.5, r = lineRow(li) + 0.5, p = iso(c, r, 0);
-  line(p, [p[0], p[1] - 18], '#7a5228', 3);
-  rrect(p[0] - 42, p[1] - 38, 84, 22, 4, '#f2c230', '#2b2b2b', 2);
-  const ex = EXPANSIONS.find(e => (li === 1 && e.id === 'line2') || (li === 2 && e.id === 'line3'));
-  textW(`Linea ${li + 1} · Liv. ${ex.lvl()}`, p[0], p[1] - 27, 10, '#2b2b2b');
+  if (state.tool) {
+    const h = hoverCell();
+    if (h && inShed(h[0], h[1])) poly(qT(h[0] + 0.04, h[1] + 0.04, h[0] + 0.96, h[1] + 0.96, 0.6), null, state.tool === 'demo' ? '#ff8a7a' : '#f2c230', 2);
+    if (state.demo) { const [c, r] = state.demo.split(',').map(Number); poly(qT(c, r, c + 1, r + 1, 0.7), `rgba(216,67,58,${0.35 + 0.2 * Math.sin(t * 8)})`, '#d8433a', 2); }
+  }
 }
 
 // ---- Workers ----------------------------------------------------------------------------
-function walkable(c, r) {
-  if (c < 0 || c >= COLS || r < 0 || r >= openRows()) return false;
-  if (c === RACK.c && r === RACK.r) return false;
-  return (r % 2 === 0 && r > 0) || (c === COLS - 1 && r > 0);
-}
+function walkable(c, r) { if (!inShed(c, r)) return false; const o = cellAt(c, r); return !o || o.kind === 'belt'; }
 function bfs(from, to) {
-  const key = (c, r) => c + r * 16, prev = new Map([[key(from[0], from[1]), null]]), q = [from];
+  const key = (c, r) => c + r * 256, prev = new Map([[key(from[0], from[1]), null]]), q = [from];
   while (q.length) {
     const [c, r] = q.shift();
     if (c === to[0] && r === to[1]) break;
-    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    for (const [dc, dr] of DIRS) {
       const nc = c + dc, nr = r + dr, k = key(nc, nr);
       if (!walkable(nc, nr) || prev.has(k)) continue;
       prev.set(k, [c, r]); q.push([nc, nr]);
@@ -664,17 +706,17 @@ function bfs(from, to) {
   while (cur && !(cur[0] === from[0] && cur[1] === from[1])) { path.unshift([cur[0] + 0.5, cur[1] + 0.5]); cur = prev.get(key(cur[0], cur[1])); }
   return path;
 }
-function walkCells() { const a = []; for (let r = 0; r < openRows(); r++) for (let c = 0; c < COLS; c++) if (walkable(c, r)) a.push([c, r]); return a; }
+function walkCells() { return cellList(F).filter(([c, r]) => walkable(c, r)).sort((a, b) => (a[0] + a[1]) - (b[0] + b[1])); }
 function updateWorkers(dt) {
-  const building = allMachines().filter(m => m.phase < 3);
-  for (const w of state.workers) if (w.task && (w.task.phase >= 3 || !allMachines().includes(w.task))) { w.task = null; w.path = []; }
-  for (const m of building) {
-    if (state.workers.some(w => w.task === m)) continue;
-    const free = state.workers.find(w => !w.task && w.wave <= 0);
+  for (const w of F.workers) if (w.task && (w.task.phase >= 2 || !F.machines.includes(w.task))) { w.task = null; w.path = []; }
+  for (const m of F.machines) {
+    if (m.phase >= 2 || F.workers.some(w => w.task === m)) continue;
+    const free = F.workers.find(w => !w.task && w.wave <= 0);
     if (!free) break;
-    free.task = m; free.path = bfs([Math.floor(free.c), Math.floor(free.r)], [m.slot + 1, lineRow(m.line) + 1]);
+    const spot = DIRS.map(([dc, dr]) => [m.c + dc, m.r + dr]).find(([c, r]) => walkable(c, r));
+    free.task = m; free.path = spot ? bfs([Math.floor(free.c), Math.floor(free.r)], spot) : [];
   }
-  for (const w of state.workers) {
+  for (const w of F.workers) {
     if (w.wave > 0) { w.wave -= dt; continue; }
     if (w.path.length) {
       const [tc, tr] = w.path[0], dx = tc - w.c, dy = tr - w.r, d = Math.hypot(dx, dy), sp = tune.workerSpeed * dt;
@@ -684,7 +726,7 @@ function updateWorkers(dt) {
     } else if (!w.task) {
       w.idleT -= dt;
       if (w.idleT <= 0) {
-        const cells = walkCells(); const tgt = cells[Math.floor(rng() * cells.length)];
+        const cells = walkCells(), tgt = cells[Math.floor(rng() * cells.length)];
         if (tgt) w.path = bfs([Math.floor(w.c), Math.floor(w.r)], tgt);
         w.idleT = 2 + rng() * 4;
       }
@@ -697,49 +739,57 @@ function drawWorker(w, t) {
   let spr = 'walk0', bob = 0;
   if (w.wave > 0) spr = Math.sin(t * 10) > 0 ? 'wave' : 'walk0';
   else if (w.path.length) { spr = Math.floor(w.walkT * 6) % 2 ? 'walk1' : 'walk0'; bob = Math.floor(w.walkT * 6) % 2; }
-  else if (w.task) { spr = Math.sin(t * 9) > 0 ? 'work' : 'walk0'; }
+  else if (w.task) spr = Math.sin(t * 9) > 0 ? 'work' : 'walk0';
   sprite(spr, p[0], p[1] - bob, 2, w.dir < 0);
   if (w.task && !w.path.length && Math.sin(t * 9) > 0.7) { ctx.fillStyle = '#ffd36a'; ctx.fillRect(p[0] + 12 * w.dir, p[1] - 22, 2, 2); ctx.fillRect(p[0] + 15 * w.dir, p[1] - 26, 2, 2); }
 }
 
 // ---- Production -------------------------------------------------------------------------
-function lineMachines(L) { const a = []; for (let s = 0; s < state.slotsPerLine; s++) if (L.slots[s]) a.push(L.slots[s]); return a; }
-function lineSeq(L) { return lineMachines(L).map(m => m.type).join(''); }
-function lineQuality(ms) { return avg(ms.map(m => tune.qualityBase + m.quality)); }
-function clearLine(L) { L.pieces = []; L.spawnT = 0.4; L.slots.forEach(m => { if (m) m.busy = null; }); }
-function updateLine(L, li, dt) {
-  const ms = lineMachines(L);
-  if (!ms.length) { L.pieces = []; return; }
-  L.spawnT -= dt;
-  if (L.spawnT <= 0 && !L.pieces.some(p => p.x < tune.pieceGap)) { L.pieces.push({ x: 0, next: 0, ops: '', proc: 0 }); L.spawnT = tune.spawnGap; }
-  L.pieces.sort((a, b) => b.x - a.x);
-  for (let i = 0; i < L.pieces.length; i++) {
-    const p = L.pieces[i];
-    if (p.proc > 0) {
-      p.proc -= dt;
-      if (p.proc <= 0) { const m = ms[p.next]; p.ops += m.type; p.next++; m.busy = null; }
-      continue;
-    }
-    const target = p.next < ms.length ? ms[p.next].slot + 1 : CRATE_COL;
-    let nx = Math.min(target, p.x + tune.beltSpeed * dt);
-    if (i > 0) nx = Math.min(nx, L.pieces[i - 1].x - tune.pieceGap);
-    p.x = Math.max(p.x, nx);
-    if (p.x >= target - 1e-6) {
-      if (p.next < ms.length) {
-        const m = ms[p.next];
-        if (m.phase >= 3 && !m.busy) { m.busy = p; p.proc = mcfg('time', m.type); p.x = target; }
-      } else { sell(p, L, li, ms); p.dead = true; }
-    }
-  }
-  L.pieces = L.pieces.filter(p => !p.dead);
+// Parts move cell to cell: a belt holds one part and passes it on in its direction; a machine
+// takes a part from any side but its output, works it, and sends it out its output side; a
+// crate sells whatever reaches it. The machines a part went through, in order, are its recipe.
+function newItem() { return { ops: '', qs: [], prog: 0, inDir: 0 }; }
+function nextOf(o, dir) { return [o.c + DIRS[dir][0], o.r + DIRS[dir][1]]; }
+function accept(c, r, it, mv) {
+  if (!inShed(c, r)) return false;
+  const o = cellAt(c, r); if (!o) return false;
+  if (o.kind === 'belt') { if (o.item || o.dir === (mv + 2) % 4) return false; it.prog = 0; it.inDir = mv; o.item = it; return true; }
+  if (o.kind === 'mach') { const m = o.m; if (m.phase < 2 || m.cur || m.out || mv === (m.dir + 2) % 4) return false; m.cur = it; m.proc = mcfg('time', m.type); return true; }
+  if (o.kind === 'crate') { sell(it, o); return true; }
+  return false;
 }
-function sell(p, L, li, ms) {
-  const rec = recipeOf(p.ops), v = Math.round(recipeVal(p.ops) * lineQuality(ms));
+function updateFactory(dt) {
+  for (const o of Object.values(F.grid)) {
+    if (o.kind === 'src') {
+      o.t -= dt;
+      if (o.t <= 0) { const [nc, nr] = nextOf(o, o.dir); if (accept(nc, nr, newItem(), o.dir)) o.t = tune.spawnGap; }
+    } else if (o.kind === 'belt' && o.item) {
+      const it = o.item; it.prog = Math.min(1, it.prog + tune.beltSpeed * dt);
+      if (it.prog >= 1) { const [nc, nr] = nextOf(o, o.dir); if (accept(nc, nr, it, o.dir)) o.item = null; }
+    } else if (o.kind === 'crate') o.bump = Math.max(0, (o.bump || 0) - dt * 4);
+  }
+  for (const m of F.machines) {
+    if (m.cur) { m.proc -= dt; if (m.proc <= 0) { m.cur.ops += m.type; m.cur.qs.push(m.quality + netBonus(m)); m.out = m.cur; m.cur = null; } }
+    if (m.out) { const [nc, nr] = nextOf(m, m.dir); if (accept(nc, nr, m.out, m.dir)) m.out = null; }
+  }
+}
+function itemPos(o) { // where a part is drawn on its belt: from the side it came in, through the centre, to the exit
+  const it = o.item, [ix, ir] = DIRS[it.inDir], [ox, or] = DIRS[o.dir], cc = o.c + 0.5, cr = o.r + 0.5;
+  if (it.prog < 0.5) { const u = it.prog * 2; return [cc - ix * 0.5 * (1 - u), cr - ir * 0.5 * (1 - u)]; }
+  const u = (it.prog - 0.5) * 2; return [cc + ox * 0.5 * u, cr + or * 0.5 * u];
+}
+function sell(it, crate) {
+  const rec = recipeOf(it.ops), q = it.qs.length ? avg(it.qs) : 0;
+  const v = Math.max(1, Math.round(recipeVal(it.ops) * (tune.qualityBase + q)));
   state.coins += v; state.earned += v; state.sold++;
   state.incomeLog.push([state.t, v]);
-  L.bump = 1;
-  const [x, y] = iso(CRATE_COL + 0.5, lineRow(li) + 0.5, 72);
-  state.floats.push({ wx: x, wy: y, txt: '+' + fmt(v), col: rec ? '#7ef0a0' : '#c9c9c9', life: 1.4, coin: true });
+  crate.bump = 1; crate.last = { name: rec ? rec.name : it.ops ? 'Scarto' : 'Barra grezza', v, known: !!rec };
+  const [x, y] = iso(crate.c + 0.5, crate.r + 0.5, 72);
+  state.floats.push({ wx: x, wy: y, txt: '+' + fmt(v), col: rec ? '#7ef0a0' : '#c9c9c9', life: 1.4, coin: true, b: F.id });
+  if (state.t - F.lastSale > 0.6) { // seen from outside: one coin at a time over the roof
+    F.lastSale = state.t; const bb = bboxOf(F.cells), [wx, wy] = iso((bb.c0 + bb.c1) / 2, (bb.r0 + bb.r1) / 2, 150);
+    state.floats.push({ wx, wy, txt: '+' + fmt(v), col: '#7ef0a0', life: 1.2, coin: true, b: 'w' });
+  }
   addXp(tune.xpPerSale);
   if (state.t - (state.lastCoinSfx || -9) > 0.18) { sfx.coin(); state.lastCoinSfx = state.t; }
   if (rec && !state.found.includes(rec.seq)) {
@@ -764,7 +814,8 @@ function addXp(n) {
 function unlocksAt(L) {
   const a = [];
   ORDER.forEach(t => { if (mcfg('unlock', t) === L) a.push(MACH[t].name); });
-  EXPANSIONS.forEach(e => { if (e.lvl() === L) a.push(e.name); });
+  if (tune.areaPerLvl) a.push(`capannoni fino a ${maxArea(L)} celle`);
+  for (let n = 1; n < tune.maxBuildings; n++) if (buildingLvl(n) === L) a.push(`capannone n. ${n + 1}`);
   TOOLS.forEach(tl => { for (let l = 1; l < tune.toolMax; l++) if (toolReq(tl, l) === L) a.push(`${tl.name} liv. ${l + 1}`); });
   return a;
 }
@@ -789,29 +840,102 @@ function buy(type) {
   const cost = costOf(type);
   if (state.level < mcfg('unlock', type)) return toast(`Si sblocca al livello ${mcfg('unlock', type)}`, '#ffb35b');
   if (state.coins < cost) return toast('Monete insufficienti', '#ffb35b');
-  if (!freeSlots().length) return toast('Nessun posto libero: amplia il capannone o vendi una macchina', '#ffb35b');
-  state.panel = null; state.placing = { type, cost }; sfx.click();
+  if (!freeCells()) return toast('Capannone pieno: amplialo o demolisci qualcosa', '#ffb35b');
+  state.panel = null; state.tool = null; state.placing = { kind: 'mach', type, cost, dir: 0, rotated: false }; sfx.click();
 }
-function freeSlots() { const a = []; for (let li = 0; li < state.linesOpen; li++) for (let s = 0; s < state.slotsPerLine; s++) if (!state.lines[li].slots[s]) a.push([li, s]); return a; }
-function placeAt(li, s) {
-  const P = state.placing, L = state.lines[li];
-  if (P.m) { // moving or swapping an existing machine
-    const from = state.lines[P.m.line], fs = P.m.slot, other = L.slots[s];
-    if (other === P.m) { state.placing = null; return; }
-    from.slots[fs] = other; if (other) { other.line = P.m.line; other.slot = fs; }
-    L.slots[s] = P.m; P.m.line = li; P.m.slot = s;
-    clearLine(from); clearLine(L); state.placing = null; sfx.clack(); save();
-    toast(other ? 'Macchine scambiate: la ricetta della linea cambia' : 'Macchina spostata', '#bfe3ff');
-    return;
+function buyLogi(k) {
+  if (k === 'rack' && state.level < tune.rackLvl) return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b');
+  const cost = logiCost(k);
+  if (state.coins < cost) return toast('Monete insufficienti', '#ffb35b');
+  if (!freeCells()) return toast('Capannone pieno: amplialo o demolisci qualcosa', '#ffb35b');
+  state.panel = null; state.tool = null; state.placing = { kind: k, cost, dir: 0, rotated: false }; sfx.click();
+}
+function canPlaceAt(c, r, P) {
+  if (!inShed(c, r)) return false;
+  const o = cellAt(c, r);
+  return !o || o.kind === 'belt' || (!!P.m && o.kind === 'mach' && o.m === P.m);
+}
+function rotatePlacing() { if (!state.placing) return; state.placing.dir = (state.placing.dir + 1) % 4; state.placing.rotated = true; sfx.click(); }
+function placeAt(c, r) {
+  const P = state.placing;
+  if (!canPlaceAt(c, r, P)) { sfx.wrong(); return toast('Qui non c\'è spazio: scegli una cella libera o un nastro', '#ffb35b'); }
+  const old = cellAt(c, r);
+  const dir = old && old.kind === 'belt' && !P.rotated ? old.dir : P.dir; // dropped on a belt, it follows the belt
+  if (P.m) { // moving a machine that is already built
+    if (old && old.kind === 'mach') { P.m.dir = dir; state.placing = null; return; }
+    if (old) state.coins += tune.beltCost;
+    clearCell(P.m.c, P.m.r); P.m.c = c; P.m.r = r; P.m.dir = dir; P.m.cur = null; P.m.out = null;
+    setCell(c, r, { kind: 'mach', m: P.m }); state.placing = null; sfx.clack(); save();
+    return toast('Macchina spostata', '#bfe3ff');
   }
-  if (L.slots[s]) return toast('Posto occupato', '#ffb35b');
   if (state.coins < P.cost) { state.placing = null; return toast('Monete insufficienti', '#ffb35b'); }
-  state.coins -= P.cost;
-  const m = makeMachine(P.type, li, s); L.slots[s] = m; clearLine(L);
-  state.placing = null; sfx.clack(); events.push({ type: 'place', m: m.type });
-  const [x, y] = iso(s + 1.5, lineRow(li) + 0.5, 20);
+  if (old) state.coins += tune.beltCost; // the belt under it is given back
+  state.coins -= P.cost; state.placing = null; sfx.clack();
+  const [x, y] = iso(c + 0.5, r + 0.5, 40);
   state.floats.push({ wx: x, wy: y, txt: '-' + fmt(P.cost), col: '#ffb35b', life: 1.2 });
-  save(); startBuild(m);
+  if (P.kind === 'mach') {
+    const m = makeMachine(P.type, c, r, dir); F.machines.push(m); setCell(c, r, { kind: 'mach', m });
+    events.push({ type: 'place', m: m.type }); save(); startBuild(m);
+  } else if (P.kind === 'src') { setCell(c, r, { kind: 'src', dir, t: 0.5, paid: P.cost }); save(); }
+  else if (P.kind === 'rack') { setCell(c, r, { kind: 'rack', paid: P.cost }); save(); toast('Rack di rete pronto: ora le macchine si possono collegare', '#5bc7ff'); }
+  else { setCell(c, r, { kind: 'crate', last: null, bump: 0, paid: P.cost }); save(); }
+}
+function buyBelt(c, r, dir) {
+  if (state.coins < tune.beltCost) {
+    if (!state.beltDrag || !state.beltDrag.warned) toast('Monete insufficienti per il nastro', '#ffb35b');
+    if (state.beltDrag) state.beltDrag.warned = true;
+    return false;
+  }
+  state.coins -= tune.beltCost; setCell(c, r, { kind: 'belt', dir, item: null }); state.beltsLaid++; sfx.cable();
+  return true;
+}
+function dirBetween(a, b) { return DIRS.findIndex(([dx, dr]) => a[0] + dx === b[0] && a[1] + dr === b[1]); }
+function layStep(from, to) { // a drag from one cell to its neighbour: belts point along the drag
+  if (!inShed(to[0], to[1])) return false;
+  const dir = dirBetween(from, to); if (dir < 0) return false;
+  const a = cellAt(from[0], from[1]), b = cellAt(to[0], to[1]);
+  if (b && b.kind === 'rack') return false;
+  if (!a) { if (!buyBelt(from[0], from[1], dir)) return false; }
+  else if (a.kind === 'belt' || a.kind === 'src') a.dir = dir;
+  else if (a.kind === 'mach') a.m.dir = dir; // dragging out of a machine turns its output that way
+  if (!b) { if (!buyBelt(to[0], to[1], dir)) return false; }
+  else if (b.kind === 'belt') b.dir = dir;
+  return true;
+}
+function beltDragStep() {
+  const d = state.beltDrag, h = hoverCell(); if (!h) return;
+  const [c, r] = h;
+  if (!d.last) { if (inShed(c, r) && cellAt(c, r)?.kind !== 'rack') d.last = [c, r]; return; }
+  for (let i = 0; i < 8 && (d.last[0] !== c || d.last[1] !== r); i++) {
+    const dc = c - d.last[0], dr = r - d.last[1];
+    const to = Math.abs(dc) >= Math.abs(dr) ? [d.last[0] + Math.sign(dc), d.last[1]] : [d.last[0], d.last[1] + Math.sign(dr)];
+    if (!layStep(d.last, to)) break;
+    d.last = to;
+  }
+}
+function setTool(id) { state.tool = id; state.placing = null; state.demo = null; }
+function toolTap(c, r) {
+  const o = inShed(c, r) ? cellAt(c, r) : null;
+  if (state.tool === 'belt') {
+    if (!inShed(c, r)) return;
+    if (!o) { if (buyBelt(c, r, 0)) sfx.clack(); }
+    else if (o.kind === 'belt') { o.dir = (o.dir + 1) % 4; sfx.click(); }
+    else toast('Trascina partendo da qui per collegarlo con un nastro', '#bfe3ff');
+  } else if (state.tool === 'rotate') {
+    if (!o) return;
+    if (o.kind === 'mach') o.m.dir = (o.m.dir + 1) % 4;
+    else if (o.kind === 'belt' || o.kind === 'src') o.dir = (o.dir + 1) % 4;
+    else return;
+    sfx.click(); save();
+  } else if (state.tool === 'demo') demolish(c, r, o);
+}
+function demolish(c, r, o) {
+  if (!o) return;
+  if (o.kind === 'belt') { clearCell(c, r); state.coins += tune.beltCost; sfx.click(); return; }
+  if (state.demo !== K(c, r)) { state.demo = K(c, r); sfx.click(); return toast('Tocca di nuovo per demolire', '#ff8a7a'); }
+  state.demo = null;
+  if (o.kind === 'mach') sellMachine(o.m);
+  else { const refund = Math.round((o.paid || 0) * tune.sellRefund); clearCell(c, r); state.coins += refund; toast(`${LOGI[o.kind].name} demolito${refund ? `: +${refund} monete` : ''}`); save(); }
 }
 function upgradeTool(tl) {
   const l = state.tools[tl.key];
@@ -821,18 +945,9 @@ function upgradeTool(tl) {
   state.coins -= toolCost(l); state.tools[tl.key]++; sfx.ding();
   toast(`${tl.name} ora al livello ${l + 1}!`, '#7ef0a0'); save();
 }
-function buyExpansion(e) {
-  if (e.done() || !e.can()) return;
-  if (state.level < e.lvl()) return toast(`Serve il livello ${e.lvl()}`, '#ffb35b');
-  if (state.coins < e.cost()) return toast('Monete insufficienti', '#ffb35b');
-  state.coins -= e.cost(); e.apply();
-  if (e.id !== 'long') addWorker(false);
-  state.panel = null; centerCam(); sfx.level();
-  showBanner('Capannone ampliato!', e.desc, '#5bc7ff'); events.push({ type: 'expand', id: e.id }); save();
-}
 function sellMachine(m) {
   const refund = Math.round(mcfg('cost', m.type) * tune.sellRefund);
-  state.lines[m.line].slots[m.slot] = null; clearLine(state.lines[m.line]);
+  clearCell(m.c, m.r); F.machines = F.machines.filter(x => x !== m);
   state.coins += refund; state.panel = null; state.sel = null; sfx.click();
   toast(`${MACH[m.type].name} venduta: +${refund} monete`); save();
 }
@@ -841,9 +956,13 @@ function sellMachine(m) {
 // Each phase: an intro card, the minigame, a result card. The percentage comes from the time
 // taken (plus penalties) against the phase's best time; there is never a failure.
 const MG = { x: 190, y: 92, w: 900, h: 560 };
-function startBuild(m, recal = false) {
+function needsRack(mg) { return mg.phase === 1 && !rackOf(F); }
+function placeRackFromMg() {
+  if (state.level < tune.rackLvl) { state.mg = null; return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b'); }
+  state.mg = null; state.placing = { kind: 'rack', cost: logiCost('rack'), dir: 0, rotated: false }; toast('Piazza il Rack di rete, poi tocca la macchina per continuare', '#5bc7ff'); }
+function startBuild(m, recal = false, net = false) {
   state.panel = null; state.sel = null;
-  state.mg = { m, phase: recal ? 2 : m.phase, step: 'intro', recal };
+  state.mg = { m, phase: net ? 1 : recal ? 2 : (m.phase === 0 ? 0 : 2), step: 'intro', recal };
 }
 function mgPct(mg) {
   const e = mg.elapsed + mg.pen, lim = mg.par * tune.limitMult;
@@ -931,26 +1050,25 @@ function netDragTo(c, r) { // a fast drag may skip cells: walk the head toward t
 function finishPhase() {
   const mg = state.mg, m = mg.m, pct = mgPct(mg);
   mg.step = 'result'; mg.pct = pct;
-  const prev = m.pct[mg.phase];
-  if (mg.recal) { mg.better = prev === undefined || pct > prev; if (mg.better) m.pct[mg.phase] = pct; }
-  else { m.pct[mg.phase] = pct; m.phase = mg.phase + 1; }
-  if (m.phase >= 3) m.quality = avg(m.pct) / 100;
+  if (mg.phase === 1) { mg.better = m.netPct == null || pct > m.netPct; if (mg.better) m.netPct = pct; }
+  else if (mg.recal) { const prev = m.pct[2]; mg.better = prev === undefined || pct > prev; if (mg.better) m.pct[2] = pct; }
+  else { m.pct[mg.phase] = pct; m.phase++; }
+  if (m.phase >= 2) m.quality = buildQ(m);
   addXp(Math.round(pct * tune.xpPerPct));
   sfx.ding(); events.push({ type: 'phase', phase: mg.phase, pct }); save();
 }
 function afterResult() {
   const mg = state.mg, m = mg.m;
-  if (!mg.recal && m.phase < 3) { state.mg = { m, phase: m.phase, step: 'intro', recal: false }; return; }
+  if (!mg.recal && mg.phase === 0 && m.phase < 2) { state.mg = { m, phase: 2, step: 'intro', recal: false }; return; }
   state.mg = null;
-  if (!mg.recal) {
-    showBanner(`${MACH[m.type].name} in rete!`, `Qualità ${Math.round(m.quality * 100)}%  ·  rende x${(tune.qualityBase + m.quality).toFixed(2)}`, '#5be38f');
-    clearLine(state.lines[m.line]);
-  } else toast(mg.better ? 'Configurazione migliorata!' : 'Tenuta la configurazione migliore', '#bfe3ff');
+  if (mg.phase === 1) showBanner(`${MACH[m.type].name} in rete!`, `Rete ${m.netPct}%  ·  resa +${Math.round(netBonus(m) * 100)}%  ·  rende x${mult(m).toFixed(2)}`, '#5bc7ff');
+  else if (!mg.recal) showBanner(`${MACH[m.type].name} accesa!`, `Qualità ${Math.round(m.quality * 100)}%  ·  rende x${mult(m).toFixed(2)}  ·  più avanti potrai collegarla in rete`, '#5be38f');
+  else toast(mg.better ? 'Configurazione migliorata!' : 'Tenuta la configurazione migliore', '#bfe3ff');
 }
 function updateMinigame(dt) {
   const mg = state.mg;
   mg.flash = Math.max(0, (mg.flash || 0) - dt);
-  if (mg.step === 'intro' && (pressed('Enter') || pressed('Space'))) { beginPhase(); return; }
+  if (mg.step === 'intro' && (pressed('Enter') || pressed('Space'))) { if (needsRack(mg)) placeRackFromMg(); else beginPhase(); return; }
   if (mg.step === 'result' && (pressed('Enter') || pressed('Space'))) { afterResult(); return; }
   if (mg.step !== 'play') return;
   mg.elapsed += dt;
@@ -1065,12 +1183,37 @@ function badge(type, x, y, w = 58) {
 }
 
 // ---- HUD and panels -----------------------------------------------------------------------
+function toolbarIcon(id, x, y) {
+  ctx.save(); ctx.translate(x, y);
+  if (id === 'belt') {
+    rrect(-24, -10, 48, 20, 5, '#3b4046', '#1b2229', 2);
+    ctx.fillStyle = '#f2c230'; ctx.fillRect(-24, -10, 48, 3); ctx.fillRect(-24, 7, 48, 3);
+    ctx.strokeStyle = '#c9d1d8'; ctx.lineWidth = 2.5;
+    for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 13 - 4, -5); ctx.lineTo(i * 13 + 3, 0); ctx.lineTo(i * 13 - 4, 5); ctx.stroke(); }
+  } else if (id === 'rotate') {
+    ctx.beginPath(); ctx.arc(0, 0, 15, -0.3, Math.PI * 1.45); ctx.strokeStyle = '#3d8fd6'; ctx.lineWidth = 6; ctx.stroke();
+    poly([[13, -14], [22, 2], [5, 0]], '#3d8fd6');
+  } else { // sledgehammer
+    ctx.rotate(-0.6); rrect(-3, -6, 6, 30, 2, '#a7773c', '#5a3c1c', 1.5);
+    rrect(-14, -18, 28, 14, 3, '#7d878f', '#3a4148', 2); ctx.fillStyle = '#d8433a'; ctx.fillRect(-14, -18, 5, 14);
+  }
+  ctx.restore();
+}
 function drawHUD(t) {
   // money
   rrect(14, 12, 236, 66, 14, 'rgba(28,36,44,0.88)', '#f2c230', 2);
   coinIcon(44, 38, 1.4);
   text(fmt(state.coins), 66, 36, 28, '#ffe08a', 'left');
   text(`+${fmt(incomePerMin())} al minuto`, 66, 62, 15, '#9ce8b4', 'left');
+  if (F) { // space left in this building, and the way out
+    const fc = freeCells();
+    rrect(14, 84, 236, 32, 10, 'rgba(28,36,44,0.88)', fc <= 3 ? '#ff8a7a' : '#5d6366', 2);
+    text(`${F.name} · ${F.cells.size} celle · ${fc} libere`, 132, 101, 14, fc <= 3 ? '#ffb3a8' : '#cfd6dd');
+    button('Esci all\'esterno (X)', 14, 124, 236, 46, exitBuilding, { color: '#5bc7ff', size: 17, name: 'exit' });
+  } else {
+    rrect(14, 84, 236, 32, 10, 'rgba(28,36,44,0.88)', '#5d6366', 2);
+    text(`Prato · capannoni ${state.buildings.length}/${tune.maxBuildings}`, 132, 101, 14, '#cfd6dd');
+  }
   // level and XP
   rrect(262, 12, 270, 66, 14, 'rgba(28,36,44,0.88)', '#5bc7ff', 2);
   gearIcon(300, 45, 1.9, '#5bc7ff'); text(String(state.level), 300, 45, 17, '#fff');
@@ -1087,27 +1230,38 @@ function drawHUD(t) {
   if (g) {
     text(g.text, 562, 54, 18, '#fff', 'left');
     if (g.prog) { const [a, b] = g.prog(); text(`${Math.min(a, b)}/${b}`, 1250, 30, 15, '#7ef0a0', 'right'); }
-  } else text('Fabbrica al massimo: continua a ottimizzare qualità e ricette!', 562, 54, 18, '#fff', 'left');
-  // bottom buttons
-  const B = [['Attrezzi', 'tools', 'T'], ['Ricette', 'recipes', 'R'], ['Negozio', 'shop', 'B']];
-  B.forEach(([lab, id, key], i) => {
+  } else text('Fabbrica al massimo: continua a ottimizzare spazi, qualità e ricette!', 562, 54, 18, '#fff', 'left');
+  // building tools
+  const TB = F ? [['belt', 'Nastro'], ['rotate', 'Ruota'], ['demo', 'Demolisci']] : [];
+  if (!F) drawWorldHUDBottom(t);
+  TB.forEach(([id, lab], i) => {
+    const x = 214 + i * 104, y = 616, on = state.tool === id;
+    rrect(x, y + 4, 96, 92, 14, 'rgba(0,0,0,0.35)');
+    rrect(x, y, 96, 92, 14, on ? '#f2c230' : '#e6e1d3', on ? '#7a5a10' : '#2b2b2b', on ? 3 : 2);
+    toolbarIcon(id, x + 48, y + 36); text(lab, x + 48, y + 76, 16, '#2b2410');
+    text(String(i + 1), x + 12, y + 14, 12, '#7a7466');
+    btn(x, y, 96, 92, () => { sfx.click(); setTool(on ? null : id); }, 'tool_' + id);
+  });
+  // shop, recipes, tools
+  const B = [['Attrezzi', 'tools'], ['Ricette', 'recipes'], ['Negozio', 'shop']];
+  B.forEach(([lab, id], i) => {
     const x = 900 + i * 124, y = 616;
     rrect(x, y + 4, 112, 92, 14, 'rgba(0,0,0,0.35)');
     rrect(x, y, 112, 92, 14, id === 'shop' ? '#f2c230' : '#e6e1d3', '#2b2b2b', 2);
-    if (id === 'shop') { machineIcon('T', x + 56, y + 46, 0.62); }
+    if (id === 'shop') { if (F) machineIcon('T', x + 56, y + 46, 0.62); else shedIcon(x + 56, y + 42); }
     else if (id === 'recipes') { rrect(x + 36, y + 14, 40, 44, 4, '#b0543c', '#5a2a1e', 2); rrect(x + 41, y + 18, 32, 36, 2, '#f4f1e8'); for (let k = 0; k < 4; k++) ctx.fillRect(x + 45, y + 24 + k * 7, 24, 2); }
     else toolIcon('W', x + 56, y + 36, 1.1);
     text(lab, x + 56, y + 76, 17, '#2b2410');
-    btn(x, y, 112, 92, () => { sfx.click(); state.panel = id; state.placing = null; if (id === 'shop') state.shopTab = 0; }, id);
+    btn(x, y, 112, 92, () => { sfx.click(); openPanel(id === 'shop' && !F ? 'wshop' : id); if (id === 'shop') state.shopTab = 0; }, id);
   });
   // zoom and pause
   const sm = [['+', () => setZoom(cam.zoom * 1.2)], ['-', () => setZoom(cam.zoom / 1.2)], ['II', () => { scene = 'pause'; confirmNew = 0; }]];
-  sm.forEach(([lab, fn], i) => { const x = 14 + i * 64, y = 650; rrect(x, y, 54, 54, 12, 'rgba(28,36,44,0.88)', '#e6e1d3', 2); text(lab, x + 27, y + 28, 24, '#fff'); btn(x, y, 54, 54, fn, 'hud' + i); });
+  sm.forEach(([lab, fn], i) => { const x = 14 + (i % 2) * 64, y = i < 2 ? 586 : 650; rrect(x, y, 54, 54, 12, 'rgba(28,36,44,0.88)', '#e6e1d3', 2); text(lab, x + 27, y + 28, 24, '#fff'); btn(x, y, 54, 54, fn, 'hud' + i); });
 }
-function openPanel(id) { state.panel = state.panel === id ? null : id; state.placing = null; }
+function openPanel(id) { state.panel = id; state.placing = null; state.tool = null; state.demo = null; state.wtool = null; state.wplacing = null; }
 function drawShop(t) {
   const P = panelFrame('Negozio', 1060, 580, () => { state.panel = null; });
-  ['Macchine CNC', 'Capannone'].forEach((lab, i) => {
+  ['Macchine CNC', 'Logistica', 'Capannone'].forEach((lab, i) => {
     const x = P.x + 30 + i * 200, y = P.y + 74, on = state.shopTab === i;
     rrect(x, y, 186, 40, 10, on ? '#f2c230' : '#3f4a56', '#1b2229', 2);
     text(lab, x + 93, y + 21, 18, on ? '#2b2410' : '#cfd6dd'); btn(x, y, 186, 40, () => { state.shopTab = i; sfx.click(); }, 'tab' + i);
@@ -1126,30 +1280,47 @@ function drawShop(t) {
       text(`Lavora un pezzo in ${mcfg('time', tp).toFixed(1)} s`, x + w / 2, y + 240, 13, '#b9c4ce');
       text(`${mcfg('bolts', tp)} bulloni · ${mcfg('dials', tp)} parametri`, x + w / 2, y + 262, 13, '#b9c4ce');
       if (owned(tp)) text(`Ne possiedi ${owned(tp)}`, x + w / 2, y + 290, 14, '#7ef0a0');
-      if (locked) {
-        rrect(x + 30, y + 330, w - 60, 56, 10, '#1b2229', '#59626b', 2);
-        text(`Livello ${lvl}`, x + w / 2, y + 358, 18, '#ffb35b');
-      } else {
+      if (locked) { rrect(x + 30, y + 330, w - 60, 56, 10, '#1b2229', '#59626b', 2); text(`Livello ${lvl}`, x + w / 2, y + 358, 18, '#ffb35b'); }
+      else {
         coinIcon(x + 34, y + 318, 0.9); text(fmt(cost), x + 52, y + 318, 20, state.coins >= cost ? '#ffe08a' : '#ff8a7a', 'left');
         button('Compra', x + 20, y + 342, w - 40, 54, () => buy(tp), { enabled: state.coins >= cost, name: 'buy' + tp });
       }
     });
-  } else {
-    EXPANSIONS.forEach((e, i) => {
-      const x = P.x + 40 + i * 330, y = P.y + 140, w = 310, h = 400, done = e.done(), locked = state.level < e.lvl() || !e.can();
-      rrect(x, y, w, h, 14, '#3a4552', done ? '#7ef0a0' : '#5bc7ff', 2);
-      // little building icon: a factory bay drawn in iso
-      ctx.save(); ctx.translate(x + w / 2, y + 120); ctx.scale(1.1, 1.1);
-      const bays = e.id === 'long' ? 1 : (e.id === 'line2' ? 2 : 3);
-      for (let k = 0; k < bays; k++) { box(-1 + k * 0.7 - 0.7, -0.7, -1 + k * 0.7, 0.7, 0, 34, k === bays - 1 && !done ? '#c96a4a' : '#a84f3a'); poly(qT(-1 + k * 0.7 - 0.7, -0.7, -1 + k * 0.7, 0.7, 34), '#6e7e8c'); }
-      if (e.id === 'long') { box(0.1, -0.15, 1.6, 0.15, 0, 6, '#3b4046'); box(1.2, -0.3, 1.6, 0.3, 6, 20, '#e8b52a'); }
+  } else if (state.shopTab === 1) {
+    const cards = [
+      ['Rack di rete', LOGI.rack.desc + '. Collegare in rete una macchina la fa rendere di più.', `Ne hai ${countKind('rack')}`, 'rack'],
+      ['Nastro', 'Trascina sul pavimento: i pezzi seguono le frecce. Tocca un nastro per girarlo.', `${tune.beltCost} monete a cella`, null],
+      ['Magazzino barre', LOGI.src.desc + '. Più magazzini = più linee in parallelo.', `Ne hai ${countKind('src')}`, 'src'],
+      ['Cassa vendita', LOGI.crate.desc + '. Mettila alla fine di ogni linea.', `Ne hai ${countKind('crate')}`, 'crate'],
+    ];
+    cards.forEach(([name, desc, info, k], i) => {
+      const x = P.x + 26 + i * 254, y = P.y + 136, w = 240, h = 410;
+      rrect(x, y, w, h, 14, '#3a4552', '#f0923a', 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + 12, y + 12, w - 24, 140);
+      ctx.save(); ctx.translate(x + w / 2, y + 96); ctx.scale(1.4, 1.4);
+      if (!k) { ctx.translate(-iso(1.5, 0.5)[0], -iso(1.5, 0.5)[1]); [0, 1, 2].forEach(c => drawBelt({ c, r: 0, dir: 0 }, t)); drawPiece('TL', 1.6, 0.5); }
+      else if (k === 'rack') { ctx.scale(0.8, 0.8); ctx.translate(-iso(0.5, 0.5)[0], -iso(0.5, 0.5)[1] + 34); drawRack(0, 0, t); }
+      else { ctx.translate(-iso(0.5, 0.5)[0], -iso(0.5, 0.5)[1] + 8); if (k === 'src') drawSource(0, 0); else drawCrateAt(0, 0, 0); }
       ctx.restore();
-      text(e.name, x + w / 2, y + 200, 22, '#fff');
-      wrapText(e.desc, x + w / 2, y + 236, w - 40, 15, '#b9c4ce', 20, 'center');
-      if (done) text('Completato', x + w / 2, y + 330, 22, '#7ef0a0');
-      else if (locked) { rrect(x + 50, y + 300, w - 100, 56, 10, '#1b2229', '#59626b', 2); text(e.can() ? `Livello ${e.lvl()}` : 'Prima la Linea 2', x + w / 2, y + 328, 18, '#ffb35b'); }
-      else { coinIcon(x + 100, y + 296, 0.9); text(fmt(e.cost()), x + 118, y + 296, 20, state.coins >= e.cost() ? '#ffe08a' : '#ff8a7a', 'left'); button('Amplia', x + 50, y + 320, w - 100, 54, () => buyExpansion(e), { enabled: state.coins >= e.cost(), color: '#5bc7ff', name: 'exp' + e.id }); }
+      text(name, x + w / 2, y + 180, 21, '#fff');
+      wrapText(desc, x + w / 2, y + 214, w - 36, 15, '#b9c4ce', 20, 'center');
+      text(info, x + w / 2, y + 300, 15, '#7ef0a0');
+      if (!k) button('Usa lo strumento', x + 20, y + 330, w - 40, 56, () => { state.panel = null; setTool('belt'); }, { name: 'beltTool', size: 18 });
+      else if (k === 'rack' && state.level < tune.rackLvl) { rrect(x + 20, y + 330, w - 40, 56, 10, '#1b2229', '#59626b', 2); text(`Livello ${tune.rackLvl}`, x + w / 2, y + 358, 18, '#ffb35b'); }
+      else { const cost = logiCost(k); button(cost ? `Compra · ${fmt(cost)}` : 'Piazza (gratis)', x + 20, y + 330, w - 40, 56, () => buyLogi(k), { enabled: state.coins >= cost, name: 'buy_' + k, size: 18 }); }
     });
+  } else {
+    const x = P.x + 40, y = P.y + 136, w = P.w - 80, bb = bboxOf(F.cells);
+    rrect(x, y, w, 410, 14, '#3a4552', '#5bc7ff', 2);
+    ctx.save(); ctx.translate(x + 250, y + 60); const sc = Math.min(1, 10 / (bb.c1 - bb.c0 + bb.r1 - bb.r0)) * 0.9; ctx.scale(sc, sc);
+    const o = iso(bb.c0, bb.r0); ctx.translate(-o[0], -o[1]);
+    for (const [c, r] of cellList(F)) poly(qT(c, r, c + 1, r + 1, 0), (c + r) % 2 ? '#93a6b3' : '#8a9eab', 'rgba(60,75,88,0.5)');
+    ctx.restore();
+    text(`${F.name}: ${F.cells.size} celle`, x + w - 230, y + 50, 22, '#fff');
+    text(`Al livello ${state.level}: fino a ${maxArea()} celle`, x + w - 230, y + 84, 16, '#7ef0a0');
+    text(`Al livello ${state.level + 1}: fino a ${maxArea(state.level + 1)}`, x + w - 230, y + 108, 14, '#b9c4ce');
+    wrapText(`Per allargarlo esci e disegna un rettangolo attaccato a questo capannone: diventa parte di lui. Così fai forme a L o a U. ${tune.cellCost} monete per ogni cella nuova.`, x + w - 230, y + 144, 380, 15, '#b9c4ce', 20, 'center');
+    button('Esci e disegna un\'estensione', x + w / 2 - 220, y + 300, 440, 64, () => { exitBuilding(); setWTool('draw'); }, { color: '#5bc7ff', size: 20, name: 'extend' });
   }
 }
 function drawRecipes(t) {
@@ -1191,21 +1362,28 @@ function drawTools(t) {
 }
 function drawMachinePanel(t) {
   const m = state.sel; if (!m) { state.panel = null; return; }
-  const P = panelFrame(MACH[m.type].name, 620, 440, () => { state.panel = null; state.sel = null; });
+  const P = panelFrame(MACH[m.type].name, 700, 470, () => { state.panel = null; state.sel = null; });
   rrect(P.x + 24, P.y + 80, 200, 200, 14, '#252c33');
-  machineIcon(m.type, P.x + 124, P.y + 220, 1.9, { t, busy: !!m.busy, status: m.busy ? 'work' : 'wait' });
+  machineIcon(m.type, P.x + 124, P.y + 220, 1.9, { t, busy: !!m.cur, status: m.cur ? 'work' : 'wait' });
   text(`Qualità ${Math.round(m.quality * 100)}%`, P.x + 250, P.y + 100, 24, '#7ef0a0', 'left');
-  text(`Rende x${(tune.qualityBase + m.quality).toFixed(2)} il valore del pezzo`, P.x + 250, P.y + 132, 15, '#cfd6dd', 'left');
-  PHASES.forEach((ph, i) => {
-    const y = P.y + 166 + i * 36; phaseIcon(i, P.x + 264, y, 1);
-    text(ph, P.x + 284, y, 16, '#fff', 'left'); text(`${m.pct[i] ?? 0}%`, P.x + 580, y, 16, '#ffe08a', 'right');
+  text(`Rende x${mult(m).toFixed(2)} il valore del pezzo`, P.x + 250, P.y + 132, 15, '#cfd6dd', 'left');
+  [[0, 'Montaggio', m.pct[0]], [2, 'Configurazione', m.pct[2]], [1, 'Rete', m.netPct]].forEach(([ph, name, v], i) => {
+    const y = P.y + 166 + i * 36; phaseIcon(ph, P.x + 264, y, 1);
+    text(name, P.x + 284, y, 16, '#fff', 'left');
+    text(v == null ? (ph === 1 ? 'non collegata' : '-') : `${v}%${ph === 1 ? `  (+${Math.round(netBonus(m) * 100)}% resa)` : ''}`, P.x + 660, y, 16, v == null ? '#8f9aa4' : ph === 1 ? '#5bc7ff' : '#ffe08a', 'right');
   });
-  text(`Linea ${m.line + 1}, posto ${m.slot + 1}  ·  ${MACH[m.type].desc}`, P.x + 310, P.y + 300, 15, '#b9c4ce');
-  button('Sposta', P.x + 24, P.y + 340, 180, 64, () => { state.panel = null; state.placing = { m }; toast('Tocca un posto: libero per spostare, occupato per scambiare', '#bfe3ff'); }, { color: '#5bc7ff', name: 'move' });
-  button('Ricalibra', P.x + 220, P.y + 340, 180, 64, () => startBuild(m, true), { color: '#7ef0a0', name: 'recal' });
-  button(`Vendi +${fmt(mcfg('cost', m.type) * tune.sellRefund)}`, P.x + 416, P.y + 340, 180, 64, () => sellMachine(m), { color: '#ff8a7a', size: 18, name: 'sell' });
+  text(m.cur ? 'Sta lavorando un pezzo' : m.out ? 'Pezzo pronto: l\'uscita è bloccata' : 'In attesa di pezzi da un nastro', P.x + 350, P.y + 298, 15, m.out && !m.cur ? '#ffb35b' : '#b9c4ce');
+  text('La freccia gialla sul pavimento è l\'uscita: i pezzi entrano dagli altri lati', P.x + 350, P.y + 322, 13, '#8f9aa4');
+  const netLab = state.level < tune.rackLvl ? `Rete: liv. ${tune.rackLvl}` : m.netPct == null ? 'Collega in rete' : 'Rifai la rete';
+  const B = [
+    ['Ruota', () => { m.dir = (m.dir + 1) % 4; sfx.click(); save(); }, '#f2c230', 'rotm'],
+    ['Sposta', () => { state.panel = null; state.placing = { kind: 'mach', m, dir: m.dir, rotated: true }; toast('Tocca una cella libera o un nastro', '#bfe3ff'); }, '#9ad0ff', 'move'],
+    ['Ricalibra', () => startBuild(m, true), '#7ef0a0', 'recal'],
+    [netLab, () => { if (state.level < tune.rackLvl) return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b'); startBuild(m, false, true); }, '#5bc7ff', 'net'],
+    [`Vendi +${fmt(mcfg('cost', m.type) * tune.sellRefund)}`, () => sellMachine(m), '#ff8a7a', 'sell'],
+  ];
+  B.forEach(([lab, fn, col, nm], i) => button(lab, P.x + 20 + i * 134, P.y + 370, 126, 64, fn, { color: col, name: nm, size: lab.length > 11 ? 14 : 17, enabled: !(nm === 'net' && state.level < tune.rackLvl) }));
 }
-
 function drawMinigame(t) {
   const mg = state.mg, m = mg.m;
   ctx.fillStyle = 'rgba(8,12,18,0.7)'; ctx.fillRect(0, 0, W, H);
@@ -1214,7 +1392,7 @@ function drawMinigame(t) {
   rrect(x, y + 6, w, h, 18, 'rgba(0,0,0,0.4)');
   rrect(x, y, w, h, 18, '#2c3540', '#f2c230', 3);
   rrect(x + 3, y + 3, w - 6, 54, 15, '#38434f');
-  const title = mg.recal ? `Ricalibra · ${MACH[m.type].name}` : `Fase ${mg.phase + 1}/3 · ${PHASES[mg.phase]} · ${MACH[m.type].name}`;
+  const title = mg.phase === 1 ? `Collegamento in rete · ${MACH[m.type].name}` : mg.recal ? `Ricalibra · ${MACH[m.type].name}` : `Fase ${mg.phase === 0 ? 1 : 2}/2 · ${PHASES[mg.phase]} · ${MACH[m.type].name}`;
   text(title, x + w / 2, y + 31, 24, '#fff');
   for (let i = 0; i < 3; i++) { const on = i <= mg.phase; rrect(x + 24 + i * 34, y + 18, 26, 26, 6, on ? '#f2c230' : '#1b2229'); phaseIcon(i, x + 37 + i * 34, y + 31, 0.8, on ? '#2b2b2b' : '#59626b'); }
   const tl = TOOLS[mg.phase], tlv = state.tools[tl.key];
@@ -1223,15 +1401,19 @@ function drawMinigame(t) {
     text(`${tl.name} · liv. ${tlv}`, x + 250, y + 110, 20, '#f2c230', 'left');
     const how = [
       `Tocca i bulloni nell'ordine dei numeri (1, 2, 3...). Ogni bullone richiede ${boltTurnsAt(tlv)} giri di chiave. Un bullone sbagliato costa ${tune.mgPenalty.toFixed(0)} s.`,
-      `Trascina il cavo dal rack (a sinistra) alla macchina (a destra), girando intorno a pilastri, pallet e macchie d'olio. Poi crimpa il connettore con ${crimpTapsAt(tlv)} tocchi. Anche le frecce funzionano.`,
+      `Trascina il cavo dal rack (a sinistra) alla macchina (a destra), girando intorno a pilastri, pallet e macchie d'olio. Poi crimpa il connettore con ${crimpTapsAt(tlv)} tocchi. In rete la macchina rende fino a +${Math.round(tune.netBonus * 100)}%.`,
       `Ferma l'ago nella zona verde di ogni parametro: tocca lo schermo o premi Spazio. Fuori dalla zona costa ${tune.mgPenalty.toFixed(0)} s.`,
     ][mg.phase];
     wrapText(how, x + 250, y + 150, w - 300, 18, '#e6e1d3', 26);
     const parGuess = mg.phase === 0 ? mcfg('bolts', m.type) * tune.parBolt : mg.phase === 2 ? mcfg('dials', m.type) * tune.parDial : null;
     text(parGuess ? `Tempo ottimo: ${parGuess.toFixed(1)} s = 100%. Più ci metti, più scende la percentuale.` : 'Più sei veloce, più alta è la percentuale.', x + 250, y + 290, 16, '#7ef0a0', 'left');
-    text('La qualità finale (media delle tre fasi) moltiplica quanto rende la macchina.', x + 250, y + 318, 15, '#b9c4ce', 'left');
+    text(mg.phase === 1 ? 'La percentuale decide quanto rende in più la macchina collegata.' : 'La qualità (media di montaggio e configurazione) moltiplica quanto rende.', x + 250, y + 318, 15, '#b9c4ce', 'left');
     machineIcon(m.type, x + w / 2, y + 470, 1.4, { status: 'off', t });
-    button('Inizia', x + w - 260, y + h - 100, 220, 70, beginPhase, { name: 'start', size: 26 });
+    if (needsRack(mg)) {
+      rrect(x + 250, y + 340, w - 300, 50, 10, 'rgba(216,67,58,0.25)', '#ff8a7a', 2);
+      text('In questo capannone non c\'è ancora un Rack di rete: piazzalo prima', x + 250 + (w - 300) / 2, y + 365, 16, '#ffb3a8');
+      button(`Piazza il Rack${logiCost('rack') ? ' · ' + fmt(logiCost('rack')) : ' (gratis)'}`, x + w - 340, y + h - 100, 300, 70, placeRackFromMg, { name: 'start', size: 22, color: '#5bc7ff' });
+    } else button('Inizia', x + w - 260, y + h - 100, 220, 70, beginPhase, { name: 'start', size: 26 });
     if (!mg.recal) button('Più tardi', x + 40, y + h - 90, 160, 54, () => { state.mg = null; toast('Tocca la macchina per riprendere la costruzione', '#bfe3ff'); }, { color: '#9aa4ad', size: 18, name: 'later' });
     else button('Annulla', x + 40, y + h - 90, 160, 54, () => { state.mg = null; }, { color: '#9aa4ad', size: 18, name: 'later' });
     return;
@@ -1242,9 +1424,10 @@ function drawMinigame(t) {
     textO(`${pct}%`, x + w / 2, y + 230, 110, col);
     text(`Tempo ${(mg.elapsed).toFixed(1)} s${mg.pen ? ` + ${mg.pen.toFixed(1)} s di errori` : ''} · ottimo ${mg.par.toFixed(1)} s`, x + w / 2, y + 320, 18, '#cfd6dd');
     if (mg.recal) text(mg.better ? 'Nuovo record: la qualità sale!' : `Resta il risultato migliore: ${m.pct[2]}%`, x + w / 2, y + 360, 18, '#bfe3ff');
-    else if (m.phase >= 3) text(`Qualità finale ${Math.round(m.quality * 100)}%  ·  la macchina rende x${(tune.qualityBase + m.quality).toFixed(2)}`, x + w / 2, y + 360, 20, '#7ef0a0');
-    else text(`Prossima fase: ${PHASES[m.phase]}`, x + w / 2, y + 360, 18, '#bfe3ff');
-    button(m.phase >= 3 || mg.recal ? 'Accendi la macchina' : 'Avanti', x + w / 2 - 150, y + h - 110, 300, 70, afterResult, { name: 'next', size: 24, color: '#7ef0a0' });
+    else if (mg.phase === 1) text(`Collegata in rete: rende +${Math.round(netBonus(m) * 100)}%  ·  in tutto x${mult(m).toFixed(2)}`, x + w / 2, y + 360, 20, '#5bc7ff');
+    else if (m.phase >= 2) text(`Qualità finale ${Math.round(m.quality * 100)}%  ·  la macchina rende x${mult(m).toFixed(2)}`, x + w / 2, y + 360, 20, '#7ef0a0');
+    else text('Prossima fase: Configurazione', x + w / 2, y + 360, 18, '#bfe3ff');
+    button(mg.phase === 1 ? 'Fatto' : m.phase >= 2 || mg.recal ? 'Accendi la macchina' : 'Avanti', x + w / 2 - 150, y + h - 110, 300, 70, afterResult, { name: 'next', size: 24, color: '#7ef0a0' });
     return;
   }
   // live timer bar: green to the best time, then sliding down to the floor
@@ -1345,32 +1528,256 @@ function drawConfig(mg, t) {
 }
 
 function drawTutorial(t) {
-  let target = null, label = '';
-  const g = state.goal, bounce = Math.sin(t * 5) * 8;
-  if (state.mg || state.goal > 4) return;
-  const wantType = g === 0 ? 'T' : g === 3 ? 'L' : g === 4 && state.level >= tune.unlockF ? 'F' : null;
-  if (state.placing && !state.placing.m) {
-    let li = 0, s = 0;
-    if (wantType === 'L') { const tIdx = state.lines[0].slots.findIndex(m => m && m.type === 'T'); s = tIdx >= 0 && !state.lines[0].slots[tIdx + 1] ? tIdx + 1 : freeSlots()[0]?.[1] ?? 0; }
-    else s = (freeSlots()[0] || [0, 0])[1], li = (freeSlots()[0] || [0, 0])[0];
-    const p = iso(s + 1.5, lineRow(li) + 0.5, 0), [sx, sy] = toScreen(p[0], p[1]);
-    target = { x: sx, y: sy - 20 }; label = wantType === 'L' ? 'Mettilo subito dopo la Troncatrice' : 'Piazzala qui';
-  } else if (wantType && state.panel === 'shop' && ui.named['buy' + wantType]) {
-    const b = ui.named['buy' + wantType]; target = { x: b.x + b.w - 22, y: b.y - 2 }; label = '';
-  } else if (wantType && !state.panel && state.coins >= costOf(wantType) && state.level >= mcfg('unlock', wantType) && ui.named.shop) {
-    const b = ui.named.shop; target = { x: b.x + b.w / 2, y: b.y - 10 }; label = `Compra ${wantType === 'T' ? 'la Troncatrice' : wantType === 'L' ? 'il Tornio' : 'la Fresa'}`;
+  if (state.mg) return;
+  const g = state.goal, bounce = Math.sin(t * 5) * 8, N = ui.named;
+  let target = null, label = '', say = null;
+  const at = (b, lab) => { if (b) { target = { x: b.x + b.w / 2, y: b.y - 10 }; label = lab || ''; } };
+  const shopFor = (want) => { // the arrows that lead to buying something in the factory shop
+    if (state.panel === 'shop') {
+      if (want.tab !== state.shopTab) at(N['tab' + want.tab]);
+      else if (N[want.btn]) { const b = N[want.btn]; target = { x: b.x + b.w - 22, y: b.y - 2 }; }
+    } else if (!state.panel && !state.placing) at(N.shop, want.label);
+  };
+  if (!F) {
+    if (g === 0) {
+      say = `Capo, questo prato è nostro! Disegniamo il capannone: tocca "Nuovo capannone" e trascina un rettangolo sul prato. Consiglio un 6×5: ${6 * 5 * tune.cellCost} monete, e restano soldi per la prima macchina.`;
+      if (state.wtool !== 'draw' && !state.panel) at(N.wtool_draw, 'Nuovo capannone');
+    } else if (g === 1 && state.buildings[0]) {
+      say = 'Che bel capannone! Toccalo per entrare e mettere su la fabbrica.';
+      const b = state.buildings[0], bb = bboxOf(b.cells), p = iso((bb.c0 + bb.c1) / 2, (bb.r0 + bb.r1) / 2, 60), [sx, sy] = toScreen(p[0], p[1]);
+      if (!state.panel) target = { x: sx, y: sy - 40 };
+    } else if (g === 12) { say = 'Serve più spazio? Tocca "Costruisci" e disegna un rettangolo ATTACCATO al capannone: si allarga. Così puoi fare forme a L o a U.'; if (state.wtool !== 'draw' && !state.panel) at(N.wtool_draw, 'Costruisci'); }
+    else if (g === 15) { say = 'Sfida: dai al capannone una forma a U, con due bracci e un cortile in mezzo.'; }
+    else if (g >= 2 && g <= 11 && state.buildings[0]) say = 'Rientra nel capannone per continuare: toccalo.';
+  } else {
+    if (g === 2) {
+      say = 'Qui dentro è tutto da fare. Piazza un Magazzino barre e una Cassa: il primo di ognuno è gratis. Lascia spazio in mezzo per le macchine!';
+      const miss = ['src', 'crate'].find(k => !countKind(k));
+      if (miss) shopFor({ tab: 1, btn: 'buy_' + miss, label: 'Negozio > Logistica' });
+    } else if (g === 3) { say = 'Ora la prima macchina: compra la Troncatrice nel Negozio e piazzala tra il Magazzino e la Cassa.'; shopFor({ tab: 0, btn: 'buyT', label: 'Compra la Troncatrice' }); }
+    else if (g === 4) say = 'Tocca la Troncatrice per finire di costruirla: montaggio e configurazione.';
+    else if (g === 5) { say = 'Collegali con lo strumento Nastro: trascina dal Magazzino alla Troncatrice e poi fino alla Cassa. I pezzi seguono le frecce!'; if (state.tool !== 'belt' && !state.panel && !state.placing) at(N.tool_belt, 'Nastro'); }
+    else if (g === 6) say = 'Funziona! Ogni pezzo che arriva alla Cassa ti dà monete ed esperienza. Aspetta qualche vendita.';
+    else if (g === 7) {
+      say = 'Il Tornio va DOPO la Troncatrice: il pezzo tagliato diventa un Perno tornito, che vale il triplo. Puoi metterlo sopra un nastro.';
+      if (state.placing && state.placing.kind === 'mach' && !state.placing.m) {
+        const tm = F.machines.find(m => m.type === 'T');
+        if (tm) { const n = nextOf(tm, tm.dir); if (canPlaceAt(n[0], n[1], state.placing)) { const p = iso(n[0] + 0.5, n[1] + 0.5, 0), [sx, sy] = toScreen(p[0], p[1]); target = { x: sx, y: sy - 20 }; label = 'Subito dopo la Troncatrice'; } }
+      } else if (state.coins >= costOf('L')) shopFor({ tab: 0, btn: 'buyL', label: 'Compra il Tornio' });
+    } else if (g === 8) {
+      say = state.level < tune.rackLvl ? `Al livello ${tune.rackLvl} si sblocca il Rack di rete: intanto continua a vendere.` : 'Il Rack di rete è sbloccato! Piazzalo: poi deciderai tu quali macchine collegare.';
+      if (state.level >= tune.rackLvl) shopFor({ tab: 1, btn: 'buy_rack', label: 'Negozio > Logistica' });
+    } else if (g === 9) say = 'Tocca una macchina e scegli "Collega in rete": col minigioco del cavo la macchina rende di più.';
+    else if (g === 10 && state.level >= tune.unlockF && state.coins >= costOf('F')) shopFor({ tab: 0, btn: 'buyF', label: 'Compra la Fresa' });
   }
+  if (say && !state.panel && !state.placing && !state.wplacing) drawNarrator(t, say);
   if (!target) return;
   const ax = target.x, ay = target.y - 20 + bounce;
   poly([[ax, ay + 18], [ax - 18, ay - 4], [ax - 7, ay - 4], [ax - 7, ay - 30], [ax + 7, ay - 30], [ax + 7, ay - 4], [ax + 18, ay - 4]], '#f2c230', '#2b2b2b', 3);
   if (label) { ctx.font = `bold 18px ${FONT}`; const tw = ctx.measureText(label).width; const bx = Math.max(10, Math.min(W - tw - 34, ax - tw / 2 - 12)); rrect(bx, ay - 74, tw + 24, 34, 10, '#2b2b2b', '#f2c230', 2); text(label, bx + tw / 2 + 12, ay - 56, 18, '#fff'); }
 }
 
+// ---- Outside: a meadow where you draw your own buildings ------------------------------------
+function inWorld(c, r) { const D = WORLD(); return c >= 0 && r >= 0 && c < D.c && r < D.r; }
+function maxArea(L = state.level) { return tune.areaBase + (L - 1) * tune.areaPerLvl; }
+function buildingAt(c, r, ignore) { return state.buildings.find(b => b !== ignore && b.cells.has(K(c, r))); }
+function rectOf(a, b) { const c0 = Math.min(a[0], b[0]), r0 = Math.min(a[1], b[1]); return { bc: c0, br: r0, w: Math.abs(a[0] - b[0]) + 1, h: Math.abs(a[1] - b[1]) + 1 }; }
+function plan(R) { // what drawing this rectangle does: a new building, or an extension of the one it touches
+  const tiles = rectCells(R.bc, R.br, R.w, R.h), touched = new Set();
+  for (const k of tiles) {
+    const [c, r] = k.split(',').map(Number);
+    for (const [dc, dr] of [[0, 0], ...DIRS]) { const b = buildingAt(c + dc, r + dr); if (b) touched.add(b); }
+  }
+  const target = touched.size === 1 ? [...touched][0] : null;
+  const fresh = [...tiles].filter(k => !target || !target.cells.has(k));
+  const cost = fresh.length * tune.cellCost + (target ? 0 : buildingCost(state.buildings.length));
+  return { tiles, touched, target, fresh, cost };
+}
+function drawCheck(R) { // why a drawn rectangle cannot be built, or '' when it can
+  const D = WORLD(), P = plan(R);
+  if (R.bc < 0 || R.br < 0 || R.bc + R.w > D.c || R.br + R.h > D.r) return 'Esce dal prato';
+  if (P.touched.size > 1) return 'Tocca due capannoni diversi';
+  if (!P.target) {
+    const n = state.buildings.length;
+    if (n >= tune.maxBuildings) return 'Hai già tutti i capannoni separati possibili: attaccalo a uno esistente';
+    if (state.level < buildingLvl(n)) return `Un capannone separato in più al livello ${buildingLvl(n)}: per ora attaccalo`;
+  }
+  if (R.w < tune.minSide || R.h < tune.minSide) return `Ogni rettangolo almeno ${tune.minSide}×${tune.minSide}`;
+  if (!P.fresh.length) return 'Già tutto costruito';
+  const size = (P.target ? P.target.cells.size : 0) + P.fresh.length;
+  if (size > maxArea()) return `Al livello ${state.level} un capannone ha al massimo ${maxArea()} celle`;
+  if (state.coins < P.cost) return 'Monete insufficienti';
+  return '';
+}
+function setWTool(id) { state.panel = null; state.wtool = id; if (id) sfx.click(); }
+function commitDraw(R) {
+  const why = drawCheck(R);
+  if (why) { sfx.wrong(); return toast(why, '#ffb35b'); }
+  const P = plan(R); state.coins -= P.cost; state.wtool = null; sfx.clack(); sfx.level();
+  if (P.target) {
+    const b = P.target, keep = F; for (const k of P.fresh) b.cells.add(k); b.grown = true; F = b; staffUp(false); F = keep;
+    showBanner(`${b.name} allargato!`, `+${P.fresh.length} celle · ora ${b.cells.size}`, '#5bc7ff');
+    events.push({ type: 'extend', id: b.id, n: P.fresh.length });
+  } else {
+    const b = newBuilding(P.tiles);
+    showBanner(`${b.name}: ${R.w}×${R.h} celle!`, 'Toccalo per entrare e mettere su la fabbrica', '#5bc7ff');
+    events.push({ type: 'building', id: b.id });
+  }
+  save();
+}
+function wallDragStep() { const d = state.wallDrag, h = hoverCell(); if (!h) return; const D = WORLD(); h[0] = Math.max(0, Math.min(D.c - 1, h[0])); h[1] = Math.max(0, Math.min(D.r - 1, h[1])); if (!d.a) d.a = h; d.b = h; }
+function buildingAtScreen(sx, sy) { // the tile under the finger, or the roof above it
+  for (let z = 0; z <= 60; z += 15) {
+    const [cf, rf] = toCell(sx, sy + z * cam.zoom), b = buildingAt(Math.floor(cf + z / 32), Math.floor(rf + z / 32));
+    if (b) return b;
+  }
+  return null;
+}
+function outsideTap(sx, sy) {
+  if (state.wtool === 'draw') return toast('Trascina sul prato per disegnare le pareti del capannone', '#bfe3ff');
+  const [cf, rf] = toCell(sx, sy), b = buildingAtScreen(sx, sy) || buildingAt(Math.floor(cf), Math.floor(rf));
+  if (b) enterBuilding(b);
+}
+function enterBuilding(b) {
+  state.wcam = { x: cam.x, y: cam.y, zoom: cam.zoom };
+  F = b; state.cur = state.buildings.indexOf(b); state.entered = true;
+  state.wtool = null; state.wplacing = null; state.wallDrag = null; state.panel = null;
+  state.banner = null; centerCam(); sfx.click(); events.push({ type: 'enter', id: b.id });
+}
+function exitBuilding() {
+  F = null; state.cur = null; state.placing = null; state.tool = null; state.demo = null; state.beltDrag = null; state.panel = null; state.sel = null;
+  if (state.wcam) { cam.x = state.wcam.x; cam.y = state.wcam.y; cam.zoom = state.wcam.zoom; clampCam(); } else centerWorldCam();
+  sfx.click();
+}
+const hash = (c, r) => { let h = Math.imul(c * 374761393 + r * 668265263, 1274126177); h ^= h >>> 13; return (h >>> 0) % 1000; };
+function drawTree(c, r) {
+  const p = iso(c, r, 0);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(p[0] - 12, p[1] - 3, 24, 6);
+  ctx.fillStyle = '#6b4a2a'; ctx.fillRect(p[0] - 3, p[1] - 16, 6, 16);
+  for (const [col, wd, y] of [['#2f6b34', 24, 18], ['#3b8040', 19, 30], ['#4c9a4c', 13, 40]]) poly([[p[0], p[1] - y - 16], [p[0] + wd, p[1] - y + 2], [p[0], p[1] - y + 10], [p[0] - wd, p[1] - y + 2]], col, '#1f4a24', 1);
+}
+function drawMeadow(t) {
+  const D = WORLD();
+  const g = ctx.createLinearGradient(0, -500, 0, 900); g.addColorStop(0, '#5f9fd0'); g.addColorStop(1, '#a8d4f0');
+  ctx.fillStyle = g; ctx.fillRect(-5000, -5000, 10000, 10000);
+  poly([iso(-4, -4), iso(D.c + 4, -4), iso(D.c + 4, D.r + 4), iso(-4, D.r + 4)], '#5a8f3e');
+  poly([iso(0, D.r, 0), iso(D.c, D.r, 0), iso(D.c, D.r, -10), iso(0, D.r, -10)], '#6b4f34', EDGE);
+  poly([iso(D.c, 0, 0), iso(D.c, D.r, 0), iso(D.c, D.r, -10), iso(D.c, 0, -10)], '#57402a', EDGE);
+  for (let r = 0; r < D.r; r++) for (let c = 0; c < D.c; c++) {
+    poly(qT(c, r, c + 1, r + 1, 0), (c + r) % 2 ? '#74ab4c' : '#6da447');
+    const h = hash(c, r);
+    if (h % 9 === 0) { const p = iso(c + 0.3 + (h % 5) * 0.1, r + 0.5, 0); ctx.fillStyle = '#5f9a3e'; ctx.fillRect(p[0], p[1], 4, 2); ctx.fillRect(p[0] + 1, p[1] - 2, 2, 2); }
+    if (h % 23 === 1) { const p = iso(c + 0.5, r + 0.4, 0); ctx.fillStyle = h % 2 ? '#f2e35a' : '#f5f5f5'; ctx.fillRect(p[0], p[1], 3, 3); ctx.fillStyle = '#e07a2e'; ctx.fillRect(p[0] + 1, p[1] + 1, 1, 1); }
+  }
+  for (let i = -3; i < D.c + 3; i += 2) drawTree(i + 0.5, -1.5 - (hash(i, 7) % 2));
+  for (let j = -1; j < D.r + 3; j += 2) drawTree(-1.5 - (hash(3, j) % 2), j + 0.5);
+}
+function drawBuildingOut(b, t, ghostCells) { // wall faces only where the building ends, a sawtooth roof on every tile
+  const cells = ghostCells || b.cells, has = (c, r) => cells.has(K(c, r)), Hh = 46;
+  const list = [...cells].map(k => k.split(',').map(Number)).sort((a, q) => (a[0] + a[1]) - (q[0] + q[1]));
+  const front = list.filter(([c, r]) => !has(c, r + 1)), door = front[Math.floor(front.length / 2)];
+  for (const [c, r] of list) {
+    if (!has(c, r + 1)) {
+      poly([iso(c, r + 1, 0), iso(c + 1, r + 1, 0), iso(c + 1, r + 1, -4), iso(c, r + 1, -4)], '#6b7780');
+      poly(qL(c, c + 1, r + 1, 0, Hh), shade('#a84f3a', 0.85), EDGE);
+      poly(qL(c, c + 0.5, r + 1, 0, 4), '#f2c230'); poly(qL(c + 0.5, c + 1, r + 1, 0, 4), '#2b2b2b');
+      if (door && door[0] === c && door[1] === r) { poly(qL(c + 0.1, c + 0.9, r + 1, 4, 26), '#7d878f', '#2b2b2b', 1.5); for (let z = 8; z < 26; z += 4) line(iso(c + 0.1, r + 1, z), iso(c + 0.9, r + 1, z), '#5d6366', 1); }
+      else poly(qL(c + 0.28, c + 0.72, r + 1, 22, 36), '#a9d8ee', '#4a2a22', 1.5);
+    }
+    if (!has(c + 1, r)) {
+      poly([iso(c + 1, r, 0), iso(c + 1, r + 1, 0), iso(c + 1, r + 1, -4), iso(c + 1, r, -4)], '#56616a');
+      poly(qR(c + 1, r, r + 1, 0, Hh), shade('#a84f3a', 0.68), EDGE);
+      poly(qR(c + 1, r + 0.28, r + 0.72, 22, 36), '#8fc2da', '#4a2a22', 1.5);
+    }
+    poly([iso(c, r, Hh), iso(c + 1, r, Hh + 14), iso(c + 1, r + 1, Hh + 14), iso(c, r + 1, Hh)], '#7d878f', EDGE);
+    poly([iso(c + 1, r, Hh), iso(c + 1, r + 1, Hh), iso(c + 1, r + 1, Hh + 14), iso(c + 1, r, Hh + 14)], '#a9d8ee', EDGE);
+    if (!has(c, r + 1)) poly([iso(c, r + 1, Hh), iso(c + 1, r + 1, Hh), iso(c + 1, r + 1, Hh + 14)], '#8f4232', EDGE);
+  }
+  const back = list[0];
+  if (back) {
+    box(back[0] + 0.35, back[1] + 0.35, back[0] + 0.6, back[1] + 0.6, Hh, Hh + 34, '#4a525a');
+    if (!ghostCells && t - b.lastSale < 2 && b.machines.length) {
+      const p = iso(back[0] + 0.48, back[1] + 0.48, Hh + 40);
+      for (let i = 0; i < 3; i++) { const k = ((t * 0.8 + i / 3) % 1); ctx.fillStyle = `rgba(230,230,230,${0.7 - k * 0.6})`; ctx.fillRect(p[0] - 3 + k * 8, p[1] - k * 26, 6 + k * 4, 6 + k * 4); }
+    }
+  }
+}
+function drawOutside(t) {
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-cam.x, -cam.y);
+  drawMeadow(t);
+  const d = state.wallDrag, R = d && d.a && d.b ? rectOf(d.a, d.b) : null;
+  if (R) { const ok = !drawCheck(R); poly(qT(R.bc, R.br, R.bc + R.w, R.br + R.h, 0.5), ok ? 'rgba(80,220,120,0.35)' : 'rgba(216,67,58,0.4)', ok ? '#5be38f' : '#d8433a', 2); }
+  // where a rectangle would join an existing building: its outline glows
+  if (R) { const P = plan(R); if (P.target && P.touched.size === 1) for (const [c, r] of cellList(P.target)) poly(qT(c, r, c + 1, r + 1, 0.4), null, 'rgba(91,199,255,0.9)', 1.5); }
+  if (state.wtool === 'draw' && !R) { const h = hoverCell(); if (h && inWorld(h[0], h[1])) poly(qT(h[0] + 0.05, h[1] + 0.05, h[0] + 0.95, h[1] + 0.95, 0.5), null, '#f2c230', 2); }
+  state.buildings.slice().sort((a, q) => { const A = bboxOf(a.cells), B = bboxOf(q.cells); return (A.c0 + A.r0) - (B.c0 + B.r0); }).forEach(b => drawBuildingOut(b, t)); // separate buildings never touch, so each draws whole
+  if (R && R.w >= 1 && R.h >= 1) { const P = plan(R); ctx.globalAlpha = 0.5; drawBuildingOut({ machines: [] }, t, new Set(P.target ? [...P.target.cells, ...P.fresh] : P.tiles)); ctx.globalAlpha = 1; }
+  ctx.restore();
+}
+function drawOverlaysOut(t) {
+  for (const b of state.buildings) {
+    const bb = bboxOf(b.cells), p = iso((bb.c0 + bb.c1) / 2, (bb.r0 + bb.r1) / 2, 100), [sx, sy] = toScreen(p[0], p[1]);
+    const n = b.machines.length, sub = `${b.cells.size} celle · ${n ? `${n} macchin${n > 1 ? 'e' : 'a'}` : 'vuoto: entra!'}`;
+    ctx.font = `bold 15px ${FONT}`; const tw = Math.max(ctx.measureText(b.name).width, ctx.measureText(sub).width) + 24;
+    rrect(sx - tw / 2, sy - 22, tw, 42, 10, 'rgba(20,26,34,0.85)', '#f2c230', 2);
+    text(b.name, sx, sy - 8, 15, '#ffe08a'); text(sub, sx, sy + 10, 13, n ? '#9ce8b4' : '#bfe3ff');
+    if (b.machines.some(m => m.phase < 2)) { rrect(sx + tw / 2 + 4, sy - 18, 36, 34, 8, '#fff', '#2b2b2b', 2); phaseIcon(0, sx + tw / 2 + 22, sy - 1, 1); }
+  }
+  const d = state.wallDrag;
+  if (d && d.a && d.b) {
+    const R = rectOf(d.a, d.b), why = drawCheck(R), P = plan(R);
+    const lab = `${P.target ? `Allarga ${P.target.name}: +` : `${R.w}×${R.h} · `}${P.fresh.length} celle · ${fmt(P.cost)} monete`;
+    ctx.font = `bold 16px ${FONT}`; const tw = Math.max(ctx.measureText(lab).width, why ? ctx.measureText(why).width : 0) + 24;
+    const bx = Math.max(10, Math.min(W - tw - 10, ptr.x - tw / 2)), by = Math.max(10, ptr.y - (why ? 92 : 70));
+    rrect(bx, by, tw, why ? 52 : 30, 8, 'rgba(20,26,34,0.92)', why ? '#ff8a7a' : '#5be38f', 2);
+    text(lab, bx + tw / 2, by + 15, 16, '#fff'); if (why) text(why, bx + tw / 2, by + 37, 15, '#ffb3a8');
+  }
+  for (const f of state.floats) {
+    if (f.b !== 'w') continue;
+    const [sx, sy] = toScreen(f.wx, f.wy); ctx.globalAlpha = Math.min(1, f.life * 2);
+    coinIcon(sx - 24, sy, 0.8); textO(f.txt, sx + 4, sy, 20, f.col); ctx.globalAlpha = 1;
+  }
+}
+function shedIcon(x, y) { ctx.save(); ctx.translate(x, y); ctx.scale(0.42, 0.42); const p = iso(1.5, 1.5, 0); ctx.translate(-p[0], -p[1] + 30); drawBuildingOut({ machines: [] }, 0, rectCells(0, 0, 3, 3)); ctx.restore(); }
+function drawWorldHUDBottom(t) {
+  const x = 214, y = 616, on = state.wtool === 'draw';
+  rrect(x, y + 4, 150, 92, 14, 'rgba(0,0,0,0.35)');
+  rrect(x, y, 150, 92, 14, on ? '#f2c230' : '#e6e1d3', on ? '#7a5a10' : '#2b2b2b', on ? 3 : 2);
+  shedIcon(x + 75, y + 40); text('Costruisci', x + 75, y + 76, 15, '#2b2410'); text('1', x + 12, y + 14, 12, '#7a7466');
+  btn(x, y, 150, 92, () => { sfx.click(); if (on) state.wtool = null; else setWTool('draw'); }, 'wtool_draw');
+  rrect(x + 162, y + 22, 250, 50, 10, 'rgba(28,36,44,0.88)', '#5d6366', 2);
+  text(`Livello ${state.level}: fino a ${maxArea()} celle`, x + 287, y + 38, 14, '#cfd6dd');
+  text(`${tune.cellCost} monete a cella · attaccato = si allarga`, x + 287, y + 58, 13, '#9aa4ad');
+}
+function drawWorldShop(t) {
+  const P = panelFrame('Negozio · Esterno', 640, 520, () => { state.panel = null; });
+  const n = state.buildings.length, x = P.x + 40, y = P.y + 84, w = P.w - 80, h = 410;
+  rrect(x, y, w, h, 14, '#3a4552', '#5bc7ff', 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + 12, y + 12, w - 24, 130);
+  shedIcon(x + w / 2, y + 96);
+  text('Capannone', x + w / 2, y + 172, 22, '#fff');
+  wrapText(`Disegni tu le pareti: trascina un rettangolo sul prato (${tune.cellCost} monete a cella). Se lo attacchi a un capannone, lo allarga: così fai forme a L o a U. Staccato, è un capannone nuovo${buildingCost(n) ? ` (permesso ${fmt(buildingCost(n))})` : ''}.`, x + w / 2, y + 206, w - 40, 15, '#b9c4ce', 20, 'center');
+  text(`Al livello ${state.level}: fino a ${maxArea()} celle · al livello ${state.level + 1}: ${maxArea(state.level + 1)}`, x + w / 2, y + 296, 15, '#7ef0a0');
+  text(n >= tune.maxBuildings ? 'Capannoni separati: tutti costruiti' : state.level < buildingLvl(n) ? `Capannone separato n. ${n + 1}: livello ${buildingLvl(n)}` : `Capannoni separati: ${n} di ${tune.maxBuildings}`, x + w / 2, y + 320, 14, '#b9c4ce');
+  button('Disegna', x + 100, y + 340, w - 200, 52, () => setWTool('draw'), { name: 'drawB', size: 20, color: '#5bc7ff' });
+}
+function drawNarrator(t, msg) { // the foreman: a pixel worker with a speech bubble, bottom left
+  const x = 60, y = 556;
+  sprite(Math.sin(t * 4) > 0 ? 'wave' : 'walk0', x, y, 4, false);
+  ctx.font = `bold 16px ${FONT}`;
+  const maxW = 380, words = msg.split(' '); let lines = [], cur = '';
+  for (const w of words) { const tt = cur ? cur + ' ' + w : w; if (ctx.measureText(tt).width > maxW && cur) { lines.push(cur); cur = w; } else cur = tt; }
+  if (cur) lines.push(cur);
+  const bh = lines.length * 22 + 18, bx = x + 34, by = y - 70 - bh / 2;
+  rrect(bx, by, maxW + 24, bh, 12, '#fff', '#2b2b2b', 2); poly([[bx, by + bh - 20], [bx - 14, by + bh - 6], [bx, by + bh - 8]], '#fff', '#2b2b2b', 2);
+  lines.forEach((l, i) => text(l, bx + 12, by + 20 + i * 22, 16, '#2b2b2b', 'left'));
+}
+
 // ---- World tap ----------------------------------------------------------------------------
 function machineAt(sx, sy) {
-  const ms = allMachines().sort((a, b) => (b.slot + lineRow(b.line)) - (a.slot + lineRow(a.line)));
+  const ms = F.machines.slice().sort((a, b) => (b.c + b.r) - (a.c + a.r));
   for (const m of ms) {
-    const c = m.slot + 1.5, r = lineRow(m.line) + 0.5, h = machineTop(m.type);
+    const c = m.c + 0.5, r = m.r + 0.5, h = machineTop(m.type);
     const [x0] = iso(c - 0.45, r + 0.45), [x1] = iso(c + 0.45, r - 0.45), y0 = iso(c - 0.45, r - 0.45, h)[1], y1 = iso(c + 0.45, r + 0.45, 0)[1];
     const [a, b] = toScreen(x0, y0), [cc, d] = toScreen(x1, y1);
     if (sx >= a && sx <= cc && sy >= b && sy <= d) return m;
@@ -1380,26 +1787,24 @@ function machineAt(sx, sy) {
 function worldTap(sx, sy) {
   const [cf, rf] = toCell(sx, sy), c = Math.floor(cf), r = Math.floor(rf);
   if (state.placing) {
-    const li = (r - 1) / 2, s = c - 1;
-    if (r % 2 === 1 && li >= 0 && li < state.linesOpen && s >= 0 && s < state.slotsPerLine) placeAt(li, s);
-    else { if (state.placing.m) toast('Spostamento annullato'); state.placing = null; }
+    if (inShed(c, r)) placeAt(c, r); else { state.placing = null; toast('Piazzamento annullato'); }
     return;
   }
+  if (state.tool) { const m = state.tool !== 'belt' ? machineAt(sx, sy) : null; if (m) toolTap(m.c, m.r); else toolTap(c, r); return; }
   const m = machineAt(sx, sy);
-  if (m) {
-    if (m.phase < 3) startBuild(m);
-    else { state.sel = m; state.panel = 'machine'; sfx.click(); }
-    return;
-  }
-  if (r % 2 === 1 && c === CRATE_COL) { const li = (r - 1) / 2; if (li < state.linesOpen) { state.panel = 'recipes'; sfx.click(); } }
-  else if (r >= openRows() && r < MAXROWS && c >= 0 && c < COLS) { state.panel = 'shop'; state.shopTab = 1; sfx.click(); }
+  if (m) { if (m.phase < 2) startBuild(m); else { state.sel = m; state.panel = 'machine'; sfx.click(); } return; }
+  const o = inShed(c, r) ? cellAt(c, r) : null;
+  if (o && o.kind === 'crate') { state.panel = 'recipes'; sfx.click(); }
+  else if (o && o.kind === 'src') toast(`Magazzino barre: una barra grezza ogni ${tune.spawnGap.toFixed(1)} s verso la freccia`, '#bfe3ff');
+  else if (o && o.kind === 'rack') toast('Rack di rete: ogni macchina si collega qui col minigioco Rete', '#bfe3ff');
 }
 
 // ---- Scenes -------------------------------------------------------------------------------
 function updateWorld(dt) {
   state.t += dt;
-  state.lines.forEach((L, li) => { if (li < state.linesOpen) updateLine(L, li, dt); L.bump = Math.max(0, (L.bump || 0) - dt * 4); });
-  updateWorkers(dt);
+  const view = F;
+  for (const b of state.buildings) { F = b; updateFactory(dt); updateWorkers(dt); }
+  F = view;
   for (const f of state.floats) { f.life -= dt; f.wy -= 22 * dt; }
   state.floats = state.floats.filter(f => f.life > 0);
   for (const tt of state.toasts) tt.life -= dt;
@@ -1410,88 +1815,96 @@ function updateWorld(dt) {
   state.score = state.earned;
   state.saveT += dt; if (state.saveT > 5) { state.saveT = 0; save(); }
 }
+function drawGhost(P, c, r, t) {
+  ctx.globalAlpha = 0.55;
+  if (P.kind === 'mach') drawMachine(P.m ? P.m.type : P.type, c, r, { status: 'off', t });
+  else if (P.kind === 'src') drawSource(c, r); else if (P.kind === 'rack') drawRack(c, r, t); else drawCrateAt(c, r, 0);
+  ctx.globalAlpha = 1;
+}
 function drawWorld(t) {
   ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-cam.x, -cam.y);
-  drawGround(); drawFloor(t); drawWalls();
-  const signP = iso(4, 0, 35); ctx.save(); ctx.translate(signP[0], signP[1]); ctx.transform(1, 0.5, 0, 1, 0, 0); textW('FABBRICA CNC', 0, 0, 10, '#f2c230'); ctx.restore();
-  for (let li = 0; li < state.linesOpen; li++) drawBelt(li, t);
-  drawCables(); drawSlots(t);
-  const objs = [];
-  objs.push({ d: RACK.c + RACK.r + 1, f: () => drawRack(t) });
-  for (let li = 0; li < state.linesOpen; li++) {
-    const L = state.lines[li], row = lineRow(li);
-    objs.push({ d: row + 1, f: () => drawFeeder(li) });
-    objs.push({ d: CRATE_COL + row + 1, f: () => drawCrate(li, t, L.bump || 0) });
-    for (const p of L.pieces) if (!(p.proc > 0)) objs.push({ d: p.x + row + 1.02, f: () => drawPiece(p.ops, p.x + 0.5, row + 0.5) });
-    L.slots.forEach(m => {
-      if (!m) return;
-      const moving = state.placing && state.placing.m === m;
-      objs.push({ d: m.slot + 1 + row + 1, f: () => {
-        if (moving) ctx.globalAlpha = 0.45 + 0.2 * Math.sin(t * 6);
-        if (m.phase < 3) { ctx.globalAlpha = 0.6; drawMachine(m.type, m.slot + 1, row, { status: 'off', t }); ctx.globalAlpha = 1; drawScaffold(m.slot + 1, row, machineTop(m.type)); }
-        else drawMachine(m.type, m.slot + 1, row, { status: m.busy ? 'work' : 'wait', busy: !!m.busy, t });
+  drawGround(); drawFloor(); drawCables();
+  const cells = Object.values(F.grid);
+  cells.filter(o => o.kind === 'belt').sort((a, b) => (a.c + a.r) - (b.c + b.r)).forEach(o => drawBelt(o, t));
+  drawCellMarks(t);
+  for (const o of cells) { if (o.kind === 'src') drawOutArrow(o.c, o.r, o.dir); else if (o.kind === 'mach' && o.m.phase >= 2) drawOutArrow(o.c, o.r, o.m.dir); }
+  const objs = wallSegs();
+  for (const o of cells) {
+    const d = o.c + o.r + 1;
+    if (o.kind === 'rack') objs.push({ d, f: () => drawRack(o.c, o.r, t) });
+    else if (o.kind === 'src') objs.push({ d, f: () => drawSource(o.c, o.r) });
+    else if (o.kind === 'crate') objs.push({ d, f: () => drawCrateAt(o.c, o.r, o.bump || 0) });
+    else if (o.kind === 'belt' && o.item) { const [pc, pr] = itemPos(o), ops = o.item.ops; objs.push({ d: pc + pr + 0.05, f: () => drawPiece(ops, pc, pr) }); }
+    else if (o.kind === 'mach') {
+      const m = o.m, moving = state.placing && state.placing.m === m;
+      objs.push({ d, f: () => {
+        if (moving) ctx.globalAlpha = 0.35;
+        if (m.phase < 2) { ctx.globalAlpha = moving ? 0.3 : 0.6; drawMachine(m.type, m.c, m.r, { status: 'off', t }); ctx.globalAlpha = 1; drawScaffold(m.c, m.r, machineTop(m.type)); }
+        else drawMachine(m.type, m.c, m.r, { status: m.cur ? 'work' : 'wait', busy: !!m.cur, t });
         ctx.globalAlpha = 1;
       } });
-    });
+    }
   }
-  for (let li = state.linesOpen; li < 3; li++) objs.push({ d: lineRow(li) + 4, f: () => drawLockedSign(li) });
-  for (const w of state.workers) objs.push({ d: w.c + w.r, f: () => drawWorker(w, t) });
-  // ghost of the machine being placed, under the pointer
-  if (state.placing && !state.placing.m && ptr.inside) {
-    const [cf, rf] = toCell(ptr.x, ptr.y), c = Math.floor(cf), r = Math.floor(rf), li = (r - 1) / 2, s = c - 1;
-    if (r % 2 === 1 && li >= 0 && li < state.linesOpen && s >= 0 && s < state.slotsPerLine && !state.lines[li].slots[s]) objs.push({ d: c + r + 1.5, f: () => { ctx.globalAlpha = 0.55; drawMachine(state.placing.type, c, r, { status: 'off', t }); ctx.globalAlpha = 1; } });
+  for (const w of F.workers) objs.push({ d: w.c + w.r, f: () => drawWorker(w, t) });
+  if (state.placing) {
+    const h = hoverCell();
+    if (h && canPlaceAt(h[0], h[1], state.placing)) {
+      const P = state.placing, old = cellAt(h[0], h[1]), dir = old && old.kind === 'belt' && !P.rotated ? old.dir : P.dir;
+      objs.push({ d: h[0] + h[1] + 1.5, f: () => { drawGhost(P, h[0], h[1], t); if (P.kind === 'mach' || P.kind === 'src') drawOutArrow(h[0], h[1], dir, '#5be38f'); } });
+    }
   }
   objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
   ctx.restore();
 }
 function drawOverlaysWorld(t) {
-  // labels above each crate: what the line makes now
-  for (let li = 0; li < state.linesOpen; li++) {
-    const L = state.lines[li], ms = lineMachines(L), p = iso(CRATE_COL + 0.5, lineRow(li) + 0.5, 34), [sx, sy] = toScreen(p[0], p[1]);
-    let lab, col = '#fff', sub = '';
-    if (!ms.length) { lab = 'Linea vuota'; col = '#b9c4ce'; }
-    else if (ms.some(m => m.phase < 3)) { lab = 'In costruzione'; col = '#ffb35b'; }
-    else {
-      const seq = lineSeq(L), rec = recipeOf(seq);
-      lab = rec ? (state.found.includes(seq) ? rec.name : 'Nuovo pezzo...') : 'Scarto'; col = rec ? '#ffd9a8' : '#c9c9c9';
-      sub = `${fmt(recipeVal(seq) * lineQuality(ms))} al pezzo`;
-    }
+  // above each crate: what it sold last
+  for (const o of Object.values(F.grid)) {
+    if (o.kind !== 'crate') continue;
+    const p = iso(o.c + 0.5, o.r + 0.5, 34), [sx, sy] = toScreen(p[0], p[1]);
+    const L = o.last, lab = L ? (L.known ? L.name : L.name) : 'In attesa di pezzi', col = L ? (L.known ? '#ffd9a8' : '#c9c9c9') : '#b9c4ce', sub = L ? `${fmt(L.v)} al pezzo` : '';
     ctx.font = `bold 15px ${FONT}`; const tw = Math.max(ctx.measureText(lab).width, sub ? 100 : 0) + 20;
     rrect(sx - tw / 2, sy - 44, tw, sub ? 42 : 26, 8, 'rgba(20,26,34,0.82)', col, 1.5);
     text(lab, sx, sy - 31, 15, col); if (sub) text(sub, sx, sy - 13, 13, '#9ce8b4');
   }
   // bubbles over machines being built
-  for (const m of allMachines()) if (m.phase < 3) {
-    const p = iso(m.slot + 1.5, lineRow(m.line) + 0.5, machineTop(m.type) + 18), [sx, sy0] = toScreen(p[0], p[1]), sy = sy0 + Math.sin(t * 3 + m.id) * 4;
+  for (const m of F.machines) if (m.phase < 2) {
+    const p = iso(m.c + 0.5, m.r + 0.5, machineTop(m.type) + 18), [sx, sy0] = toScreen(p[0], p[1]), sy = sy0 + Math.sin(t * 3 + m.id) * 4;
     rrect(sx - 22, sy - 22, 44, 40, 10, '#fff', '#2b2b2b', 2);
-    poly([[sx - 6, sy + 17], [sx + 6, sy + 17], [sx, sy + 26]], '#fff'); phaseIcon(m.phase, sx, sy - 2, 1.2);
+    poly([[sx - 6, sy + 17], [sx + 6, sy + 17], [sx, sy + 26]], '#fff'); phaseIcon(m.phase === 0 ? 0 : 2, sx, sy - 2, 1.2);
   }
-  // floating coins
   for (const f of state.floats) {
+    if (f.b !== F.id) continue;
     const [sx, sy] = toScreen(f.wx, f.wy), a = Math.min(1, f.life * 2);
     ctx.globalAlpha = a; if (f.coin) coinIcon(sx - 24, sy, 0.8); textO(f.txt, sx + (f.coin ? 4 : 0), sy, 20, f.col); ctx.globalAlpha = 1;
   }
-  // welcome bubble over the first worker
-  if (state.welcome > 0 && state.workers[0] && !state.placing && !state.panel) {
-    const w = state.workers[0], p = iso(w.c, w.r, 44), [sx, sy] = toScreen(p[0], p[1]);
-    rrect(sx - 120, sy - 46, 240, 40, 10, '#fff', '#2b2b2b', 2); poly([[sx - 8, sy - 7], [sx + 8, sy - 7], [sx, sy + 4]], '#fff');
-    text('Benvenuto in fabbrica, capo!', sx, sy - 26, 17, '#2b2b2b');
-  }
+}
+function hint(msg) {
+  ctx.font = `bold 17px ${FONT}`; const tw = ctx.measureText(msg).width + 30;
+  rrect(W / 2 - tw / 2, 124, tw, 34, 10, 'rgba(20,26,34,0.9)', '#f2c230', 1.5); text(msg, W / 2, 142, 17, '#fff');
 }
 function drawTopLayer(t) {
   if (state.banner) {
-    const b = state.banner, a = Math.min(1, b.life * 2, (3.2 - b.life) * 4), y = 108 + (1 - a) * -30;
+    const b = state.banner, a = Math.min(1, b.life * 2, (3.2 - b.life) * 4), y = 222 + (1 - a) * -30;
     ctx.globalAlpha = a; rrect(W / 2 - 330, y, 660, 76, 16, 'rgba(20,26,34,0.92)', b.col, 3);
     text(b.title, W / 2, y + 26, 26, b.col); text(b.sub, W / 2, y + 56, 16, '#e6e1d3'); ctx.globalAlpha = 1;
   }
   state.toasts.forEach((tt, i) => {
-    const y = 560 - i * 44; ctx.globalAlpha = Math.min(1, tt.life * 2);
+    const y = 540 - i * 44; ctx.globalAlpha = Math.min(1, tt.life * 2);
     ctx.font = `bold 17px ${FONT}`; const tw = ctx.measureText(tt.msg).width + 30;
-    rrect(W / 2 - tw / 2 - 120, y, tw, 36, 10, 'rgba(20,26,34,0.9)', tt.col, 1.5); text(tt.msg, W / 2 - 120, y + 19, 17, tt.col); ctx.globalAlpha = 1;
+    rrect(W / 2 + 20 - tw / 2, y, tw, 36, 10, 'rgba(20,26,34,0.9)', tt.col, 1.5); text(tt.msg, W / 2 + 20, y + 19, 17, tt.col); ctx.globalAlpha = 1;
   });
   if (state.placing) {
-    text(state.placing.m ? 'Scegli dove spostarla' : `Piazza: ${MACH[state.placing.type].name}`, W / 2 - 120, 108, 20, '#fff');
-    button('Annulla', W / 2 - 200, 126, 160, 46, () => { state.placing = null; }, { color: '#9aa4ad', size: 18, name: 'cancel' });
+    const P = state.placing, name = P.kind === 'mach' ? MACH[P.m ? P.m.type : P.type].name : LOGI[P.kind].name;
+    hint(`${P.m ? 'Sposta' : 'Piazza'}: ${name}  ·  ${P.kind === 'crate' ? 'riceve da ogni lato' : P.kind === 'rack' ? 'collega le macchine di questo capannone' : 'la freccia verde è l\'uscita'}`);
+    if (P.kind === 'mach' || P.kind === 'src') button('Ruota (E)', W / 2 - 170, 168, 160, 46, rotatePlacing, { color: '#f2c230', size: 18, name: 'rotP' });
+    button('Annulla', W / 2 + 10, 168, 160, 46, () => { state.placing = null; }, { color: '#9aa4ad', size: 18, name: 'cancel' });
+  } else if (state.tool === 'belt') hint(`Nastro: trascina sul pavimento per posarlo (${tune.beltCost} monete a cella) · tocca un nastro per girarlo`);
+  else if (state.tool === 'rotate') hint('Ruota: tocca una macchina, un nastro o un magazzino per girare la sua uscita');
+  else if (state.tool === 'demo') hint('Demolisci: tocca un nastro per toglierlo, il resto due volte per venderlo');
+  else if (!F && state.wtool === 'draw') hint(`Capannone: trascina un rettangolo sul prato per disegnarne le pareti (${tune.cellCost} monete a cella)`);
+  if (!F && state.wplacing) {
+    hint('Capannone: tocca dentro le mura, su terreno libero (verde = va bene)');
+    button('Annulla', W / 2 - 80, 168, 160, 46, () => { state.wplacing = null; }, { color: '#9aa4ad', size: 18, name: 'cancelB' });
   }
 }
 
@@ -1500,23 +1913,24 @@ const scenes = {
     update(dt) { state.t += dt; },
     draw() {
       clear('#2b3a48');
-      const t = state.t;
       ORDER.forEach((tp, i) => {
         const x = 150 + i * 245, y = 330;
         ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x - 110, 90, 220, 300);
         machineIcon(tp, x, y, 2.6, { t: 1.3, busy: true, status: 'work' });
         text(MACH[tp].name, x, 420, 17, '#fff');
       });
+      const at = (x, y, s, c, r, f) => { ctx.save(); ctx.translate(x, y); ctx.scale(s, s); const p = iso(c, r); ctx.translate(-p[0], -p[1]); f(); ctx.restore(); };
       const items = [
         ['Operaio', (x, y) => sprite('walk0', x, y, 5, false)],
         ['Operaio che saluta', (x, y) => sprite('wave', x, y, 5, false)],
         ['Operaio al lavoro', (x, y) => sprite('work', x, y, 5, false)],
-        ['Rack di rete', (x, y) => { ctx.save(); ctx.translate(x, y + 30); ctx.scale(1.5, 1.5); ctx.translate(-iso(7.5, 0.5)[0], -iso(7.5, 0.5)[1]); drawRack(1); ctx.restore(); }],
-        ['Magazzino barre', (x, y) => { ctx.save(); ctx.translate(x, y + 10); ctx.scale(1.8, 1.8); ctx.translate(-iso(0.5, 1.5)[0], -iso(0.5, 1.5)[1]); drawFeeder(0); ctx.restore(); }],
-        ['Cassa pezzi', (x, y) => { ctx.save(); ctx.translate(x, y + 10); ctx.scale(1.8, 1.8); ctx.translate(-iso(6.5, 1.5)[0], -iso(6.5, 1.5)[1]); drawCrate(0, 0, 0); ctx.restore(); }],
-        ['Pezzi', (x, y) => { ctx.save(); ctx.translate(x, y); ctx.scale(2.2, 2.2); ['', 'T', 'TL', 'TF', 'TFD', 'TX'].forEach((o, k) => { const p = iso(0, 0); ctx.save(); ctx.translate(-30 + k * 13 - p[0], (k % 2) * 10 - 10 - p[1]); drawPiece(o, 0, 0); ctx.restore(); }); ctx.restore(); }],
+        ['Rack di rete', (x, y) => at(x, y + 30, 1.5, 0.5, 0.5, () => drawRack(0, 0, 1))],
+        ['Magazzino barre', (x, y) => at(x, y + 10, 1.8, 0.5, 0.5, () => drawSource(0, 0))],
+        ['Cassa vendita', (x, y) => at(x, y + 10, 1.8, 0.5, 0.5, () => drawCrateAt(0, 0, 0))],
+        ['Nastro e pezzi', (x, y) => at(x, y, 1.6, 1.5, 0.5, () => { [0, 1, 2].forEach(c => drawBelt({ c, r: 0, dir: 0 }, 0)); ['', 'T', 'TL', 'TF', 'TFD', 'TX'].forEach((o, k) => drawPiece(o, 0.35 + k * 0.48, 0.5)); })],
       ];
-      items.forEach(([name, f], i) => { const x = 100 + i * 180, y = 600; f(x, y); text(name, x, 660, 15, '#fff'); });
+      items.push(['Capannone', (x, y) => at(x, y + 10, 0.55, 1.5, 1.5, () => drawBuildingOut({ machines: [] }, 0, rectCells(0, 0, 3, 3)))]);
+      items.forEach(([name, f], i) => { const x = 70 + i * 142, y = 600; f(x, y); text(name, x, 660, 14, '#fff'); });
     },
   },
   title: {
@@ -1528,7 +1942,7 @@ const scenes = {
     },
     draw() {
       ui = { buttons: [], named: {} };
-      drawWorld(clock.now());
+      drawOutside(clock.now());
       ctx.fillStyle = 'rgba(14,20,28,0.62)'; ctx.fillRect(0, 0, W, H);
       rrect(W / 2 - 360, 70, 720, 130, 22, 'rgba(28,36,44,0.92)', '#f2c230', 4);
       for (let i = 0; i < 680; i += 34) { ctx.fillStyle = (i / 34) % 2 ? '#2b2b2b' : '#f2c230'; ctx.fillRect(W / 2 - 340 + i, 178, 34, 8); }
@@ -1545,13 +1959,20 @@ const scenes = {
   },
   play: {
     update(dt) {
-      if (pressed('KeyP') || (pressed('Escape') && !state.panel && !state.mg && !state.placing)) { scene = 'pause'; confirmNew = 0; return; }
-      if (pressed('Escape')) { if (state.mg && state.mg.step === 'intro') state.mg = null; state.panel = null; state.placing = null; }
+      if (pressed('KeyP') || (pressed('Escape') && !state.panel && !state.mg && !state.placing && !state.tool && !state.wtool && !state.wplacing)) { scene = 'pause'; confirmNew = 0; return; }
+      if (pressed('Escape')) { if (state.mg && state.mg.step === 'intro') state.mg = null; state.panel = null; state.placing = null; state.tool = null; state.demo = null; state.wtool = null; state.wplacing = null; }
+      if (pressed('KeyX') && F && !state.mg) exitBuilding();
       if (!state.mg) {
-        if (pressed('KeyB')) openPanel('shop');
+        if (pressed('KeyB')) { openPanel(F ? 'shop' : 'wshop'); state.shopTab = 0; }
         if (pressed('KeyR')) openPanel('recipes');
         if (pressed('KeyT')) openPanel('tools');
         if (!state.panel) {
+          if (F) {
+            if (pressed('Digit1')) setTool(state.tool === 'belt' ? null : 'belt');
+            if (pressed('Digit2')) setTool(state.tool === 'rotate' ? null : 'rotate');
+            if (pressed('Digit3')) setTool(state.tool === 'demo' ? null : 'demo');
+          } else if (pressed('Digit1')) { if (state.wtool === 'draw') state.wtool = null; else setWTool('draw'); }
+          if (pressed('KeyE')) rotatePlacing();
           const sp = tune.panSpeed * dt / cam.zoom;
           if (down.has('ArrowLeft')) cam.x -= sp; if (down.has('ArrowRight')) cam.x += sp;
           if (down.has('ArrowUp')) cam.y -= sp; if (down.has('ArrowDown')) cam.y += sp;
@@ -1560,21 +1981,29 @@ const scenes = {
           clampCam();
         }
       } else updateMinigame(dt);
+      if (state.wallDrag) {
+        if (!F && !state.panel && state.wtool === 'draw') { if (ptr.down) wallDragStep(); }
+        if (!ptr.down) { const d = state.wallDrag; state.wallDrag = null; if (d.a && d.b && (d.a[0] !== d.b[0] || d.a[1] !== d.b[1])) commitDraw(rectOf(d.a, d.b)); }
+      }
+      if (state.beltDrag) {
+        if (!state.mg && !state.panel && state.tool === 'belt') beltDragStep();
+        if (!ptr.down) state.beltDrag = null;
+      }
       const tp = taps.splice(0);
-      for (const p of tp) { if (!hitButtons(p.x, p.y) && !state.mg && !state.panel) worldTap(p.x, p.y); }
+      for (const p of tp) { if (!hitButtons(p.x, p.y) && !state.mg && !state.panel) { if (F) worldTap(p.x, p.y); else outsideTap(p.x, p.y); } }
       updateWorld(dt);
     },
     draw() {
       const t = state.t;
       ui = { buttons: [], named: {} };
-      drawWorld(t);
-      drawOverlaysWorld(t);
+      if (F) { drawWorld(t); drawOverlaysWorld(t); } else { drawOutside(t); drawOverlaysOut(t); }
       drawHUD(t);
       drawTopLayer(t);
       if (state.panel === 'shop') drawShop(t);
       else if (state.panel === 'recipes') drawRecipes(t);
       else if (state.panel === 'tools') drawTools(t);
       else if (state.panel === 'machine') drawMachinePanel(t);
+      else if (state.panel === 'wshop') drawWorldShop(t);
       if (state.mg) drawMinigame(t);
       drawTutorial(t);
     },

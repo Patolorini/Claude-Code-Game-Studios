@@ -8,7 +8,7 @@ window.CONFIG = {
   volume: { value: 0.5, min: 0, max: 1, step: 0.05 },
 
   // ---- Economia di partenza ----
-  startCoins: { value: 500, min: 0, max: 5000, step: 50 },   // monete all'inizio
+  startCoins: { value: 900, min: 0, max: 5000, step: 50 },   // monete all'inizio
 
   // ---- Macchine: costo (monete) ----
   costT: { value: 200, min: 50, max: 2000, step: 10 },       // Troncatrice CNC
@@ -48,9 +48,8 @@ window.CONFIG = {
   dialsX: { value: 4, min: 1, max: 5, step: 1 },
 
   // ---- Linee di produzione ----
-  beltSpeed: { value: 1.6, min: 0.3, max: 5, step: 0.1 },    // celle al secondo sul nastro
-  spawnGap: { value: 1.2, min: 0.3, max: 5, step: 0.1 },     // s tra una barra grezza e la successiva
-  pieceGap: { value: 0.55, min: 0.2, max: 1, step: 0.05 },   // distanza minima tra pezzi (celle)
+  beltSpeed: { value: 1.8, min: 0.3, max: 5, step: 0.1 },    // celle al secondo sul nastro (un pezzo per cella)
+  spawnGap: { value: 1.2, min: 0.3, max: 5, step: 0.1 },     // s tra una barra grezza e la successiva, per Magazzino
   qualityBase: { value: 0.5, min: 0, max: 1, step: 0.05 },   // resa = qualityBase + qualità% / 100
 
   // ---- Ricette: monete per pezzo (prima della qualità) ----
@@ -108,13 +107,34 @@ window.CONFIG = {
   toolReqT: { value: 5, min: 1, max: 10, step: 1 },          // per Tester liv. 2
   toolReqStep: { value: 2, min: 0, max: 5, step: 1 },        // livelli in più per ogni livello attrezzo
 
-  // ---- Capannone (ampliamenti) ----
-  line2Cost: { value: 1500, min: 0, max: 50000, step: 100 },
-  line2Lvl: { value: 4, min: 1, max: 10, step: 1 },
-  longCost: { value: 3000, min: 0, max: 50000, step: 100 },  // linee da 4 a 5 posti
-  longLvl: { value: 6, min: 1, max: 10, step: 1 },
-  line3Cost: { value: 6000, min: 0, max: 90000, step: 100 },
-  line3Lvl: { value: 8, min: 1, max: 10, step: 1 },
+  // ---- Logistica (piazzamento libero) ----
+  beltCost: { value: 5, min: 0, max: 200, step: 1 },          // monete per cella di nastro (rimborsate se demolito)
+  sourceCost: { value: 300, min: 0, max: 5000, step: 10 },    // Magazzino barre in più
+  crateCost: { value: 150, min: 0, max: 5000, step: 10 },     // Cassa vendita in più
+  logisticsCopyMult: { value: 0.5, min: 0, max: 2, step: 0.05 }, // ogni Magazzino/Cassa in più costa +50%
+
+  rackCost: { value: 400, min: 0, max: 5000, step: 10 },      // Rack di rete in più (il primo di ogni capannone è gratis)
+  rackLvl: { value: 3, min: 1, max: 10, step: 1 },           // livello che sblocca il Rack di rete
+  netBonus: { value: 0.3, min: 0, max: 2, step: 0.05 },       // resa in più di una macchina in rete al 100% (0.3 = +30%)
+
+  // ---- Esterno: prato e capannoni disegnati dal giocatore ----
+  worldCols: { value: 30, min: 10, max: 60, step: 1 },        // larghezza del prato (caselle)
+  worldRows: { value: 24, min: 10, max: 60, step: 1 },        // profondità del prato (caselle)
+  worldZoom: { value: 1.0, min: 0.4, max: 3, step: 0.05 },    // zoom iniziale all'esterno
+  cellCost: { value: 10, min: 0, max: 500, step: 1 },         // monete per cella di capannone (costruire o ingrandire)
+  areaBase: { value: 30, min: 9, max: 200, step: 1 },         // celle massime di un capannone (con tutte le sue parti) al livello 1
+  areaPerLvl: { value: 12, min: 0, max: 50, step: 1 },        // celle massime in più per ogni livello
+  minSide: { value: 3, min: 2, max: 6, step: 1 },             // lato minimo di un capannone
+  maxCols: { value: 14, min: 4, max: 14, step: 1 },           // lato massimo (colonne)
+  maxRows: { value: 10, min: 4, max: 10, step: 1 },           // lato massimo (file)
+  maxBuildings: { value: 4, min: 1, max: 4, step: 1 },        // capannoni separati (quelli attaccati diventano uno solo); building2..4 qui sotto
+  building2Lvl: { value: 4, min: 1, max: 10, step: 1 },       // livello per il secondo capannone
+  building2Cost: { value: 1000, min: 0, max: 90000, step: 100 }, // permesso di costruzione, oltre alle celle
+  building3Lvl: { value: 7, min: 1, max: 10, step: 1 },
+  building3Cost: { value: 4000, min: 0, max: 90000, step: 100 },
+  building4Lvl: { value: 9, min: 1, max: 10, step: 1 },
+  building4Cost: { value: 9000, min: 0, max: 90000, step: 100 },
+  cellsPerWorker: { value: 10, min: 4, max: 50, step: 1 },    // un operaio ogni tot celle di capannone
 
   // ---- Obiettivi ----
   goalCoins: { value: 100, min: 0, max: 2000, step: 10 },    // monete premio (x numero obiettivo/3+1)
@@ -126,5 +146,5 @@ window.CONFIG = {
   zoomStart: { value: 1.75, min: 0.5, max: 3, step: 0.05 },
   panSpeed: { value: 420, min: 50, max: 2000, step: 10 },    // px/s con le frecce
   workerSpeed: { value: 1.3, min: 0.2, max: 5, step: 0.1 },  // celle al secondo
-  workers: { value: 3, min: 1, max: 8, step: 1 },            // operai iniziali (+1 per linea aperta)
+  workers: { value: 3, min: 1, max: 8, step: 1 },            // operai iniziali (+1 per ogni ampliamento)
 };
