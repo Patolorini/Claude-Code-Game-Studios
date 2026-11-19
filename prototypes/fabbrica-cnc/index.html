@@ -337,7 +337,7 @@ function reset() {
   };
   F = null; crewSync();
   const b = newBuilding(rectCells(0, 0, tune.shed0Cols, tune.shed0Rows)); b.name = 'La tua fabbrica'; b.stage = 0;
-  F = b; layoutZones(b); state.cur = 0; state.entered = true; centerCam();
+  F = b; layoutZones(b); crewSync(); state.cur = 0; state.entered = true; centerCam();
 }
 const shedSize = st => [tune['shed' + st + 'Cols'], tune['shed' + st + 'Rows']];
 function buyStage() { // a new, bigger site: it starts empty, the old one stays yours and keeps producing
@@ -350,7 +350,7 @@ function buyStage() { // a new, bigger site: it starts empty, the old one stays 
   state.coins -= cost; state.siteStart = state.t / tune.dayLength; state.siteToldDone = false;
   const keep = F, b = newBuilding(rectCells(0, 0, C, R)); F = keep;
   state.tokens = (state.tokens || 0) + 2; // a new site brings two tokens
-  b.stage = st; b.name = TIERS[st].short; b.grown = true; b.wh = { bars: 0, orders: [], auto: false }; layoutZones(b);
+  b.stage = st; b.name = TIERS[st].short; b.grown = true; b.wh = { bars: 0, orders: [], auto: false }; layoutZones(b); crewSync();
   F = b; state.cur = state.buildings.indexOf(b);
   state.panel = null; state.placing = null; state.tool = null; state.town = false; sfx.level();
   state.move = { from, to: TIERS[st].site, t: 0, st }; scene = 'move';
@@ -400,11 +400,12 @@ function load() {
   reset(); state.buildings = [];
   Object.assign(state, { coins: d.coins, xp: d.xp, level: d.level, sold: d.sold, earned: d.earned || 0, tools: d.tools, crew: d.crew || [], found: d.found, t: d.t || 0, siteStart: d.siteStart || 0, goal: d.goal, nextId: d.nextId, entered: !!d.entered, welcome: 0 });
   state.perks = d.perks || {}; state.tokens = d.tokens != null ? d.tokens : Math.max(0, (d.level || 1) - 1); // older saves: the tokens their levels would have given
+  state.xp = Math.max(state.xp || 0, levelXp(state.level)); // the curve got steeper: an old save keeps its level
   for (const bd of d.buildings) {
     const b = { id: bd.id, name: bd.name, cells: new Set(bd.tiles), stage: bd.stage || 0, grown: !!bd.grown, grid: {}, machines: [], workers: [], lastSale: -9 };
     state.buildings.push(b); F = b;
     for (const o of bd.cells) {
-      if (o.k === 'mach') { const m = makeMachine(o.type, o.c, o.r, o.dir, o.id, o.phase, o.pct, o.net ?? null); m.op = !!o.op; m.input = o.input || ''; m.age = o.age || 0; m.broken = o.broken || null; m.mk = o.mk || 1; b.machines.push(m); if (!fitsAt(m.c, m.r, m.mk, m.dir, null)) m.mk = 1; placeMachineCells(m); }
+      if (o.k === 'mach') { const m = makeMachine(o.type, o.c, o.r, o.dir, o.id, o.phase, o.pct, o.net ?? null); m.op = !!o.op; m.input = o.input || ''; m.age = o.age || 0; m.broken = o.broken || null; m.mk = o.mk || 1; b.machines.push(m); if (!fitsAt(m.c, m.r, m.mk, m.dir, null, m.type)) m.mk = 1; placeMachineCells(m); }
       else if (o.k === 'src') setCell(o.c, o.r, { kind: 'src', dir: o.dir, t: 0.5 });
       else if (o.k === 'crate') setCell(o.c, o.r, { kind: 'crate', last: null, bump: 0 });
       else setCell(o.c, o.r, { kind: o.k });
@@ -549,15 +550,100 @@ function screenQ(pts, col, t, busy) {
   }
 }
 // ---- Machines in five generations: from an old hand-cranked machine on a wooden plinth to a robot cell ----
-// Each generation is bigger: 1x1, 2x1, 2x1, 3x2, 4x4 cells (turned with the machine).
-const MK_FP = [[1, 1], [2, 1], [2, 1], [3, 2], [4, 4]];
-const fpDims = (mk = 1, dir = 0) => { const [w, h] = MK_FP[Math.max(1, Math.min(5, mk)) - 1]; return dir % 2 ? [h, w] : [w, h]; };
-const fpOf = m => fpDims(m.mk || 1, m.dir || 0);
-function cellsOf(m, c = m.c, r = m.r, mk = m.mk || 1, dir = m.dir || 0) { const [w, h] = fpDims(mk, dir), out = []; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) out.push([c + i, r + j]); return out; }
+// Each kind of machine has its own shape and size in every generation (w x h along its long side; turned with the machine).
+const MK_FP = {
+  T: [[1, 1], [2, 1], [3, 1], [4, 1], [4, 2]], // a saw line: long and narrow, roller tables in and out
+  L: [[1, 1], [2, 1], [2, 1], [3, 1], [4, 2]], // a lathe: long, with a bar feeder at the back later
+  F: [[1, 1], [2, 1], [2, 2], [2, 2], [3, 3]], // a mill: square and tall
+  D: [[1, 1], [2, 1], [2, 1], [2, 2], [3, 2]], // a drill: from a radial arm to a gantry with several spindles
+  X: [[1, 1], [2, 2], [2, 2], [3, 3], [4, 4]], // the 5-axis centre: the biggest
+};
+const fpDims = (mk = 1, dir = 0, type = 'T') => { const [w, h] = (MK_FP[type] || MK_FP.T)[Math.max(1, Math.min(5, mk)) - 1]; return dir % 2 ? [h, w] : [w, h]; };
+const fpOf = m => fpDims(m.mk || 1, m.dir || 0, m.type);
+function cellsOf(m, c = m.c, r = m.r, mk = m.mk || 1, dir = m.dir || 0, type = m.type) { const [w, h] = fpDims(mk, dir, type), out = []; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) out.push([c + i, r + j]); return out; }
 function placeMachineCells(m) { cellsOf(m).forEach(([c, r], i) => setCell(c, r, { kind: 'mach', m, main: i === 0 })); }
 function clearMachineCells(m) { for (const [c, r] of cellsOf(m)) { const o = cellAt(c, r); if (o && o.kind === 'mach' && o.m === m) clearCell(c, r); } }
-function fitsAt(c, r, mk, dir, self) { return cellsOf(null, c, r, mk, dir).every(([cc, rr]) => { if (!inShed(cc, rr)) return false; const o = cellAt(cc, rr); return !o || (self && o.kind === 'mach' && o.m === self); }); }
-const machineTopM = (type, mk = 1) => [34, 40, 46, 56, 66][Math.max(1, Math.min(5, mk)) - 1] + (type === 'F' || type === 'D' ? 8 : 0);
+function fitsAt(c, r, mk, dir, self, type) { return cellsOf(null, c, r, mk, dir, type).every(([cc, rr]) => { if (!inShed(cc, rr)) return false; const o = cellAt(cc, rr); return !o || (self && o.kind === 'mach' && o.m === self); }); }
+const machineTopM = (type, mk = 1) => mk === 1 ? 34 + (type === 'F' || type === 'D' ? 8 : 0) : ({ T: [36, 44, 50, 54], L: [34, 42, 48, 52], F: [52, 58, 66, 70], D: [50, 56, 66, 58], X: [50, 56, 64, 66] }[type] || [40, 46, 56, 66])[mk - 2];
+const GEN = { // the look of each generation: paint, base, how much it shines
+  2: { body: '#6f8270', top: '#7d8f7a', base: '#8a8478' },
+  3: { body: '#eadcbc', top: '#d6c8a8', base: '#6e675c' },
+  4: { body: '#eef0f2', top: '#d6dade', base: '#3a3f45' },
+  5: { body: '#f4f5f6', top: '#e0e2e4', base: '#2b2f35' },
+};
+function drawMachineGen(type, mk, c0, r0, c1, r1, longC, t, busy, st, acc) { // generations II to V, a shape for each kind
+  const G = GEN[mk];
+  const cOf = (u, v) => longC ? c0 + (c1 - c0) * u : c0 + (c1 - c0) * v, rOf = (u, v) => longC ? r0 + (r1 - r0) * v : r0 + (r1 - r0) * u;
+  const B = (u0, u1, v0, v1, z0, z1, col, s) => { const a = [cOf(u0, v0), rOf(u0, v0)], b = [cOf(u1, v1), rOf(u1, v1)]; box(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1]), z0, z1, col, s); };
+  const FQ = (u0, u1, v, z0, z1) => longC ? qL(cOf(u0, v), cOf(u1, v), rOf(0, v), z0, z1) : qR(cOf(0, v), rOf(u0, v), rOf(u1, v), z0, z1); // a quad on the face toward the camera
+  const P = (u, v, z = 0) => iso(cOf(u, v), rOf(u, v), z), PT = (u, v) => [cOf(u, v), rOf(u, v)];
+  const dials = (u0, u1, v0, v1, h) => { B(u0, u1, v0, v1, 0, h, '#9aa0a0'); for (let i = 0; i < 2; i++) { const p = P((u0 + u1) / 2, v1, h - 10 - i * 9); ctx.beginPath(); ctx.ellipse(p[0], p[1], 3.5, 3, 0, 0, Math.PI * 2); ctx.fillStyle = '#f4f1e6'; ctx.fill(); ctx.strokeStyle = '#2b2b2b'; ctx.lineWidth = 1; ctx.stroke(); line(p, [p[0] + Math.cos(t * (busy ? 4 : 0.2) + i) * 3, p[1] + Math.sin(t * (busy ? 4 : 0.2) + i) * 2.5], '#d8433a', 1); } const lp = P((u0 + u1) / 2, v1, 6); ctx.fillStyle = busy ? '#4fdc7a' : '#244a30'; ctx.fillRect(lp[0] - 5, lp[1] - 2, 4, 3); ctx.fillStyle = st === 'off' ? '#d8433a' : '#5a2a28'; ctx.fillRect(lp[0] + 1, lp[1] - 2, 4, 3); };
+  const screen = (u, h0, h1, col) => { const [pc, pr] = PT(u, 1); screenQ(longC ? qL(pc - 0.12, pc + 0.12, pr + 0.01, h0, h1) : qR(pc + 0.01, pr - 0.12, pr + 0.12, h0, h1), col, t, busy); };
+  const touch = u => { const [pc, pr] = PT(u, 1.12); box(pc - 0.04, pr - 0.04, pc + 0.04, pr + 0.04, 0, 30, '#5d6366'); screenQ(longC ? qL(pc - 0.16, pc + 0.16, pr + 0.05, 28, 44) : qR(pc + 0.05, pr - 0.16, pr + 0.16, 28, 44), '#5bc7ff', t, busy); };
+  const rollers = (u0, u1) => { B(u0, u1, 0.25, 0.75, 0, 10, '#5d6366'); for (let u = u0 + 0.03; u < u1; u += 0.07) line(P(u, 0.27, 10.5), P(u, 0.73, 10.5), '#c9d1d8', 1.5); };
+  const robot = (u, v, reach) => { const bp = P(u, v, 0), sw = busy ? Math.sin(t * 1.8) : 0.3; B(u - 0.06, u + 0.06, v - 0.12, v + 0.12, 0, 10, '#e07a2e'); const j1 = [bp[0], bp[1] - 24], j2 = [j1[0] - 16 * reach + sw * 12, j1[1] - 8 + Math.cos(t * 1.8) * 4], j3 = [j2[0] - 10 + sw * 5, j2[1] + 12]; line([bp[0], bp[1] - 10], j1, '#e07a2e', 6); line(j1, j2, '#e8b52a', 5); line(j2, j3, '#e8b52a', 3); ctx.fillStyle = '#3a3f45'; for (const p of [j1, j2]) { ctx.beginPath(); ctx.ellipse(p[0], p[1], 3.5, 3.5, 0, 0, Math.PI * 2); ctx.fill(); } ctx.fillRect(j3[0] - 3, j3[1], 6, 4); };
+  const fence = () => { for (let i = 0; i <= 4; i++) B(i / 4 - 0.01, i / 4 + 0.01, 0.97, 0.99, 0, 16, '#f2c230'); poly(FQ(0, 1, 0.98, 4, 16), 'rgba(60,64,70,0.22)', 'rgba(242,194,48,0.7)', 1); };
+  let top = machineTopM(type, mk);
+  B(0, 1, 0, 1, 0, mk >= 4 ? 4 : 2, G.base); // the plinth
+  if (mk === 5) { const n = 20; for (let i = 0; i < n; i += 2) line(P(i / n, 0.995, 4.5), P((i + 1) / n, 0.995, 4.5), '#f2c230', 2.5); }
+  if (type === 'T') { // a saw line: rollers in, the saw in its housing, rollers out
+    const hu0 = mk === 2 ? 0.3 : 0.33, hu1 = mk === 2 ? 0.75 : 0.67, vb = mk === 5 ? 0.45 : 0;
+    rollers(0.02, hu0 - 0.02); rollers(hu1 + 0.02, 0.98);
+    B(0.04, hu0 + 0.1, 0.44, 0.56, 10.5, 14, '#a7b0b8'); // the bar coming in
+    if (mk === 2) { B(hu0, hu1, 0.15, 0.85, 4, 18, G.body); toolFeature('T', cOf((hu0 + hu1) / 2, 0.6), rOf((hu0 + hu1) / 2, 0.6), 26, 1.2, t, busy); B(hu0 + 0.05, hu0 + 0.12, 0.1, 0.4, 18, 36, G.body); dials(hu1 - 0.12, hu1, 0, 0.25, 34); }
+    else { B(hu0, hu1, 0.08 + vb * 0, 0.95, 4, top - 6, G.body); poly(FQ(hu0, hu1, 0.95, 4, 10), acc); glassQ(FQ(hu0 + 0.04, hu1 - 0.12, 0.95, 14, top - 14)); toolFeature('T', cOf(hu0 + 0.1, 0.94), rOf(hu0 + 0.1, 0.94), 22, 1.1, t, busy); B(hu0 + 0.04, hu1 - 0.04, 0.2, 0.8, top - 6, top, G.top); screen(hu1 - 0.06, 14, 26, '#5be38f'); }
+    if (mk >= 4) { B(0.02, 0.3, 0.0, 0.2, 0, 22, '#5d6366'); for (let i = 0; i < 4; i++) B(0.04, 0.28, 0.02 + i * 0.04, 0.05 + i * 0.04, 22, 25, '#a7b0b8'); } // bar magazine
+    if (mk === 5) { robot(0.86, 0.3, 1); fence(); }
+    if (mk === 4) touch(0.9);
+    stackLight(cOf(hu1 - 0.05, 0.15), rOf(hu1 - 0.05, 0.15), top - 2, st, t); return top;
+  }
+  if (type === 'L') { // a lathe: headstock, a long bed under a window, and later a bar feeder and a loading gantry
+    const vb = mk === 5 ? [0.05, 0.55] : [0.1, 0.9], fe = mk >= 4 ? 0.78 : 1;
+    if (mk === 2) { B(0.04, fe - 0.02, 0.25, 0.75, 2, 16, G.body); poly(FQ(0.04, fe - 0.02, 0.75, 2, 5), '#2b2b2b'); B(0.04, 0.3, 0.2, 0.8, 16, 34, G.body); B(0.75, 0.92, 0.3, 0.7, 16, 26, G.body); toolFeature('L', cOf(0.34, 0.6), rOf(0.34, 0.6), 26, 1.1, t, busy); handwheel(cOf(0.5, 0.75), rOf(0.5, 0.75), 12, 4, longC ? 'L' : 'R', t, busy); dials(0.84, 0.98, 0, 0.22, 34); }
+    else { B(0.02, fe, vb[0], vb[1], 2, top - 6, G.body); B(0.02, 0.26, vb[0], vb[1], top - 6, top + 2, G.body); poly(FQ(0.02, fe, vb[1], 2, 8), acc); glassQ(FQ(0.3, fe - 0.18, vb[1], 12, top - 12)); toolFeature('L', cOf(0.32, vb[1] - 0.02), rOf(0.32, vb[1] - 0.02), 22, 1.2, t, busy); B(0.28, fe - 0.04, vb[0] + 0.1, vb[1] - 0.1, top - 6, top - 3, G.top); screen(fe - 0.1, 14, 28, '#5bc7ff'); }
+    if (mk >= 4) { B(fe + 0.01, 0.99, vb[0] + 0.25 * (vb[1] - vb[0]), vb[1] - 0.25 * (vb[1] - vb[0]), 4, 20, '#5d6366'); B(fe + 0.02, 0.98, vb[0] + 0.4 * (vb[1] - vb[0]), vb[1] - 0.4 * (vb[1] - vb[0]), 20, 24, '#a7b0b8'); } // bar feeder
+    if (mk === 5) { for (const u of [0.1, 0.7]) B(u, u + 0.03, 0.62, 0.66, 0, 50, '#e07a2e'); B(0.1, 0.73, 0.6, 0.68, 50, 54, '#e8b52a'); const gx = 0.15 + (busy ? (Math.sin(t * 1.2) + 1) / 2 : 0.3) * 0.5; B(gx, gx + 0.05, 0.6, 0.66, 30, 50, '#3a3f45'); B(0.15, 0.6, 0.75, 0.92, 4, 12, '#5d6366'); for (let i = 0; i < 4; i++) B(0.18 + i * 0.1, 0.24 + i * 0.1, 0.78, 0.88, 12, 16, '#a7b0b8'); fence(); }
+    if (mk === 4) touch(0.86);
+    stackLight(cOf(0.1, vb[0] + 0.08), rOf(0.1, vb[0] + 0.08), top + 2, st, t); return top + 2;
+  }
+  if (type === 'F') { // a mill: square and tall, the spindle head on its column on top
+    if (mk === 2) { B(0.05, 0.35, 0.2, 0.8, 2, top, G.body); B(0.05, 0.6, 0.3, 0.7, top - 14, top - 4, G.body); B(0.35, 0.95, 0.3, 0.7, 14, 20, G.top); B(0.3, 0.9, 0.35, 0.65, 2, 14, G.body); toolFeature('F', cOf(0.52, 0.5), rOf(0.52, 0.5), 32, 1.1, t, busy); handwheel(cOf(0.6, 0.7), rOf(0.6, 0.7), 16, 4, longC ? 'L' : 'R', t, busy); dials(0.78, 0.98, 0, 0.25, 36); stackLight(cOf(0.15, 0.25), rOf(0.15, 0.25), top, st, t); return top; }
+    const vb = mk === 5 ? 0.62 : 0.9, uE = mk === 5 ? 0.95 : 0.85;
+    B(0.05, uE, 0.08, vb, 2, top - 14, G.body); poly(FQ(0.05, uE, vb, 2, 8), acc); glassQ(FQ(0.14, uE - 0.25, vb, 12, top - 22)); toolFeature('F', cOf(0.4, vb - 0.04), rOf(0.4, vb - 0.04), 34, 1.3, t, busy);
+    B(0.3, 0.6, 0.12, 0.42, top - 14, top, G.top); // the column and head rising above the cabin
+    screen(uE - 0.12, 16, 32, '#5be38f');
+    if (mk >= 4) { const mp = P(uE + 0.02, 0.3, top - 16); ctx.beginPath(); ctx.ellipse(mp[0], mp[1], 12, 7, 0, 0, Math.PI * 2); ctx.fillStyle = '#5d6366'; ctx.fill(); for (let i = 0; i < 10; i++) { const a = i * Math.PI / 5 + (busy ? t : 0); ctx.fillStyle = '#c9d1d8'; ctx.fillRect(mp[0] + Math.cos(a) * 9 - 1, mp[1] + Math.sin(a) * 5 - 1, 2, 2); } } // umbrella tool magazine
+    if (mk === 4) touch(0.9);
+    if (mk === 5) { const sp = busy ? t * 0.6 : 0; for (let i = 0; i < 2; i++) { const a = sp + i * Math.PI, u = 0.4 + Math.cos(a) * 0.14, v = 0.8 + Math.sin(a) * 0.06; B(u - 0.1, u + 0.1, v - 0.07, v + 0.07, 4, 9, '#5d6366'); B(u - 0.05, u + 0.05, v - 0.04, v + 0.04, 9, 14, '#a7b0b8'); } robot(0.85, 0.8, 0.8); fence(); } // twin pallet changer and robot
+    stackLight(cOf(0.1, 0.14), rOf(0.1, 0.14), top - 14, st, t); return top;
+  }
+  if (type === 'D') { // a drill: radial arm, then a cabin with a tall column, then a gantry with three spindles
+    if (mk === 2) { B(0.05, 0.95, 0.2, 0.8, 2, 10, G.top); const cp = PT(0.15, 0.5); box(cp[0] - 0.08, cp[1] - 0.08, cp[0] + 0.08, cp[1] + 0.08, 10, top, G.body); const sw = busy ? Math.sin(t * 0.8) * 0.1 : 0; B(0.15, 0.85, 0.42 + sw, 0.58 + sw, top - 12, top - 6, G.body); B(0.6, 0.75, 0.38 + sw, 0.62 + sw, top - 20, top - 4, G.body); toolFeature('D', cOf(0.68, 0.5 + sw), rOf(0.68, 0.5 + sw), top - 22, 1, t, busy); dials(0.85, 0.99, 0, 0.2, 34); stackLight(cp[0], cp[1], top, st, t); return top; }
+    if (mk === 5) { B(0.06, 0.94, 0.25, 0.75, 2, 14, G.top); for (let i = 0; i < 5; i++) B(0.1 + i * 0.17, 0.2 + i * 0.17, 0.35, 0.65, 14, 17, '#a7b0b8'); const gu = 0.15 + (busy ? (Math.sin(t * 0.9) + 1) / 2 : 0.4) * 0.6; for (const v of [0.12, 0.88]) B(gu, gu + 0.06, v - 0.04, v + 0.04, 2, top, G.body); B(gu - 0.02, gu + 0.08, 0.1, 0.9, top - 8, top, acc); for (const v of [0.3, 0.5, 0.7]) { B(gu, gu + 0.06, v - 0.05, v + 0.05, top - 22, top - 8, G.top); toolFeature('D', cOf(gu + 0.03, v), rOf(gu + 0.03, v), top - 24, 0.8, t, busy); } screen(0.95, 12, 26, '#ffb35b'); fence(); stackLight(cOf(gu + 0.03, 0.1), rOf(gu + 0.03, 0.1), top, st, t); return top; }
+    const s = mk === 4 ? [0.08, 0.92] : [0.05, 0.95];
+    B(s[0], s[1], 0.15, 0.9, 2, 28, G.body); poly(FQ(s[0], s[1], 0.9, 2, 8), acc); glassQ(FQ(s[0] + 0.1, s[1] - 0.3, 0.9, 10, 24));
+    B(0.38, 0.6, 0.18, 0.42, 28, top, G.top); B(0.4, 0.58, 0.4, 0.62, top - 16, top - 4, G.top); toolFeature('D', cOf(0.49, 0.6), rOf(0.49, 0.6), top - 18, 1.1, t, busy);
+    screen(s[1] - 0.12, 10, 24, '#ffb35b'); if (mk === 4) touch(0.92);
+    stackLight(cOf(0.42, 0.22), rOf(0.42, 0.22), top, st, t); return top;
+  }
+  // X: the 5-axis centre: a big cabin with a round window on the tilting table; the last one is a robot cell
+  if (mk === 5) {
+    const vb = 0.55; B(0.03, 0.97, 0.03, vb, 4, top - 4, G.body); poly(FQ(0.03, 0.97, vb, 4, 12), acc); poly(FQ(0.03, 0.97, vb, top - 8, top - 4), G.base);
+    glassQ(FQ(0.1, 0.65, vb, 16, top - 14)); toolFeature('X', cOf(0.3, vb - 0.02), rOf(0.3, vb - 0.02), 28, 1.6, t, busy);
+    for (let i = 0; i < 4; i++) B(0.12 + i * 0.2, 0.22 + i * 0.2, 0.12, 0.25, top - 4, top - 1, '#9aa4ad');
+    B(0.05, 0.6, 0.72, 0.84, 4, 12, '#5d6366'); for (let i = 0; i < 4; i++) { const u = 0.08 + ((i / 4) + (busy ? t * 0.08 : 0)) % 1 * 0.45; B(u, u + 0.08, 0.74, 0.82, 12, 16, '#a7b0b8'); }
+    robot(0.75, 0.75, 1); fence(); B(0.88, 0.96, 0.85, 0.95, 4, 26, '#3a3f45'); screen(0.92, 16, 26, '#c49bff');
+    stackLight(cOf(0.9, 0.1), rOf(0.9, 0.1), top - 4, st, t); return top;
+  }
+  if (mk === 2) { B(0.05, 0.4, 0.1, 0.5, 2, top, G.body); B(0.1, 0.95, 0.15, 0.85, 2, 14, G.top); B(0.4, 0.9, 0.3, 0.8, 14, 20, G.body); toolFeature('X', cOf(0.55, 0.55), rOf(0.55, 0.55), 26, 1.1, t, busy); B(0.1, 0.55, 0.15, 0.4, top - 14, top - 4, G.body); handwheel(cOf(0.3, 0.85), rOf(0.3, 0.85), 10, 4, longC ? 'L' : 'R', t, busy); dials(0.82, 0.98, 0.02, 0.2, 36); stackLight(cOf(0.15, 0.15), rOf(0.15, 0.15), top, st, t); return top; }
+  B(0.05, 0.95, 0.08, 0.9, 2, top - 6, G.body); poly(FQ(0.05, 0.95, 0.9, 2, 10), acc); poly(FQ(0.05, 0.95, 0.9, 10, 13), shade(acc, 0.8));
+  const wq = FQ(0.15, 0.65, 0.9, 14, top - 14); glassQ(wq); const wc = P(0.4, 0.9, (top) / 2); ctx.beginPath(); ctx.ellipse(wc[0], wc[1], 10 + mk * 2, 6 + mk, 0, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(40,40,60,0.5)'; ctx.lineWidth = 2; ctx.stroke();
+  toolFeature('X', cOf(0.4, 0.88), rOf(0.4, 0.88), top / 2 - 6, 1.2 + (mk - 3) * 0.3, t, busy);
+  B(0.15, 0.8, 0.2, 0.7, top - 6, top, G.top);
+  if (mk === 4) { B(0.86, 0.98, 0.1, 0.8, 4, top - 14, '#5d6366'); for (let i = 0; i < 6; i++) { const p = P(0.98, 0.15 + i * 0.11, top - 24); ctx.fillStyle = '#c9d1d8'; ctx.fillRect(p[0] - 1, p[1] - 1, 3, 3); } touch(0.75); } // chain tool magazine
+  else screen(0.8, 16, 30, '#c49bff');
+  stackLight(cOf(0.1, 0.14), rOf(0.1, 0.14), top, st, t); return top;
+}
 function handwheel(c, r, z, rad, face, t, spin) { // a spoked iron handwheel on a front face
   const p = iso(c, r, z), rx = rad * (face === 'L' ? 0.9 : 0.55), ry = rad;
   ctx.save(); ctx.translate(p[0], p[1]); if (face === 'R') ctx.transform(1, -0.5, 0, 1, 0, 0); else ctx.transform(1, 0.5, 0, 1, 0, 0);
@@ -573,7 +659,7 @@ function toolFeature(type, cx, cr, z, s, t, busy) { // the working part, drawn a
   else { const tilt = busy ? Math.sin(t * 2) * 4 * s : 0; poly([[p[0] - 10 * s, p[1] + tilt], [p[0] + 10 * s, p[1] - tilt], [p[0] + 10 * s, p[1] - tilt + 3 * s], [p[0] - 10 * s, p[1] + tilt + 3 * s]], '#4a4f7a', '#1b1b1b', 1); ctx.fillStyle = '#4a525a'; ctx.fillRect(p[0] - 2 * s, p[1] - 16 * s, 4 * s, 10 * s + (busy ? Math.sin(t * 5) * 2 : 0)); }
 }
 function drawMachine(type, col, row, o = {}) {
-  const mk = Math.max(1, Math.min(5, o.mk || 1)), dir = o.dir || 0, [w, h] = fpDims(mk, dir), t = o.t || 0, busy = !!o.busy, st = o.status || 'wait', acc = MACH[type].color;
+  const mk = Math.max(1, Math.min(5, o.mk || 1)), dir = o.dir || 0, [w, h] = fpDims(mk, dir, type), t = o.t || 0, busy = !!o.busy, st = o.status || 'wait', acc = MACH[type].color;
   const c0 = col + 0.06, r0 = row + 0.06, c1 = col + w - 0.06, r1 = row + h - 0.06, cm = (c0 + c1) / 2, rm = (r0 + r1) / 2, longC = w >= h;
   const frontQ = (za, zb, a = 0.1, b = 0.1) => longC ? qL(c0 + (c1 - c0) * a, c1 - (c1 - c0) * b, r1, za, zb) : qR(c1, r0 + (r1 - r0) * a, r1 - (r1 - r0) * b, za, zb); // the long face toward the camera
   const frontAt = (u, z) => longC ? [c0 + (c1 - c0) * u, r1, z] : [c1, r0 + (r1 - r0) * u, z];
@@ -591,64 +677,7 @@ function drawMachine(type, col, row, o = {}) {
     box(c1 - 0.2, r1 - 0.14, c1 - 0.12, r1 - 0.06, 5, 10, '#8a4a2a'); // an oil can
     stackLight(c1 - 0.16, r0 + 0.16, top - 6, st, t); return top;
   }
-  if (mk === 2) { // the numerical-control years: green-grey paint, a long bed, a cabinet full of dials, handwheels still there
-    box(c0, r0, c1, r1, 0, 3, '#8a8478');
-    const cab = longC ? [c1 - 0.42, r0 + 0.08, c1 - 0.04, r1 - 0.08] : [c0 + 0.08, r1 - 0.42, c1 - 0.08, r1 - 0.04];
-    const bed = longC ? [c0 + 0.06, r0 + 0.14, c1 - 0.5, r1 - 0.14] : [c0 + 0.14, r0 + 0.06, c1 - 0.14, r1 - 0.5];
-    box(bed[0], bed[1], bed[2], bed[3], 3, 16, '#6f8270'); poly(longC ? qL(bed[0], bed[2], bed[3], 3, 6) : qR(bed[2], bed[1], bed[3], 3, 6), '#2b2b2b');
-    const fc = (bed[0] + bed[2]) / 2, fr = (bed[1] + bed[3]) / 2;
-    if (type === 'L') { box(bed[0], bed[1] + 0.04, bed[0] + 0.3, bed[3] - 0.04, 16, 34, '#6f8270'); toolFeature('L', bed[0] + 0.4, fr, 26, 1, t, busy); top = 34; }
-    else if (type === 'T') { box(fc - 0.3, fr - 0.14, fc + 0.3, fr + 0.14, 16, 22, '#5a6a5c'); toolFeature('T', fc, fr, 30, 1.1, t, busy); top = 34; }
-    else { box(fc - 0.18, bed[1] + 0.02, fc + 0.12, fr - 0.06, 16, 50, '#6f8270'); box(fc - 0.2, bed[1] + 0.04, fc + 0.22, fr + 0.1, 40, 50, '#6f8270'); toolFeature(type, fc + 0.05, fr + 0.05, 36, 1, t, busy); top = 50; }
-    box(cab[0], cab[1], cab[2], cab[3], 3, 40, '#9aa0a0'); // the NC cabinet with round dials and lamps
-    const cf = longC ? [(cab[0] + cab[2]) / 2, cab[3]] : [cab[2], (cab[1] + cab[3]) / 2];
-    for (let i = 0; i < 2; i++) { const p = iso(cf[0], cf[1], 22 + i * 9); ctx.beginPath(); ctx.ellipse(p[0] + (longC ? -3 : 3), p[1], 4, 3.5, 0, 0, Math.PI * 2); ctx.fillStyle = '#f4f1e6'; ctx.fill(); ctx.strokeStyle = '#2b2b2b'; ctx.lineWidth = 1; ctx.stroke(); line([p[0] + (longC ? -3 : 3), p[1]], [p[0] + (longC ? -3 : 3) + Math.cos(t * (busy ? 4 : 0.2) + i) * 3, p[1] + Math.sin(t * (busy ? 4 : 0.2) + i) * 2.5], '#d8433a', 1); }
-    const lp = iso(cf[0], cf[1], 14); ctx.fillStyle = busy ? '#4fdc7a' : '#244a30'; ctx.fillRect(lp[0] - 6, lp[1] - 2, 4, 3); ctx.fillStyle = st === 'off' ? '#d8433a' : '#5a2a28'; ctx.fillRect(lp[0] + 1, lp[1] - 2, 4, 3);
-    poly(longC ? qL(bed[0] + 0.05, bed[2] - 0.05, bed[3], 11, 13) : qR(bed[2], bed[1] + 0.05, bed[3] - 0.05, 11, 13), acc);
-    handwheel(...frontAt(0.18, 11).slice(0, 2), 11, 4.5, longC ? 'L' : 'R', t, busy);
-    stackLight(longC ? cab[0] + 0.12 : cab[0] + 0.12, longC ? cab[1] + 0.12 : cab[1] + 0.12, 40, st, t); return Math.max(top, 40);
-  }
-  if (mk === 3) { // the first CNC: a cream enclosure with a glass door, a small screen, the accent colour along the base
-    box(c0, r0, c1, r1, 0, 4, '#6e675c');
-    box(c0 + 0.04, r0 + 0.04, c1 - 0.04, r1 - 0.04, 4, 40, '#eadcbc');
-    poly(frontQ(4, 9, 0.02, 0.02), acc);
-    glassQ(frontQ(12, 34, 0.12, 0.42)); const fp = frontAt(0.32, 18); toolFeature(type, fp[0] - (longC ? 0 : 0.02), fp[1] - (longC ? 0.02 : 0), 20, 1, t, busy);
-    box(cm - 0.25, rm - 0.18, cm + 0.2, rm + 0.12, 40, 46, '#d6c8a8');
-    const sp = frontAt(0.78, 0); screenQ(longC ? qL(sp[0] - 0.12, sp[0] + 0.12, r1 - 0.04, 16, 30) : qR(c1 - 0.04, sp[1] - 0.12, sp[1] + 0.12, 16, 30), '#5be38f', t, busy);
-    stackLight(c0 + 0.16, r0 + 0.16, 46, st, t); return 46;
-  }
-  if (mk === 4) { // modern: white panels on a dark plinth, a long window, a touchscreen on an arm, a tool magazine drum, a chip conveyor
-    box(c0, r0, c1, r1, 0, 6, '#3a3f45');
-    box(c0 + 0.08, r0 + 0.08, c1 - 0.08, r1 - 0.08, 6, 50, '#eef0f2');
-    poly(frontQ(6, 12, 0.03, 0.03), acc); poly(frontQ(46, 50, 0.03, 0.03), '#3a3f45');
-    glassQ(frontQ(16, 42, 0.1, 0.38)); const fp = frontAt(0.3, 22); toolFeature(type, fp[0], fp[1], 26, 1.3, t, busy);
-    line(iso(...frontAt(0.64, 16)), iso(...frontAt(0.64, 42)), '#9aa4ad', 2); // the sliding door edge
-    const dc = longC ? [c0 + 0.2, r0 + 0.2] : [c0 + 0.2, r0 + 0.2]; box(dc[0], dc[1], dc[0] + 0.5, dc[1] + 0.5, 50, 58, '#d6dade');
-    const dp = iso(c0 + 0.08, rm, 34); ctx.beginPath(); ctx.ellipse(dp[0] - 6, dp[1], 9, 12, 0, 0, Math.PI * 2); ctx.fillStyle = '#5d6366'; ctx.fill(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + (busy ? t : 0); ctx.fillStyle = '#c9d1d8'; ctx.fillRect(dp[0] - 6 + Math.cos(a) * 6 - 1, dp[1] + Math.sin(a) * 8 - 1, 2, 2); } // tool magazine
-    box(c1 - 0.5, r0 - 0.02, c1 - 0.2, r0 + 0.3, 2, 16, '#5d6366'); // chip conveyor at the back
-    const ap = frontAt(0.86, 0), arm = longC ? [ap[0], r1 + 0.18] : [c1 + 0.18, ap[1]]; box(arm[0] - 0.04, arm[1] - 0.04, arm[0] + 0.04, arm[1] + 0.04, 0, 30, '#5d6366');
-    screenQ(longC ? qL(arm[0] - 0.16, arm[0] + 0.16, arm[1] + 0.05, 28, 44) : qR(arm[0] + 0.05, arm[1] - 0.16, arm[1] + 0.16, 28, 44), '#5bc7ff', t, busy);
-    stackLight(c1 - 0.24, r0 + 0.24, 58, st, t); return 58;
-  }
-  // mk 5: a robot cell: the machine at the back, a robot arm loading it, a pallet conveyor, a safety fence and a control station
-  poly(qT(c0, r0, c1, r1, 0.3), '#5d6366'); const tape = (a, b) => { const n = 24; for (let i = 0; i < n; i += 2) line(iso(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n, 0.6), iso(a[0] + (b[0] - a[0]) * (i + 1) / n, a[1] + (b[1] - a[1]) * (i + 1) / n, 0.6), '#f2c230', 2.5); };
-  tape([c0 + 0.05, r1 - 0.05], [c1 - 0.05, r1 - 0.05]); tape([c1 - 0.05, r0 + 0.05], [c1 - 0.05, r1 - 0.05]);
-  const mc = [c0 + 0.1, r0 + 0.1, c1 - 0.1, r0 + (r1 - r0) * 0.55]; // the machining centre
-  box(mc[0], mc[1], mc[2], mc[3], 0, 8, '#2b2f35'); box(mc[0] + 0.05, mc[1] + 0.05, mc[2] - 0.05, mc[3] - 0.05, 8, 60, '#f4f5f6');
-  poly(qL(mc[0] + 0.1, mc[2] - 0.1, mc[3] - 0.05, 8, 15), acc); poly(qL(mc[0] + 0.1, mc[2] - 0.1, mc[3] - 0.05, 56, 60), '#2b2f35');
-  glassQ(qL(mc[0] + 0.4, mc[2] - 1.2, mc[3] - 0.05, 20, 50)); toolFeature(type, mc[0] + 1.2, mc[3] - 0.08, 30, 1.6, t, busy);
-  poly(qT(mc[0] + 0.3, mc[1] + 0.3, mc[2] - 0.3, mc[3] - 0.3, 60), '#e0e2e4', EDGE); for (let i = 0; i < 4; i++) box(mc[0] + 0.5 + i * 0.7, mc[1] + 0.5, mc[0] + 0.9 + i * 0.7, mc[1] + 0.9, 60, 63, '#9aa4ad'); // vents on the roof
-  const cv = [c0 + 0.2, r1 - 0.7, c1 - 1.3, r1 - 0.35]; box(cv[0], cv[1], cv[2], cv[3], 0, 12, '#5d6366'); poly(qT(cv[0], cv[1], cv[2], cv[3], 12.5), '#2b2b2b'); // the pallet conveyor
-  for (let i = 0; i < 4; i++) { const u = ((i / 4) + (busy ? t * 0.08 : 0)) % 1, pc = cv[0] + 0.1 + u * (cv[2] - cv[0] - 0.4); box(pc, cv[1] + 0.06, pc + 0.26, cv[3] - 0.06, 12.5, 17, '#a7b0b8'); }
-  const base = [c1 - 1.0, r1 - 1.0], bp = iso(base[0], base[1], 0), sw = busy ? Math.sin(t * 1.8) : 0.3; // the robot arm
-  box(base[0] - 0.22, base[1] - 0.22, base[0] + 0.22, base[1] + 0.22, 0, 10, '#e07a2e');
-  const j1 = [bp[0], bp[1] - 26], j2 = [j1[0] - 20 + sw * 14, j1[1] - 10 + Math.cos(t * 1.8) * 4], j3 = [j2[0] - 14 + sw * 6, j2[1] + 12];
-  line([bp[0], bp[1] - 10], j1, '#e07a2e', 7); line(j1, j2, '#e8b52a', 6); line(j2, j3, '#e8b52a', 4); ctx.fillStyle = '#3a3f45'; for (const p of [j1, j2]) { ctx.beginPath(); ctx.ellipse(p[0], p[1], 4, 4, 0, 0, Math.PI * 2); ctx.fill(); } ctx.fillRect(j3[0] - 3, j3[1], 6, 4);
-  for (let i = 0; i <= 4; i++) { const p0 = [c0 + (c1 - c0) * i / 4, r1 - 0.02]; box(p0[0] - 0.03, p0[1] - 0.03, p0[0] + 0.03, p0[1] + 0.03, 0, 18, '#f2c230'); } // fence posts
-  for (let i = 1; i <= 3; i++) { const p0 = [c1 - 0.02, r0 + (r1 - r0) * i / 4]; box(p0[0] - 0.03, p0[1] - 0.03, p0[0] + 0.03, p0[1] + 0.03, 0, 18, '#f2c230'); }
-  poly(qL(c0, c1, r1 - 0.02, 4, 18), 'rgba(60,64,70,0.25)', 'rgba(242,194,48,0.7)', 1);
-  box(c1 - 0.5, r1 - 0.5, c1 - 0.2, r1 - 0.2, 0, 26, '#3a3f45'); screenQ(qL(c1 - 0.48, c1 - 0.22, r1 - 0.2, 16, 26), '#c49bff', t, busy); // control station
-  stackLight(mc[2] - 0.2, mc[1] + 0.2, 63, st, t); return 66;
+  return drawMachineGen(type, mk, c0, r0, c1, r1, longC, t, busy, st, acc);
 }
 function machineTop(type, mk = 1) { return machineTopM(type, mk); }
 
@@ -997,16 +1026,32 @@ const JOBS = {
 const JOB_ORDER = ['mach', 'mag', 'it', 'none'];
 const NAMES = ['Marco', 'Luca', 'Giulia', 'Sara', 'Paolo', 'Elena', 'Davide', 'Chiara', 'Matteo', 'Anna', 'Franco', 'Irene', 'Nicola', 'Rita'];
 function newItem() { return { ops: '', qs: [] }; }
-const opsTotal = () => tune.opsBase + (state.level - 1) * tune.opsPerLvl;
+const opsTotal = () => Math.floor(tune.opsBase + (state.level - 1) * tune.opsPerLvl);
 function crewSync() { // one crew member per slot; the first two start as operator and warehouse worker
   while (state.crew.length < opsTotal()) {
     const n = state.crew.length;
-    state.crew.push({ id: n + 1, name: NAMES[n % NAMES.length], job: n === 0 ? 'mach' : n === 1 ? 'mag' : 'none', b: null, m: null });
+    const home = F && crewOf(F).length < staffCap(F) ? F : state.buildings.find(b => crewOf(b).length < staffCap(b));
+    state.crew.push({ id: n + 1, name: NAMES[n % NAMES.length], job: n === 0 ? 'mach' : n === 1 ? 'mag' : 'none', b: home ? home.id : -1, m: null }); // -1: waiting for a place
   }
+  for (const cw of state.crew) if (cw.b === -1) { const home = F && crewOf(F).length < staffCap(F) ? F : state.buildings.find(b => crewOf(b).length < staffCap(b)); if (home) cw.b = home.id; } // whoever was waiting takes a free place
 }
-const crewB = cw => cw.b != null ? state.buildings.find(b => b.id === cw.b) || state.buildings[0] : state.buildings[0];
+const crewB = cw => cw.b === -1 ? null : cw.b != null ? state.buildings.find(b => b.id === cw.b) || state.buildings[0] : state.buildings[0];
+const staffCap = b => tune['staffCap' + (b ? b.stage : 0)];
+const crewOf = b => state.crew.filter(cw => crewB(cw) === b);
+const crewWaiting = () => state.crew.filter(cw => cw.b === -1);
+function moveCrew(cw, b) { // send someone to work in another site (their machine there is left without an operator)
+  if (!b || crewB(cw) === b) return;
+  if (crewOf(b).length >= staffCap(b)) return toast(`${b.name} è al completo (${staffCap(b)} persone)`, '#ffb35b');
+  if (cw.m != null) { const m = allMachines().find(x => x.id === cw.m); if (m) m.op = false; cw.m = null; }
+  cw.b = b.id; cw.routes = null; sfx.click(); toast(`${cw.name} ora lavora in ${b.name}`, '#7ef0a0'); save();
+}
+// ---- Power: each site has a supply; every machine draws more the newer and bigger it is
+const MK_POW = [1, 1.6, 2.2, 3.2, 4.5];
+const powerOf = (t, mk = 1) => Math.round(mcfg('pow', t) * MK_POW[Math.max(1, Math.min(5, mk)) - 1]);
+const powerUsed = b => b.machines.reduce((s, m) => s + powerOf(m.type, mkOf(m)), 0);
+const powerCap = b => tune['power' + b.stage];
 const crewIn = (b, job) => state.crew.filter(cw => cw.job === job && crewB(cw) === b);
-const freeOps = () => state.crew.filter(cw => cw.job === 'mach' && cw.m == null);
+const freeOps = (b = F) => state.crew.filter(cw => cw.job === 'mach' && cw.m == null && crewB(cw) === b);
 const opsFree = () => freeOps().length;
 const netOk = b => !!b && hasKind(b, 'rack') && hasKind(b, 'pc') && crewIn(b, 'it').length > 0;
 function jobNeeds(b) { // the jobs this building is missing, in words
@@ -1176,9 +1221,9 @@ const ZONES = [ // the web opens ring by ring: further out needs higher levels a
   { open: () => true, txt: '' },
   { open: () => state.level >= 3, txt: 'Si apre al livello 3' },
   { open: () => TIER() >= 1, txt: 'Si apre con la seconda sede' },
-  { open: () => TIER() >= 2 && state.level >= 5, txt: 'Si apre con la terza sede e il livello 5' },
-  { open: () => TIER() >= 3 && state.level >= 7, txt: 'Si apre con la quarta sede e il livello 7' },
-  { open: () => TIER() >= 4 && state.level >= 9, txt: 'Si apre con la quinta sede e il livello 9' },
+  { open: () => TIER() >= 2 && state.level >= 15, txt: 'Si apre con la terza sede e il livello 15' },
+  { open: () => TIER() >= 3 && state.level >= 25, txt: 'Si apre con la quarta sede e il livello 25' },
+  { open: () => TIER() >= 4 && state.level >= 35, txt: 'Si apre con la quinta sede e il livello 35' },
 ];
 const zoneOpen = z => ZONES[z].open();
 function perkNodes() { // id, where it sits (offset from the centre), what it needs, which ring, how it looks, what it does
@@ -1187,7 +1232,7 @@ function perkNodes() { // id, where it sits (offset from the centre), what it ne
   ORDER.forEach((t, i) => { // one branch per machine, fanned out above
     const a = (-160 + i * 35) * Math.PI / 180, at = r => [Math.cos(a) * r * 1.35, Math.sin(a) * r * 0.95], lv = mcfg('unlock', t) || 1, nm = MACH[t].name;
     const add = (id, r, req, zone, name, desc, icon) => { const [x, y] = at(r); N.push({ id, x, y, req: [req], zone, lvl: lv, name, desc, icon, t }); };
-    const big = k => { const [a, b] = MK_FP[k - 1]; return `${a}×${b} celle`; };
+    const big = k => { const [a, b] = MK_FP[t][k - 1]; return `${a}×${b} celle`; };
     add('spd1' + t, 110, 'core', 0, `${nm}: più veloce`, `Lavora ogni pezzo nel ${sp}% di tempo in meno.`, 'speed');
     add('q' + t, 175, 'spd1' + t, 1, `${nm}: precisione`, `I pezzi che passano di qui valgono di più (+${Math.round(tune.perkQuality * 100)}% di qualità).`, 'qual');
     add('mk2' + t, 240, 'q' + t, 2, `${nm} Mk II`, `Sblocca nel Negozio la ${nm} Mk II, gli anni del controllo numerico: ${Math.round((1 - MK_T[1]) * 100)}% più veloce, qualità +${Math.round(MK_Q[1] * 100)}%. Occupa ${big(2)} e costa ${MK_COST[1]} volte la base.`, 'mk2');
@@ -1227,7 +1272,7 @@ function perkIcon(n, x, y, s = 1) { // a drawn icon for each kind of node
   ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
   const bolt = (dx, dy, col) => poly([[dx + 2, dy - 9], [dx - 5, dy + 1], [dx, dy + 1], [dx - 2, dy + 9], [dx + 5, dy - 2], [dx, dy - 2]], col, '#2b2410', 1);
   const star = (dx, dy, r, col) => { const pts = []; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; pts.push([dx + Math.cos(a) * rr, dy + Math.sin(a) * rr]); } poly(pts, col, '#2b2410', 1); };
-  if (n.t) { machineIcon(n.t, 0, 4, 0.34); if (n.icon === 'speed') bolt(13, -11, '#ffe08a'); if (n.icon === 'speed2') { bolt(9, -11, '#ffe08a'); bolt(17, -9, '#ffe08a'); } if (n.icon === 'qual') star(13, -11, 8, '#7ef0a0'); if (/^mk\d$/.test(n.icon)) { rrect(4, -18, 24, 13, 3, '#e0b84a', '#2b2410', 1); text(['II', 'III', 'IV', 'V'][+n.icon[2] - 2], 16, -11, 10, '#2b2410'); } }
+  if (n.t) { machineIcon(n.t, 0, 4, 0.34, { mk: /^mk\d$/.test(n.icon) ? +n.icon[2] : 1 }); if (n.icon === 'speed') bolt(13, -11, '#ffe08a'); if (n.icon === 'speed2') { bolt(9, -11, '#ffe08a'); bolt(17, -9, '#ffe08a'); } if (n.icon === 'qual') star(13, -11, 8, '#7ef0a0'); if (/^mk\d$/.test(n.icon)) { rrect(4, -18, 24, 13, 3, '#e0b84a', '#2b2410', 1); text(['II', 'III', 'IV', 'V'][+n.icon[2] - 2], 16, -11, 10, '#2b2410'); } }
   else if (n.icon === 'core') { gearIcon(0, 0, 1.6, '#9aa4ad'); rrect(-9, -9, 18, 18, 3, '#b07a3e', '#2b2410', 1.5); }
   else if (n.icon === 'bars') { for (let i = 0; i < 3; i++) rrect(-14, -8 + i * 6, 28, 5, 2, '#a7b0b8', '#3a4148', 1); coinIcon(10, 8, 0.45); }
   else if (n.icon === 'truck') { rrect(-16, -6, 20, 12, 2, '#a7b0b8', '#2b2b2b', 1); rrect(4, -3, 10, 9, 2, '#2f7fb0', '#2b2b2b', 1); ctx.fillStyle = '#1b1b1b'; ctx.fillRect(-12, 6, 5, 4); ctx.fillRect(6, 6, 5, 4); bolt(-6, -14, '#ffe08a'); }
@@ -1327,6 +1372,7 @@ function buy(type, mk = 1) {
   const cost = Math.round(costOf(type) * MK_COST[mk - 1]);
   if (state.level < mcfg('unlock', type)) return toast(`Si sblocca al livello ${mcfg('unlock', type)}`, '#ffb35b');
   if (state.coins < cost) return toast('Monete insufficienti', '#ffb35b');
+  if (powerUsed(F) + powerOf(type, mk) > powerCap(F)) return toast(`Corrente insufficiente: servono ${powerOf(type, mk)} kW, ne restano ${powerCap(F) - powerUsed(F)}`, '#ffb35b');
   if (!freeCells()) return toast('Capannone pieno: amplialo o demolisci qualcosa', '#ffb35b');
   state.panel = null; state.tool = null; state.placing = { kind: 'mach', type, cost, mk, dir: 0, rotated: false }; sfx.click();
 }
@@ -1338,7 +1384,7 @@ function buyLogi(k) {
   state.panel = null; state.tool = null; state.placing = { kind: k, cost, dir: 0, rotated: false }; sfx.click();
 }
 function canPlaceAt(c, r, P) {
-  if (P.kind === 'mach') return fitsAt(c, r, P.m ? P.m.mk || 1 : P.mk || 1, P.dir || 0, P.m || null);
+  if (P.kind === 'mach') return fitsAt(c, r, P.m ? P.m.mk || 1 : P.mk || 1, P.dir || 0, P.m || null, P.m ? P.m.type : P.type);
   if (!inShed(c, r)) return false;
   const o = cellAt(c, r);
   return !o || (!!P.m && o.kind === 'mach' && o.m === P.m);
@@ -1640,7 +1686,7 @@ function toolIcon(key, x, y, s) {
   ctx.restore();
 }
 function machineIcon(type, x, y, s, o = {}) { // a mini machine in its world look
-  const mk = o.mk || 1, [w, h] = fpDims(mk, 0), k = 1 / Math.max(1, (w + h) / 2.2), c = iso(w / 2, h / 2, 0);
+  const mk = o.mk || 1, [w, h] = fpDims(mk, 0, type), k = 1 / Math.max(1, (w + h) / 2.2), c = iso(w / 2, h / 2, 0);
   ctx.save(); ctx.translate(x, y); ctx.scale(s * k, s * k); ctx.translate(-c[0], -c[1] - 16 + 16);
   drawMachine(type, 0, 0, { status: o.status || 'wait', t: o.t || 0, busy: o.busy, mk });
   ctx.restore();
@@ -1672,7 +1718,7 @@ function drawHUD(t) { // top: money · time · level and goal; bottom: one bar o
   const needs = F ? jobNeeds(F) : [];
   rrect(262, 58, 270, 30, 10, T.panel, needs.length ? '#ff8a7a' : T.edge, 2);
   sprite('walk0', 282, 85, 1.4, false, OP_PAL);
-  text(needs.length ? 'Squadra: manca un lavoro!' : `Squadra ${state.crew.length} · operatori liberi ${opsFree()}`, 410, 73, 14, needs.length ? '#ffb3a8' : '#ffe8d0');
+  text(needs.length ? 'Squadra: manca un lavoro!' : F ? `Squadra ${crewOf(F).length}/${staffCap(F)} · operatori liberi ${opsFree()}` : `Squadra ${state.crew.length}`, 410, 73, 14, needs.length ? '#ffb3a8' : '#ffe8d0');
   btn(262, 58, 270, 30, () => { sfx.click(); openPanel('crew'); }, 'crewChip');
   if (F && needs.length && !state.panel && !state.mg && !state.town) { ctx.font = `bold 16px ${FONT}`; const tw = ctx.measureText(needs[0]).width + 30; rrect(W / 2 - tw / 2, 578, tw, 32, 10, 'rgba(60,20,20,0.9)', '#ff8a7a', 2); text(needs[0], W / 2, 594, 16, '#ffd0c8'); }
   drawClock(t); drawStockChip();
@@ -1687,6 +1733,14 @@ function drawHUD(t) { // top: money · time · level and goal; bottom: one bar o
   if (fr > 0) rrect(LX + 72, 46, Math.max(16, 182 * fr), 16, 8, '#5bc7ff');
   text(maxed ? `${fmt(state.xp)} XP` : `${fmt(state.xp - cur)} / ${fmt(nxt - cur)} XP`, LX + 163, 55, 13, '#fff');
   drawGoalChip(t, LX);
+  if (F) { // the power meter of this site
+    const used = powerUsed(F), cap = powerCap(F), k = Math.min(1, used / Math.max(1, cap)), hot = k > 0.9;
+    rrect(14, 84, 236, 30, 10, T.panel, hot ? '#ff8a7a' : '#f2c230', 2);
+    poly([[30, 89], [24, 100], [29, 100], [26, 110], [35, 96], [30, 96], [33, 89]], '#f2c230', '#2b2410', 1);
+    rrect(42, 93, 80, 12, 4, '#1b2229'); if (k > 0) rrect(42, 93, Math.max(6, 80 * k), 12, 4, hot ? '#ff8a7a' : '#f2c230');
+    text(`Corrente ${used}/${cap} kW`, 186, 99, 13, hot ? '#ffb3a8' : '#ffe8b0');
+    btn(14, 84, 236, 30, () => toast(`Corrente di ${F.name}: ${used} kW usati su ${cap}. Ogni macchina consuma di più nelle versioni nuove.`, '#ffe08a'), 'powerChip');
+  }
   if (!F) return drawWorldHUDBottom(t);
   if (state.town) hint('Trascina per guardarti intorno · tocca una tua fabbrica per entrarci');
   drawBottomBar(t);
@@ -1813,12 +1867,13 @@ function drawShop(t) {
       if (mk > 1) { rrect(x + w - 58, y + 18, 44, 22, 4, '#e0b84a', '#2b2410', 1.5); text(MK_NAME[mk - 1].trim(), x + w - 36, y + 29, 12, '#2b2410'); }
       text(`Lavora un pezzo in ${(timeOf(tp) * MK_T[mk - 1]).toFixed(1)} s`, x + w / 2, y + 240, 13, mk > 1 ? '#ffe08a' : '#b9c4ce');
       if (av > 1 && !locked) for (let k = 1; k <= av; k++) { const bx = x + w / 2 - av * 18 + (k - 1) * 36; button(['I', 'II', 'III', 'IV', 'V'][k - 1], bx, y + 280, 34, 28, () => { state.shopMk[tp] = k; sfx.click(); }, { size: 13, color: k === mk ? '#e0b84a' : '#e6e1d3', name: `mk${tp}${k}` }); }
-      text(`Ingombro ${fpDims(mk)[0]}×${fpDims(mk)[1]} · ${mcfg('bolts', tp)} bulloni`, x + w / 2, y + 262, 13, '#b9c4ce');
+      const pw = powerOf(tp, mk), pwOk = powerUsed(F) + pw <= powerCap(F);
+      text(`Ingombro ${fpDims(mk, 0, tp)[0]}×${fpDims(mk, 0, tp)[1]} · consumo ${pw} kW`, x + w / 2, y + 262, 13, pwOk ? '#b9c4ce' : '#ff8a7a');
       if (owned(tp) && av < 2) text(`Ne possiedi ${owned(tp)}`, x + w / 2, y + 290, 14, '#7ef0a0');
       if (locked) { rrect(x + 30, y + 330, w - 60, 56, 10, '#1b2229', '#59626b', 2); text(`Livello ${lvl}`, x + w / 2, y + 358, 18, '#ffb35b'); }
       else {
         coinIcon(x + 34, y + 322, 0.9); text(fmt(mcost), x + 52, y + 322, 20, state.coins >= mcost ? '#ffe08a' : '#ff8a7a', 'left');
-        button(mk > 1 ? `Compra${MK_NAME[mk - 1]}` : 'Compra', x + 20, y + 342, w - 40, 54, () => buy(tp, mk), { enabled: state.coins >= mcost, name: 'buy' + tp });
+        button(!pwOk ? 'Corrente insufficiente' : mk > 1 ? `Compra${MK_NAME[mk - 1]}` : 'Compra', x + 20, y + 342, w - 40, 54, () => buy(tp, mk), { enabled: state.coins >= mcost && pwOk, name: 'buy' + tp, size: pwOk ? 18 : 14 });
       }
     });
   } else if (state.shopTab === 1) {
@@ -1867,38 +1922,40 @@ function drawShop(t) {
     }
   }
 }
-function drawCrew(t) { // the crew panel: one box per person to pick the job, and where non-machine jobs work
-  const P = panelFrame(`Squadra · ${state.crew.length} persone`, 1100, 620, () => { state.panel = null; });
-  const count = j => state.crew.filter(cw => cw.job === j).length;
-  const needs = state.buildings.flatMap(b => jobNeeds(b).map(n => `${b.name}: ${n}`));
+function drawCrew(t) { // the crew of this site: pick each person's job, send them to another site; those still waiting for a place
+  const list = crewOf(F), cap = staffCap(F), wait = crewWaiting();
+  const P = panelFrame(`Squadra di ${F.name} · ${list.length}/${cap} persone`, 1100, 620, () => { state.panel = null; });
+  const count = j => list.filter(cw => cw.job === j).length, needs = jobNeeds(F);
   text(`Operatori macchina ${count('mach')} · Magazzinieri ${count('mag')} · Informatici ${count('it')} · Liberi ${count('none')}`, P.x + P.w / 2, P.y + 84, 17, '#fff');
   text(needs.length ? needs[0] : 'Ogni lavoro ha qualcuno: tutto in ordine', P.x + P.w / 2, P.y + 110, 15, needs.length ? '#ff8a7a' : '#7ef0a0');
-  text(`Ogni livello arriva una persona in più · al livello ${state.level + 1}: ${opsTotal() + tune.opsPerLvl}`, P.x + P.w / 2, P.y + 132, 13, '#9aa4ad');
-  state.crew.forEach((cw, i) => {
-    const col = i % 2, row = Math.floor(i / 2), x = P.x + 24 + col * 530, y = P.y + 150 + row * 64;
-    if (y > P.y + P.h - 60) return;
+  text((() => { let L = state.level + 1; const now = opsTotal(); while (L <= tune.maxLevel && Math.floor(tune.opsBase + (L - 1) * tune.opsPerLvl) <= now) L++; return `In tutto ${state.crew.length} persone in ${state.buildings.length} sedi · ` + (L > tune.maxLevel ? 'la squadra è al completo' : `la prossima arriva al livello ${L}`); })(), P.x + P.w / 2, P.y + 132, 13, '#9aa4ad');
+  const per = 12, pages = Math.max(1, Math.ceil(list.length / per)); state.crewPage = Math.min(state.crewPage || 0, pages - 1);
+  if (pages > 1) { button('<', P.x + 24, P.y + P.h - 56, 60, 40, () => { state.crewPage = (state.crewPage + pages - 1) % pages; sfx.click(); }, { size: 20, name: 'crewPrev' }); text(`Pagina ${state.crewPage + 1} di ${pages}`, P.x + 140, P.y + P.h - 36, 14, '#e6e1d3', 'left'); button('>', P.x + P.w - 84, P.y + P.h - 56, 60, 40, () => { state.crewPage = (state.crewPage + 1) % pages; sfx.click(); }, { size: 20, name: 'crewNext' }); }
+  const others = state.buildings.filter(b => b !== F);
+  list.forEach((cw, i) => {
+    if (Math.floor(i / per) !== state.crewPage) return;
+    const k = i % per, col = k % 2, row = Math.floor(k / 2), x = P.x + 24 + col * 530, y = P.y + 150 + row * 64;
     const J = JOBS[cw.job];
     rrect(x, y, 514, 56, 10, HT().card, cw.job === 'none' ? '#59626b' : '#f2c230', 2);
     sprite(cw.job === 'mach' ? 'work' : 'walk0', x + 30, y + 50, 2.6, false, J.pal());
     text(cw.name, x + 58, y + 28, 18, '#fff', 'left');
-    button(J.short, x + 150, y + 8, 160, 40, () => cycleJob(cw), { color: cw.job === 'mach' ? '#e07a2e' : cw.job === 'mag' ? '#7ed08a' : cw.job === 'it' ? '#5bc7ff' : '#9aa4ad', size: 16, name: 'job' + cw.id });
-    let where = '';
-    if (cw.job === 'mach') { const m = allMachines().find(x2 => x2.id === cw.m); where = m ? MACH[m.type].name : 'da piazzare: strumento Operatore'; }
-    else if (cw.job === 'none') where = 'tocca il lavoro per cambiarlo';
-    if (cw.job === 'mag' && state.buildings.length > 1) { button(crewB(cw).name, x + 322, y + 8, 92, 40, () => { cycleCrewB(cw); cw.routes = null; }, { color: '#e6e1d3', size: 12, name: 'cb' + cw.id }); button(cw.routes ? `Perc. ${cw.routes.length}` : 'Perc.: tutti', x + 418, y + 8, 88, 40, () => { state.routeCw = cw.id; state.panel = 'routes'; sfx.click(); }, { color: '#e6e1d3', size: 12, name: 'routes' + cw.id }); }
-    else if (cw.job === 'mag') button(cw.routes ? `Percorsi: ${cw.routes.length}` : 'Percorsi: tutti', x + 322, y + 8, 180, 40, () => { state.routeCw = cw.id; state.panel = 'routes'; sfx.click(); }, { color: '#e6e1d3', size: 15, name: 'routes' + cw.id });
-    else if (cw.job === 'it') {
-      if (state.buildings.length > 1) button(crewB(cw) ? crewB(cw).name : '-', x + 322, y + 8, 180, 40, () => cycleCrewB(cw), { color: '#e6e1d3', size: 15, name: 'cb' + cw.id });
-      else text(crewB(cw) ? crewB(cw).name : 'nessun capannone', x + 412, y + 28, 15, '#cfd6dd');
-    } else text(where, x + 412, y + 28, 13, cw.m != null ? '#9ce8b4' : '#cfd6dd');
+    button(J.short, x + 150, y + 8, 150, 40, () => cycleJob(cw), { color: cw.job === 'mach' ? '#e07a2e' : cw.job === 'mag' ? '#7ed08a' : cw.job === 'it' ? '#5bc7ff' : '#9aa4ad', size: 16, name: 'job' + cw.id });
+    const right = others.length ? 418 : 506;
+    if (cw.job === 'mag') button(cw.routes ? `Percorsi: ${cw.routes.length}` : 'Percorsi: tutti', x + 308, y + 8, right - 312, 40, () => { state.routeCw = cw.id; state.panel = 'routes'; sfx.click(); }, { color: '#e6e1d3', size: 13, name: 'routes' + cw.id });
+    else { const m = cw.job === 'mach' ? allMachines().find(x2 => x2.id === cw.m) : null; text(cw.job === 'mach' ? (m ? MACH[m.type].short + MK_NAME[mkOf(m) - 1] : 'senza macchina') : cw.job === 'it' ? 'controlla la rete' : 'scegli un lavoro', x + 308 + (right - 308) / 2, y + 28, 12, m ? '#9ce8b4' : '#cfd6dd'); }
+    if (others.length) { const dest = others.find(b => crewOf(b).length < staffCap(b)); button(dest ? 'Sposta' : 'Sedi piene', x + 424, y + 8, 82, 40, () => dest ? moveCrew(cw, dest) : toast('Le altre sedi sono al completo', '#ffb35b'), { color: '#e6e1d3', size: 13, enabled: !!dest, name: 'move' + cw.id }); }
   });
+  if (wait.length) { // people hired while every site was full
+    const room = cap - list.length;
+    text(`${wait.length} ${wait.length === 1 ? 'persona aspetta' : 'persone aspettano'} un posto: tutte le sedi erano al completo`, P.x + P.w / 2, P.y + P.h - 84, 14, '#ffe08a');
+    if (room > 0) button('Prendile qui', P.x + P.w / 2 - 90, P.y + P.h - 64, 180, 40, () => { for (const cw of wait.slice(0, room)) cw.b = F.id; sfx.click(); save(); }, { size: 15, name: 'takeWaiting' });
+  }
 }
 function drawRoutes(t) { // which trips one warehouse worker makes
   const cw = state.crew.find(c => c.id === state.routeCw); if (!cw || cw.job !== 'mag') { state.panel = 'crew'; return; }
   const P = panelFrame(`Percorsi di ${cw.name}`, 760, 600, () => { state.panel = 'crew'; }), b = crewB(cw);
   if (!b) { text('Prima disegna un capannone', P.x + P.w / 2, P.y + 200, 20, '#fff'); return; }
   text(`Lavora in: ${b.name}`, P.x + 40, P.y + 90, 18, '#fff', 'left');
-  if (state.buildings.length > 1) button('Cambia capannone', P.x + P.w - 260, P.y + 70, 220, 40, () => { cycleCrewB(cw); cw.routes = null; }, { color: '#e6e1d3', size: 15, name: 'routeB' });
   const routes = routesOf(b), all = !cw.routes;
   text('Ogni percorso: va a prendere il pezzo e lo porta a destinazione. Puoi dargliene quanti vuoi.', P.x + P.w / 2, P.y + 128, 14, '#b9c4ce');
   const toggleAll = () => { cw.routes = all ? [] : null; sfx.click(); save(); };
@@ -1962,7 +2019,7 @@ function drawMachinePanel(t) {
   const m = state.sel; if (!m) { state.panel = null; return; }
   const P = panelFrame(MACH[m.type].name + MK_NAME[mkOf(m) - 1], 720, 560, () => { state.panel = null; state.sel = null; });
   rrect(P.x + 24, P.y + 80, 200, 200, 14, '#3a2416');
-  machineIcon(m.type, P.x + 124, P.y + 220, 1.9, { t, busy: !!m.cur, status: m.cur ? 'work' : m.op ? 'wait' : 'off' });
+  machineIcon(m.type, P.x + 124, P.y + 220, 1.9, { t, busy: !!m.cur, status: m.cur ? 'work' : m.op ? 'wait' : 'off', mk: m.mk });
   text(`Qualità ${Math.round(m.quality * 100)}%`, P.x + 250, P.y + 100, 24, '#7ef0a0', 'left');
   text(`Rende x${mult(m).toFixed(2)} il valore del pezzo`, P.x + 250, P.y + 132, 15, '#cfd6dd', 'left');
   [[0, 'Montaggio', m.pct[0]], [2, 'Configurazione', m.pct[2]], [1, 'Rete', m.netPct]].forEach(([ph, name, v], i) => {
@@ -1990,7 +2047,7 @@ function drawMachinePanel(t) {
     ['Sposta', () => { state.panel = null; state.placing = { kind: 'mach', m, dir: m.dir, rotated: true }; toast('Tocca una cella libera', '#bfe3ff'); }, '#9ad0ff', 'move'],
     ['Ricalibra', () => startBuild(m, true), '#7ef0a0', 'recal'],
     [netLab, () => { if (state.level < tune.rackLvl) return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b'); startBuild(m, false, true); }, '#5bc7ff', 'net'],
-    [`Vendi +${fmt(mcfg('cost', m.type) * tune.sellRefund)}`, () => sellMachine(m), '#ff8a7a', 'sell'],
+    [`Vendi +${fmt(Math.round(mcfg('cost', m.type) * MK_COST[mkOf(m) - 1] * tune.sellRefund))}`, () => sellMachine(m), '#ff8a7a', 'sell'],
   ];
   B.forEach(([lab, fn, col, nm], i) => button(lab, P.x + 24 + i * 170, P.y + 474, 160, 58, fn, { color: col, name: nm, size: lab.length > 11 ? 15 : 17, enabled: !(nm === 'net' && state.level < tune.rackLvl) }));
 }
@@ -2018,7 +2075,7 @@ function drawMinigame(t) {
     const parGuess = mg.phase === 0 ? mcfg('bolts', m.type) * tune.parBolt : mg.phase === 2 ? mcfg('dials', m.type) * tune.parDial : null;
     text(parGuess ? `Tempo ottimo: ${parGuess.toFixed(1)} s = 100%. Più ci metti, più scende la percentuale.` : 'Più sei veloce, più alta è la percentuale.', x + 250, y + 290, 16, '#7ef0a0', 'left');
     text(mg.phase === 1 ? 'La percentuale decide quanto rende in più la macchina collegata.' : 'La qualità (media di montaggio e configurazione) moltiplica quanto rende.', x + 250, y + 318, 15, '#b9c4ce', 'left');
-    machineIcon(m.type, x + w / 2, y + 470, 1.4, { status: 'off', t });
+    machineIcon(m.type, x + w / 2, y + 470, 1.4, { status: 'off', t, mk: m.mk });
     if (needsRack(mg)) {
       rrect(x + 250, y + 340, w - 300, 50, 10, 'rgba(216,67,58,0.25)', '#ff8a7a', 2);
       text('In questo capannone non c\'è ancora un Rack di rete: piazzalo prima', x + 250 + (w - 300) / 2, y + 365, 16, '#ffb3a8');
@@ -2096,7 +2153,7 @@ function drawNetwork(mg, t) {
   rrect(ox - 56, oy + sr * S + 2, 50, S - 4, 6, '#262c33', '#5bc7ff', 2);
   for (let k = 0; k < 4; k++) { ctx.fillStyle = (k + Math.floor(t * 4)) % 3 ? '#4fdc7a' : '#244a30'; ctx.fillRect(ox - 48 + k * 10, oy + sr * S + 14, 6, 4); }
   text('RACK', ox - 31, oy + sr * S + S - 16, 13, '#5bc7ff');
-  machineIcon(mg.m.type, ox + mg.gc * S + 40, oy + er * S + S - 6, 0.8, { status: mg.linked ? 'wait' : 'off', t });
+  machineIcon(mg.m.type, ox + mg.gc * S + 40, oy + er * S + S - 6, 0.8, { status: mg.linked ? 'wait' : 'off', t, mk: mg.m.mk });
   rrect(ox + mg.gc * S - 14, oy + er * S + S / 2 - 10, 20, 20, 4, '#3d8fd6', '#1d3e78', 2);
   // the cable
   ctx.beginPath(); mg.path.forEach(([c, r], i) => { const px = ox + c * S + S / 2, py = oy + r * S + S / 2; if (i) ctx.lineTo(px, py); else ctx.moveTo(ox - 6, py); ctx.lineTo(px, py); });
@@ -2157,7 +2214,7 @@ function drawTutorial(t) {
   else if (g === 3) { say = 'Una macchina lavora solo con un operatore. Prendi lo strumento Operatore e tocca la Troncatrice.'; if (state.tool !== 'op' && !state.panel && !state.placing) at(N.tool_op, 'Operatore'); }
   else if (g === 4) say = 'Guarda Luca, il magazziniere in verde: porta i pezzi. In alto c\'è il calendario: con x3 e x8 il tempo corre, ma le macchine si guastano più spesso!';
   else if (g === 5) {
-    say = opsFree() > 0 ? 'Compra un Tornio e mettigli un operatore libero: lavorerà le Barre tagliate e farà Perni torniti, che valgono il triplo.' : 'Ti serve un Operatore macchina libero: al prossimo livello arriva una persona nuova, dalle quel lavoro nella Squadra (Q).';
+    say = opsFree() > 0 ? 'Compra un Tornio e mettigli un operatore libero: lavorerà le Barre tagliate e farà Perni torniti, che valgono il triplo.' : 'Ti serve un Operatore macchina libero: salendo di livello arriva gente nuova, dalle quel lavoro nella Squadra (Q).';
     if (!state.placing && state.coins >= costOf('L') && !F.machines.some(m => m.type === 'L')) shopFor({ tab: 0, btn: 'buyL', label: 'Compra il Tornio' });
     else if (!state.panel && !state.placing && state.tool !== 'op' && F.machines.some(m => m.type === 'L' && m.phase >= 2 && !m.op)) at(N.tool_op, 'Operatore');
   } else if (g === 6) {
@@ -3046,7 +3103,7 @@ function drawWorld(t) {
     const h = hoverCell();
     if (h && canPlaceAt(h[0], h[1], state.placing)) {
       const P = state.placing;
-      const gw = P.kind === 'mach' ? fpDims(P.m ? P.m.mk : P.mk, P.dir) : [1, 1]; objs.push({ d: h[0] + h[1] + gw[0] + gw[1] - 0.5, f: () => drawGhost(P, h[0], h[1], t) });
+      const gw = P.kind === 'mach' ? fpDims(P.m ? P.m.mk : P.mk, P.dir, P.m ? P.m.type : P.type) : [1, 1]; objs.push({ d: h[0] + h[1] + gw[0] + gw[1] - 0.5, f: () => drawGhost(P, h[0], h[1], t) });
     }
   }
   objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
@@ -3564,6 +3621,7 @@ function startSandbox() { // a trial game with everything: top level, all five s
   state.perks = {}; for (const n of perkNodes()) if (!n.root) state.perks[n.id] = true;
   for (let st = 1; st <= 4; st++) { const [C, R] = shedSize(st), keep = F, b = newBuilding(rectCells(0, 0, C, R)); F = keep; b.stage = st; b.name = TIERS[st].short; b.grown = true; b.wh = { bars: 0, orders: [], auto: true }; layoutZones(b); }
   for (const b of state.buildings) whOf(b).bars = whCap(b);
+  { const bs = state.buildings.slice().reverse(); let k = 0; for (const cw of state.crew) { cw.b = -1; for (let n = 0; n < bs.length; n++) { const b = bs[(k + n) % bs.length]; if (crewOf(b).length < staffCap(b)) { cw.b = b.id; k = (k + n + 1) % bs.length; break; } } } } // the crew spread over the sites, the big ones first
   state.siteStart = -9999; state.siteToldDone = true;
   F = state.buildings[state.buildings.length - 1]; state.cur = state.buildings.length - 1; centerCam();
   scene = 'play'; startAudio(); save();

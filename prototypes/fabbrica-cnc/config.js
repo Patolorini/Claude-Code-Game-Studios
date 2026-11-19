@@ -20,11 +20,11 @@ window.CONFIG = {
   sellRefund: { value: 0.5, min: 0, max: 1, step: 0.05 },    // quota rimborsata vendendo una macchina
 
   // ---- Macchine: livello di sblocco ----
-  unlockT: { value: 1, min: 1, max: 10, step: 1 },
-  unlockL: { value: 2, min: 1, max: 10, step: 1 },
-  unlockF: { value: 3, min: 1, max: 10, step: 1 },
-  unlockD: { value: 5, min: 1, max: 10, step: 1 },
-  unlockX: { value: 7, min: 1, max: 10, step: 1 },
+  unlockT: { value: 1, min: 1, max: 50, step: 1 },
+  unlockL: { value: 3, min: 1, max: 50, step: 1 },
+  unlockF: { value: 6, min: 1, max: 50, step: 1 },
+  unlockD: { value: 9, min: 1, max: 50, step: 1 },
+  unlockX: { value: 12, min: 1, max: 50, step: 1 },
 
   // ---- Macchine: tempo di lavorazione per pezzo (s) ----
   timeT: { value: 1.6, min: 0.3, max: 10, step: 0.1 },
@@ -51,7 +51,7 @@ window.CONFIG = {
   spawnGap: { value: 1.2, min: 0.3, max: 5, step: 0.1 },     // s tra una barra grezza e la successiva, per Magazzino
   stockCap: { value: 8, min: 1, max: 50, step: 1 },          // pezzi massimi di un tipo nel magazzino interno del capannone
   opsBase: { value: 2, min: 1, max: 10, step: 1 },           // operatori al livello 1
-  opsPerLvl: { value: 1, min: 0, max: 5, step: 1 },          // operatori in più per ogni livello
+  opsPerLvl: { value: 0.5, min: 0, max: 5, step: 0.25 }, // operatori in più per ogni livello (0,5 = uno ogni due livelli)
   qualityBase: { value: 0.5, min: 0, max: 1, step: 0.05 },   // resa = qualityBase + qualità% / 100
 
   // ---- Ricette: monete per pezzo (prima della qualità) ----
@@ -73,9 +73,9 @@ window.CONFIG = {
   val_scrap: { value: 3, min: 0, max: 100, step: 1 },        // Scarto (ordine sbagliato)
 
   // ---- Esperienza e livelli ----
-  xpBase: { value: 50, min: 10, max: 500, step: 5 },         // XP totali per il livello 2
-  xpExp: { value: 1.6, min: 1, max: 3, step: 0.05 },         // soglia(L) = xpBase * (L-1)^xpExp
-  maxLevel: { value: 10, min: 2, max: 30, step: 1 },
+  xpBase: { value: 80, min: 10, max: 500, step: 5 }, // XP totali per il livello 2
+  xpExp: { value: 2.0, min: 1, max: 3, step: 0.05 }, // soglia(L) = xpBase * (L-1)^xpExp: più alto = livelli più lenti
+  maxLevel: { value: 50, min: 2, max: 100, step: 1 }, // livello massimo: i token bastano a completare la ragnatela
   xpPerSale: { value: 1, min: 0, max: 20, step: 1 },         // XP per pezzo venduto
   xpRecipe: { value: 40, min: 0, max: 500, step: 5 },        // XP per ricetta scoperta
   xpPerPct: { value: 0.1, min: 0, max: 2, step: 0.01 },      // XP per punto % in un minigioco
@@ -104,10 +104,10 @@ window.CONFIG = {
   toolCost2: { value: 400, min: 0, max: 20000, step: 50 },
   toolCost3: { value: 1500, min: 0, max: 50000, step: 50 },
   toolCost4: { value: 5000, min: 0, max: 90000, step: 100 },
-  toolReqW: { value: 3, min: 1, max: 10, step: 1 },          // livello giocatore per Chiave liv. 2
-  toolReqC: { value: 4, min: 1, max: 10, step: 1 },          // per Crimpatrice liv. 2
-  toolReqT: { value: 5, min: 1, max: 10, step: 1 },          // per Tester liv. 2
-  toolReqStep: { value: 2, min: 0, max: 5, step: 1 },        // livelli in più per ogni livello attrezzo
+  toolReqW: { value: 4, min: 1, max: 50, step: 1 },          // livello giocatore per Chiave liv. 2
+  toolReqC: { value: 6, min: 1, max: 50, step: 1 },          // per Crimpatrice liv. 2
+  toolReqT: { value: 8, min: 1, max: 50, step: 1 },          // per Tester liv. 2
+  toolReqStep: { value: 5, min: 0, max: 15, step: 1 },        // livelli in più per ogni livello attrezzo
 
   // ---- Logistica (piazzamento libero) ----
   sourceCost: { value: 300, min: 0, max: 5000, step: 10 },    // Magazzino barre in più
@@ -115,7 +115,14 @@ window.CONFIG = {
   logisticsCopyMult: { value: 0.5, min: 0, max: 2, step: 0.05 }, // ogni Magazzino/Cassa in più costa +50%
 
   rackCost: { value: 400, min: 0, max: 5000, step: 10 },      // Rack di rete in più (il primo di ogni capannone è gratis)
-  rackLvl: { value: 3, min: 1, max: 10, step: 1 },           // livello che sblocca Rack di rete e Postazione PC
+  // ---- Persone e corrente per sede ----
+  staffCap0: { value: 6, min: 1, max: 60, step: 1 }, staffCap1: { value: 10, min: 1, max: 60, step: 1 }, staffCap2: { value: 14, min: 1, max: 60, step: 1 }, // persone che lavorano in ogni sede
+  staffCap3: { value: 20, min: 1, max: 60, step: 1 }, staffCap4: { value: 28, min: 1, max: 60, step: 1 },
+  power0: { value: 24, min: 1, max: 2000, step: 1 }, power1: { value: 50, min: 1, max: 2000, step: 1 }, power2: { value: 90, min: 1, max: 2000, step: 1 }, // kW di corrente di ogni sede
+  power3: { value: 150, min: 1, max: 2000, step: 1 }, power4: { value: 260, min: 1, max: 2000, step: 1 },
+  powT: { value: 4, min: 1, max: 100, step: 1 }, powL: { value: 6, min: 1, max: 100, step: 1 }, powF: { value: 8, min: 1, max: 100, step: 1 }, // kW di una macchina Mk I
+  powD: { value: 5, min: 1, max: 100, step: 1 }, powX: { value: 12, min: 1, max: 100, step: 1 },
+  rackLvl: { value: 5, min: 1, max: 50, step: 1 },           // livello che sblocca Rack di rete e Postazione PC
   pcCost: { value: 300, min: 0, max: 5000, step: 10 },        // Postazione PC in più (la prima di ogni capannone è gratis)
   magSpeed: { value: 2.6, min: 0.3, max: 6, step: 0.1 },      // celle al secondo di un magazziniere
   handTime: { value: 0.2, min: 0, max: 3, step: 0.05 },      // s per prendere o posare un pezzo
@@ -132,19 +139,19 @@ window.CONFIG = {
   shed0Rows: { value: 5, min: 3, max: 10, step: 1 },
   shed1Cols: { value: 8, min: 3, max: 14, step: 1 },
   shed1Rows: { value: 6, min: 3, max: 10, step: 1 },
-  shed1Lvl: { value: 4, min: 1, max: 10, step: 1 },
+  shed1Lvl: { value: 6, min: 1, max: 60, step: 1 },
   shed1Cost: { value: 1500, min: 0, max: 90000, step: 100 },
   shed2Cols: { value: 10, min: 3, max: 14, step: 1 },
   shed2Rows: { value: 8, min: 3, max: 16, step: 1 },
-  shed2Lvl: { value: 6, min: 1, max: 10, step: 1 },
+  shed2Lvl: { value: 14, min: 1, max: 60, step: 1 },
   shed2Cost: { value: 4000, min: 0, max: 90000, step: 100 },
   shed3Cols: { value: 13, min: 3, max: 20, step: 1 },
   shed3Rows: { value: 9, min: 3, max: 16, step: 1 },
-  shed3Lvl: { value: 8, min: 1, max: 10, step: 1 },
+  shed3Lvl: { value: 24, min: 1, max: 60, step: 1 },
   shed3Cost: { value: 9000, min: 0, max: 90000, step: 100 },
   shed4Cols: { value: 16, min: 3, max: 20, step: 1 },
   shed4Rows: { value: 12, min: 3, max: 16, step: 1 },
-  shed4Lvl: { value: 10, min: 1, max: 10, step: 1 },
+  shed4Lvl: { value: 34, min: 1, max: 60, step: 1 },
   shed4Cost: { value: 18000, min: 0, max: 90000, step: 100 },
 
   // ---- Video intro ----
