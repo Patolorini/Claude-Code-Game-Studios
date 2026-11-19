@@ -314,7 +314,7 @@ const GOALS = [
   { text: `Livello ${CONFIG.unlockL.value}: un Tornio che lavora le Barre tagliate (Perno tornito)`, done: () => state.found.includes('TL'), prog: () => [Math.min(state.level, tune.unlockL), tune.unlockL] },
   { text: `Livello ${CONFIG.rackLvl.value}: piazza Rack di rete e Postazione PC`, done: () => anyB(b => hasKind(b, 'rack') && hasKind(b, 'pc')) },
   { text: 'Squadra (Q): dai a qualcuno il lavoro di Informatico', done: () => state.crew.some(cw => cw.job === 'it') },
-  { text: 'Collega una macchina in rete: toccala > Collega in rete', done: () => allMachines().some(m => m.netPct != null) },
+  { text: 'Collega le macchine in rete: tocca il Rack e scegli quali', done: () => allMachines().some(m => m.netPct != null) },
   { text: 'Costruisci la Fresa CNC', done: () => built('F') },
   { text: 'Scopri una ricetta con 3 macchine', done: () => state.found.some(s => s.length >= 3) },
   { text: 'Capitolo 2: compra l\'officina di mattoni (Negozio > Sede)', done: () => anyB(b => b.stage >= 1) },
@@ -408,7 +408,7 @@ function serialize() {
     entered: state.entered, cur: Math.max(0, state.buildings.indexOf(F)),
     buildings: state.buildings.map(b => ({
       id: b.id, name: b.name, tiles: [...b.cells], stage: b.stage, grown: b.grown, workers: b.workers.length,
-      lines: b.lines || [], lineSeq: b.lineSeq || 0, layoutV: b.layoutV || null, notched: !!b.notched, store: b.store || {}, keep: b.keep || {}, wh: b.wh ? { ...b.wh, orders: b.wh.orders.concat((b.trucks || []).filter(k => k.ph !== 'out').map(k => ({ n: k.n, at: 0, mat: k.mat || 'acc', sup: k.sup }))) } : null, cells: Object.values(b.grid).filter(o => o.kind !== 'wh' && o.kind !== 'office' && o.kind !== 'pillar' && !(o.kind === 'mach' && !o.main)).map(o => o.kind === 'mach'
+      lines: b.lines || [], lineSeq: b.lineSeq || 0, netFault: !!b.netFault, layoutV: b.layoutV || null, notched: !!b.notched, store: b.store || {}, keep: b.keep || {}, wh: b.wh ? { ...b.wh, orders: b.wh.orders.concat((b.trucks || []).filter(k => k.ph !== 'out').map(k => ({ n: k.n, at: 0, mat: k.mat || 'acc', sup: k.sup }))) } : null, cells: Object.values(b.grid).filter(o => o.kind !== 'wh' && o.kind !== 'office' && o.kind !== 'pillar' && !(o.kind === 'mach' && !o.main)).map(o => o.kind === 'mach'
         ? { k: 'mach', c: o.c, r: o.r, id: o.m.id, type: o.m.type, dir: o.m.dir, phase: o.m.phase, pct: o.m.pct, net: o.m.netPct, op: o.m.op, input: o.m.input, age: o.m.age || 0, broken: o.m.broken || null , mk: o.m.mk || 1, line: o.m.line ?? null, mat: o.m.mat || null, last: !!o.m.lineLast }
         : { k: o.kind, c: o.c, r: o.r, dir: o.dir, mat: o.mat }),
     })),
@@ -435,7 +435,7 @@ function load() {
       else if (o.k === 'crate') setCell(o.c, o.r, { kind: 'crate', last: null, bump: 0 });
       else setCell(o.c, o.r, { kind: o.k });
     }
-    b.wh = bd.wh || null; b.store = bd.store || {}; b.keep = bd.keep || {}; b.lines = bd.lines || []; b.lineSeq = bd.lineSeq || 0; b.layoutV = bd.layoutV || null; b.notched = !!bd.notched; layoutZones(b);
+    b.wh = bd.wh || null; b.store = bd.store || {}; b.keep = bd.keep || {}; b.lines = bd.lines || []; b.lineSeq = bd.lineSeq || 0; b.netFault = !!bd.netFault; b.layoutV = bd.layoutV || null; b.notched = !!bd.notched; layoutZones(b);
     for (let i = 0; i < (bd.workers || tune.workers); i++) addWorker(false);
   }
   crewSync(); state.cur = Math.min(state.buildings.length - 1, d.cur || 0); F = state.buildings[state.cur]; centerCam();
@@ -446,7 +446,7 @@ function wipeSave() { try { localStorage.removeItem(SAVE_KEY); } catch (_) { /* 
 // a machine is built in two steps (assembly, configuration) and works at once; networking is a later choice that raises its output
 const buildQ = m => avg([m.pct[0], m.pct[2]].filter(v => v != null)) / 100;
 const netMax = (l = state.tools.C) => tune.netBonus + tune.netBonusPerLvl * (l - 1) + netPerk(); // the Crimpatrice raises what a network adds
-const netBonus = m => m.netPct == null || !netOk(F) ? 0 : netMax() * m.netPct / 100;
+const netBonus = m => m.netPct == null || !netOk(F) || F.netFault ? 0 : netMax() * m.netPct / 100;
 const mult = m => tune.qualityBase + m.quality + netBonus(m);
 function makeMachine(type, c, r, dir, id, phase = 0, pct = [], netPct = null) {
   const m = { id: id || state.nextId++, type, c, r, dir, phase, pct: pct.slice(), netPct, op: false, input: '', cur: null, out: null, proc: 0 };
@@ -1168,6 +1168,7 @@ function jobNeeds(b) { // the jobs this building is missing, in words
   if (b.machines.some(m => m.phase >= 2) && !b.machines.some(m => m.op)) out.push('nessun operatore sulle macchine');
   if (b.machines.some(m => m.op) && !crewIn(b, 'mag').length) out.push('nessun magazziniere: i pezzi restano fermi');
   else { const lone = routesOf(b).find(rt => !crewIn(b, 'mag').some(cw => mayDo(cw, rt.id))); if (lone) out.push(`nessun magazziniere fa il percorso ${lone.label}`); }
+  if (b.netFault) out.push('la rete è piena di BUG: tocca il Rack o la PC e ripuliscila');
   if (b.machines.some(m => m.netPct != null) && !netOk(b)) out.push(hasKind(b, 'pc') ? 'nessun informatico: la rete non dà bonus' : 'manca la Postazione PC: la rete non dà bonus');
   return out;
 }
@@ -1573,7 +1574,7 @@ function placeAt(c, r) {
     events.push({ type: 'place', m: m.type }); save(); startBuild(m);
   } else if (P.kind === 'src') { setCell(c, r, { kind: 'src', dir, t: 0.5, paid: P.cost }); save(); }
   else if (P.kind === 'pc') { setCell(c, r, { kind: 'pc', paid: P.cost }); save(); toast(crewIn(F, 'it').length ? 'Postazione PC pronta' : 'Postazione PC pronta: assegna un Informatico nella Squadra (Q)', '#5bc7ff'); }
-  else if (P.kind === 'rack') { setCell(c, r, { kind: 'rack', paid: P.cost }); save(); toast('Rack di rete pronto: ora le macchine si possono collegare', '#5bc7ff'); }
+  else if (P.kind === 'rack') { setCell(c, r, { kind: 'rack', paid: P.cost }); save(); toast('Rack di rete pronto: scegli quali macchine collegare', '#5bc7ff'); if (F.machines.some(m => m.phase >= 2)) openNetPick(); }
   else { setCell(c, r, { kind: 'crate', last: null, bump: 0, paid: P.cost }); save(); }
 }
 function setTool(id) { state.tool = id; state.placing = null; state.demo = null; }
@@ -1664,7 +1665,7 @@ const MG = { x: 190, y: 92, w: 900, h: 560 };
 function needsRack(mg) { return mg.phase === 1 && !rackOf(F); }
 function placeRackFromMg() {
   if (state.level < tune.rackLvl) { state.mg = null; return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b'); }
-  state.mg = null; state.placing = { kind: 'rack', cost: logiCost('rack'), dir: 0, rotated: false }; toast('Piazza il Rack di rete, poi tocca la macchina per continuare', '#5bc7ff'); }
+  state.mg = null; state.panel = null; state.placing = { kind: 'rack', cost: logiCost('rack'), dir: 0, rotated: false }; toast('Piazza il Rack di rete: poi scegli quali macchine collegare', '#5bc7ff'); }
 function startBuild(m, recal = false, net = false, repair = false) {
   state.panel = null; state.sel = null;
   state.mg = { m, phase: repair ? 0 : net ? 1 : recal ? 2 : (m.phase === 0 ? 0 : 2), step: 'intro', recal, repair };
@@ -1675,6 +1676,7 @@ function mgPct(mg) {
   return Math.max(tune.pctFloor, Math.round(100 - (100 - tune.pctFloor) * (e - mg.par) / (lim - mg.par)));
 }
 function beginPhase() {
+  if (state.mg.bug) return beginBugs();
   const mg = state.mg, t = mg.m.type;
   mg.step = 'play'; mg.elapsed = 0; mg.pen = 0; mg.flash = 0;
   if (mg.phase === 0) {
@@ -1753,10 +1755,11 @@ function netDragTo(c, r) { // a fast drag may skip cells: walk the head toward t
   }
 }
 function finishPhase() {
+  if (state.mg.bug) return finishBugs();
   const mg = state.mg, m = mg.m, pct = mgPct(mg);
   mg.step = 'result'; mg.pct = pct;
   if (mg.repair) { m.broken = null; }
-  else if (mg.phase === 1) { mg.better = m.netPct == null || pct > m.netPct; if (mg.better) m.netPct = pct; }
+  else if (mg.phase === 1) { mg.better = m.netPct == null || pct > m.netPct; for (const g of mg.group || [m]) if (g.netPct == null || pct > g.netPct) g.netPct = pct; }
   else if (mg.recal) { const prev = m.pct[2]; mg.better = prev === undefined || pct > prev; if (mg.better) m.pct[2] = pct; }
   else { m.pct[mg.phase] = pct; m.phase++; }
   if (m.phase >= 2) m.quality = buildQ(m);
@@ -1764,13 +1767,150 @@ function finishPhase() {
   sfx.ding(); events.push({ type: 'phase', phase: mg.phase, pct }); save();
 }
 function afterResult() {
+  if (state.mg.bug) { const b = state.mg.b; state.mg = null; return showBanner('Rete ripulita!', `${b.name}: le macchine in rete rendono di nuovo di più`, '#5bc7ff'); }
   const mg = state.mg, m = mg.m;
   if (mg.repair) { state.mg = null; return toast(`${MACH[m.type].name} riparata: torna al lavoro`, '#7ef0a0'); }
   if (!mg.recal && mg.phase === 0 && m.phase < 2) { state.mg = { m, phase: 2, step: 'intro', recal: false }; return; }
   state.mg = null;
-  if (mg.phase === 1) showBanner(`${MACH[m.type].name} in rete!`, `Rete ${m.netPct}%  ·  resa +${Math.round(netBonus(m) * 100)}%  ·  rende x${mult(m).toFixed(2)}`, '#5bc7ff');
+  if (mg.phase === 1 && mg.group && mg.group.length > 1) showBanner(`${mg.group.length} macchine in rete!`, `Rete ${mg.pct}%  ·  ogni macchina rende fino a +${Math.round(netMax() * mg.pct)}%`, '#5bc7ff');
+  else if (mg.phase === 1) showBanner(`${MACH[m.type].name} in rete!`, `Rete ${m.netPct}%  ·  resa +${Math.round(netBonus(m) * 100)}%  ·  rende x${mult(m).toFixed(2)}`, '#5bc7ff');
   else if (!mg.recal) showBanner(`${MACH[m.type].name} accesa!`, `Qualità ${Math.round(m.quality * 100)}%  ·  rende x${mult(m).toFixed(2)}  ·  più avanti potrai collegarla in rete`, '#5be38f');
   else toast(mg.better ? 'Configurazione migliorata!' : 'Tenuta la configurazione migliore', '#bfe3ff');
+}
+// ---- Network: choose which machines to connect, then one cable minigame for all of them ----
+function openNetPick(ids) {
+  if (state.level < tune.rackLvl) return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b');
+  const ms = F.machines.filter(m => m.phase >= 2);
+  state.netPick = ids || ms.filter(m => m.netPct == null).map(m => m.id); // by default: every machine not yet connected
+  state.panel = 'netpick'; state.sel = null; sfx.click();
+}
+function startNetGroup(ms) {
+  if (!ms.length) return toast('Spunta almeno una macchina', '#ffb35b');
+  state.panel = null; state.mg = { m: ms[0], group: ms, phase: 1, step: 'intro', recal: false, repair: false };
+}
+function drawNetPick(t) {
+  const ms = F.machines.filter(m => m.phase >= 2), pick = state.netPick || [], rack = !!rackOf(F), pc = hasKind(F, 'pc'), it = crewIn(F, 'it').length > 0;
+  const P = panelFrame('Rete · quali macchine colleghi?', 960, 600, () => { state.panel = null; });
+  // what the network needs to give its bonus
+  const need = [[rack, 'Rack di rete'], [pc, 'Postazione PC'], [it, 'un Informatico']];
+  need.forEach(([ok, lab], i) => { const x = P.x + 30 + i * 300; rrect(x, P.y + 74, 286, 36, 10, ok ? 'rgba(126,240,160,0.15)' : 'rgba(216,67,58,0.2)', ok ? '#7ef0a0' : '#ff8a7a', 1.5); text(`${ok ? '✓' : '✗'} ${lab}`, x + 143, P.y + 92, 15, ok ? '#9ce8b4' : '#ffb3a8'); });
+  if (F.netFault) text('La rete è piena di BUG: prima ripuliscila (tocca il Rack)', P.x + P.w / 2, P.y + 126, 14, '#ff8a7a');
+  else text('Un solo minigioco del cavo collega tutte le macchine spuntate: il risultato vale per ognuna', P.x + P.w / 2, P.y + 126, 14, '#cfd6dd');
+  if (!ms.length) text('Qui non c\'è ancora nessuna macchina finita', P.x + P.w / 2, P.y + 260, 16, '#9aa4ad');
+  ms.slice(0, 12).forEach((m, i) => {
+    const col = i % 3, row = Math.floor(i / 3), x = P.x + 30 + col * 300, y = P.y + 148 + row * 82, on = pick.includes(m.id);
+    rrect(x, y, 286, 72, 12, on ? 'rgba(91,199,255,0.22)' : HT().card, on ? '#5bc7ff' : '#59626b', on ? 3 : 1.5);
+    rrect(x + 12, y + 22, 28, 28, 6, on ? '#5bc7ff' : '#1b2229', '#fff', 2); if (on) { line([x + 18, y + 36], [x + 24, y + 43], '#14283c', 4); line([x + 24, y + 43], [x + 35, y + 28], '#14283c', 4); }
+    machineIcon(m.type, x + 78, y + 64, 0.75, { status: 'off', t, mk: m.mk });
+    text(MACH[m.type].short + MK_NAME[mkOf(m) - 1], x + 120, y + 26, 16, '#fff', 'left');
+    text(m.netPct == null ? 'non collegata' : `in rete ${m.netPct}% · rifai per migliorare`, x + 120, y + 50, 12, m.netPct == null ? '#9aa4ad' : '#5bc7ff', 'left');
+    btn(x, y, 286, 72, () => { state.netPick = on ? pick.filter(id => id !== m.id) : pick.concat(m.id); sfx.click(); }, 'np' + i);
+  });
+  const all = ms.length && ms.every(m => pick.includes(m.id));
+  if (ms.length) button(all ? 'Nessuna' : 'Tutte', P.x + 30, P.y + P.h - 74, 160, 50, () => { state.netPick = all ? [] : ms.map(m => m.id); sfx.click(); }, { size: 17, name: 'npAll' });
+  const sel = ms.filter(m => pick.includes(m.id));
+  if (!rack) button(`Piazza il Rack${logiCost('rack') ? ' · ' + fmt(logiCost('rack')) : ' (gratis)'}`, P.x + P.w - 360, P.y + P.h - 78, 330, 58, placeRackFromMg, { color: '#5bc7ff', size: 19, name: 'npRack' });
+  else if (F.netFault) button('Ripulisci la rete', P.x + P.w - 330, P.y + P.h - 78, 300, 58, () => startBugs(F), { color: '#ff8a7a', size: 19, name: 'npBugs' });
+  else button(sel.length ? `Collega ${sel.length} ${sel.length === 1 ? 'macchina' : 'macchine'}` : 'Spunta le macchine', P.x + P.w - 330, P.y + P.h - 78, 300, 58, () => startNetGroup(sel), { enabled: sel.length > 0, color: '#7ef0a0', size: 20, name: 'npGo' });
+}
+// ---- Network fault: the wiring diagram is full of literal bugs; squash them all ----
+function startBugs(b) { state.panel = null; state.sel = null; state.mg = { bug: true, b, phase: 3, step: 'intro' }; sfx.click(); }
+function beginBugs() {
+  const mg = state.mg, b = mg.b, X = MG.x, Y = MG.y;
+  const ms = b.machines.filter(m => m.netPct != null).slice(0, 10);
+  const cy = Y + 330, nodes = [{ k: 'rack', x: X + 140, y: cy - 60 }, { k: 'pc', x: X + 140, y: cy + 130 }, { k: 'sw', x: X + 380, y: cy - 10 }];
+  const cols = ms.length > 5 ? 2 : 1;
+  ms.forEach((m, i) => { const c = cols === 2 ? i % 2 : 0, r = cols === 2 ? Math.floor(i / 2) : i, rows = Math.ceil(ms.length / cols); nodes.push({ k: 'm', m, x: X + 620 + c * 170, y: Y + 175 + (rows > 1 ? r * (330 / Math.max(1, rows - 1)) : 160) }); });
+  const edges = [[0, 2], [0, 1]]; for (let i = 3; i < nodes.length; i++) edges.push([2, i]);
+  if (nodes.length === 3) { nodes.push({ k: 'sw', x: X + 700, y: cy - 60 }); edges.push([2, 3]); }
+  const n = Math.round(tune.bugBase + tune.bugPerMach * ms.length);
+  mg.nodes = nodes; mg.edges = edges; mg.splats = [];
+  mg.bugs = Array.from({ length: n }, () => ({ e: Math.floor(rng() * edges.length), u: 0.1 + rng() * 0.8, dir: rng() < 0.5 ? 1 : -1, v: tune.bugSpeed * (0.6 + rng() * 0.8), ph: rng() * 6, alive: true }));
+  mg.step = 'play'; mg.elapsed = 0; mg.pen = 0; mg.flash = 0; mg.par = n * tune.parBug; mg.left = n; sfx.click();
+}
+function bugPos(mg, g) { const [a, c] = mg.edges[g.e], A = mg.nodes[a], C = mg.nodes[c]; return [A.x + (C.x - A.x) * g.u, A.y + (C.y - A.y) * g.u, Math.atan2(C.y - A.y, C.x - A.x) + (g.dir < 0 ? Math.PI : 0)]; }
+function updateBugs(dt) {
+  const mg = state.mg;
+  for (const g of mg.bugs) {
+    if (!g.alive) continue;
+    const [a, c] = mg.edges[g.e], A = mg.nodes[a], C = mg.nodes[c], len = Math.max(40, Math.hypot(C.x - A.x, C.y - A.y));
+    g.ph += dt * 14; g.u += g.dir * g.v * 300 * dt / len;
+    if (g.u > 1 || g.u < 0) { // at a node: crawl onto another cable that touches it
+      const at = g.u > 1 ? c : a, next = mg.edges.map((e, i) => [e, i]).filter(([e, i]) => i !== g.e && (e[0] === at || e[1] === at));
+      if (next.length && rng() < 0.75) { const [e, i] = next[Math.floor(rng() * next.length)]; g.e = i; g.dir = e[0] === at ? 1 : -1; g.u = e[0] === at ? 0 : 1; }
+      else { g.dir = -g.dir; g.u = Math.max(0, Math.min(1, g.u)); }
+    }
+  }
+}
+function squash(g) {
+  const mg = state.mg; if (!g.alive || mg.step !== 'play') return;
+  const [x, y] = bugPos(mg, g); g.alive = false; mg.left--; mg.splats.push({ x, y, r: rng() * 6 }); sfx.crimp();
+  if (mg.left <= 0) finishPhase();
+}
+function finishBugs() {
+  const mg = state.mg, pct = mgPct(mg); mg.step = 'result'; mg.pct = pct; mg.b.netFault = false;
+  addXp(Math.round(pct * tune.xpPerPct)); sfx.ding(); events.push({ type: 'bugs', pct }); save();
+}
+function drawBug(x, y, a, ph, s = 1) { // a literal bug: shell, six legs, antennae, BUG on its back
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(s, s);
+  ctx.strokeStyle = '#1b1b1b'; ctx.lineWidth = 2.5;
+  for (const sd of [-1, 1]) for (let k = 0; k < 3; k++) { const sw = Math.sin(ph + k * 2 + (sd > 0 ? 1 : 0)) * 4; ctx.beginPath(); ctx.moveTo(-6 + k * 7, sd * 7); ctx.lineTo(-8 + k * 8 + sw, sd * 17); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(13, -3); ctx.lineTo(22, -9); ctx.moveTo(13, 3); ctx.lineTo(22, 9); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(-2, 0, 15, 10, 0, 0, Math.PI * 2); ctx.fillStyle = '#c0392b'; ctx.fill(); ctx.strokeStyle = '#3a0e08'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(12, 0, 6, 6, 0, 0, Math.PI * 2); ctx.fillStyle = '#2b1a14'; ctx.fill();
+  ctx.fillStyle = '#ffe14a'; ctx.fillRect(13, -4, 3, 3); ctx.fillRect(13, 1, 3, 3);
+  ctx.translate(-2, 0); ctx.rotate(-a); // the word on its back always reads upright
+  ctx.font = `bold 10px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 2.5; ctx.strokeStyle = '#3a0e08'; ctx.strokeText('BUG', 0, 0); ctx.fillStyle = '#fff'; ctx.fillText('BUG', 0, 0);
+  ctx.restore();
+}
+function drawBugGame(t) {
+  const mg = state.mg, { x, y, w, h } = MG, b = mg.b;
+  ctx.fillStyle = 'rgba(8,12,18,0.7)'; ctx.fillRect(0, 0, W, H); btn(0, 0, W, H, () => {});
+  rrect(x, y + 6, w, h, 18, 'rgba(0,0,0,0.4)'); rrect(x, y, w, h, 18, '#4a2f1d', '#ff8a7a', 3); rrect(x + 3, y + 3, w - 6, 54, 15, '#6b4527');
+  text(`Guasto di rete · ${b.name}`, x + w / 2, y + 31, 24, '#fff');
+  if (mg.step === 'intro') {
+    rrect(x + 40, y + 90, 180, 180, 16, '#14202c'); drawBug(x + 130, y + 180, -0.4, t * 10, 3);
+    text('La rete è piena di BUG!', x + 250, y + 110, 22, '#ff8a7a', 'left');
+    wrapText(`Sullo schema dei collegamenti corrono dei BUG veri: toccali per schiacciarli tutti. Si spostano lungo i cavi, inseguili! Un tocco a vuoto costa ${(tune.mgPenalty * 0.3).toFixed(1)} s. Finché la rete è sporca le macchine in rete non danno il loro bonus.`, x + 250, y + 150, w - 300, 18, '#e6e1d3', 26);
+    const n = Math.round(tune.bugBase + tune.bugPerMach * b.machines.filter(m => m.netPct != null).slice(0, 10).length);
+    text(`${n} BUG · tempo ottimo ${(n * tune.parBug).toFixed(1)} s = 100%`, x + 250, y + 300, 16, '#7ef0a0', 'left');
+    text(crewIn(b, 'it').length ? 'Il tuo Informatico tiene la rete più pulita: i BUG arrivano più di rado.' : 'Un Informatico nella sede dimezza i guasti di rete.', x + 250, y + 330, 15, '#b9c4ce', 'left');
+    button('Inizia', x + w - 260, y + h - 100, 220, 70, beginPhase, { name: 'start', size: 26 });
+    button('Più tardi', x + 40, y + h - 90, 160, 54, () => { state.mg = null; toast('Tocca il Rack per ripulire la rete', '#bfe3ff'); }, { color: '#9aa4ad', size: 18, name: 'later' });
+    return;
+  }
+  if (mg.step === 'result') {
+    const pct = mg.pct, col = pct >= 90 ? '#7ef0a0' : pct >= 70 ? '#f2c230' : '#ffb35b';
+    text(pct >= 90 ? 'Disinfestazione perfetta!' : pct >= 70 ? 'Rete pulita' : 'Ripulita, con calma', x + w / 2, y + 130, 30, '#fff');
+    textO(`${pct}%`, x + w / 2, y + 230, 110, col);
+    text(`Tempo ${mg.elapsed.toFixed(1)} s${mg.pen ? ` + ${mg.pen.toFixed(1)} s di tocchi a vuoto` : ''} · ottimo ${mg.par.toFixed(1)} s`, x + w / 2, y + 320, 18, '#cfd6dd');
+    text('La rete funziona di nuovo: le macchine collegate riprendono il loro bonus', x + w / 2, y + 360, 19, '#5bc7ff');
+    button('Fatto', x + w / 2 - 150, y + h - 110, 300, 70, afterResult, { name: 'next', size: 24, color: '#7ef0a0' });
+    return;
+  }
+  const pct = mgPct(mg), e = mg.elapsed + mg.pen, lim = mg.par * tune.limitMult;
+  rrect(x + 160, y + 78, w - 320, 22, 11, '#1b2229');
+  rrect(x + 160, y + 78, Math.max(22, (w - 320) * Math.min(1, e / lim)), 22, 11, e <= mg.par ? '#4fdc7a' : '#f2c230');
+  ctx.fillStyle = '#fff'; ctx.fillRect(x + 160 + (w - 320) * mg.par / lim - 1, y + 74, 3, 30);
+  text(`${pct}%`, x + w - 110, y + 90, 26, pct >= 90 ? '#7ef0a0' : '#f2c230'); text(`${e.toFixed(1)} s`, x + 100, y + 90, 20, '#fff');
+  // the blueprint
+  const bx = x + 24, by = y + 112, bw = w - 48, bh = h - 136;
+  rrect(bx, by, bw, bh, 12, '#163049', '#5bc7ff', 2);
+  ctx.strokeStyle = 'rgba(91,199,255,0.12)'; ctx.lineWidth = 1; for (let gx = bx + 24; gx < bx + bw; gx += 24) { ctx.beginPath(); ctx.moveTo(gx, by + 2); ctx.lineTo(gx, by + bh - 2); ctx.stroke(); } for (let gy = by + 24; gy < by + bh; gy += 24) { ctx.beginPath(); ctx.moveTo(bx + 2, gy); ctx.lineTo(bx + bw - 2, gy); ctx.stroke(); }
+  text(`BUG rimasti: ${mg.left}`, bx + bw - 16, by + 18, 15, '#ffb3a8', 'right');
+  btn(bx, by, bw, bh, () => { mg.pen += tune.mgPenalty * 0.3; mg.flash = 0.2; sfx.wrong(); }, 'bugMiss');
+  const dirty = new Set(mg.bugs.filter(g => g.alive).map(g => g.e));
+  mg.edges.forEach(([a, c], i) => { const A = mg.nodes[a], C = mg.nodes[c]; line([A.x, A.y], [C.x, C.y], '#0c1a28', 9); line([A.x, A.y], [C.x, C.y], dirty.has(i) ? '#e0604f' : '#5bc7ff', 4); });
+  for (const sp of mg.splats) { ctx.fillStyle = 'rgba(126,200,60,0.7)'; ctx.beginPath(); ctx.ellipse(sp.x, sp.y, 14, 9, sp.r, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'rgba(40,20,10,0.8)'; ctx.fillRect(sp.x - 4, sp.y - 2, 8, 4); }
+  for (const nd of mg.nodes) {
+    if (nd.k === 'rack') { rrect(nd.x - 30, nd.y - 40, 60, 80, 6, '#262c33', '#5bc7ff', 2); for (let k = 0; k < 5; k++) { ctx.fillStyle = (k + Math.floor(t * 4)) % 3 ? '#4fdc7a' : '#244a30'; ctx.fillRect(nd.x - 20 + (k % 3) * 14, nd.y - 28 + Math.floor(k / 3) * 30, 8, 5); } text('RACK', nd.x, nd.y + 52, 13, '#5bc7ff'); }
+    else if (nd.k === 'pc') { rrect(nd.x - 34, nd.y - 30, 68, 46, 6, '#2b3138', '#cfd6dd', 2); rrect(nd.x - 28, nd.y - 24, 56, 34, 3, '#3d8fd6'); rrect(nd.x - 8, nd.y + 16, 16, 10, 2, '#59626b'); text('PC', nd.x, nd.y + 40, 13, '#cfd6dd'); }
+    else if (nd.k === 'sw') { rrect(nd.x - 36, nd.y - 14, 72, 28, 6, '#262c33', '#f2c230', 2); for (let k = 0; k < 6; k++) { ctx.fillStyle = '#4fdc7a'; ctx.fillRect(nd.x - 28 + k * 10, nd.y - 4, 6, 6); } text('SWITCH', nd.x, nd.y + 26, 11, '#f2c230'); }
+    else { rrect(nd.x - 54, nd.y - 26, 108, 52, 10, '#1d3e5e', '#5bc7ff', 2); machineIcon(nd.m.type, nd.x - 26, nd.y + 22, 0.6, { status: 'off', t, mk: nd.m.mk }); text(MACH[nd.m.type].short, nd.x + 18, nd.y, 12, '#e6f2fa'); }
+  }
+  const R = (SMALL() ? 44 : 32);
+  for (const g of mg.bugs) { if (!g.alive) continue; const [gx, gy, a] = bugPos(mg, g); drawBug(gx, gy, a, g.ph); btn(gx - R, gy - R, R * 2, R * 2, () => squash(g), 'bug' + mg.bugs.indexOf(g)); }
+  if (mg.flash > 0) { ctx.fillStyle = `rgba(216,67,58,${mg.flash})`; ctx.fillRect(x + 3, y + 60, w - 6, h - 63); }
 }
 function updateMinigame(dt) {
   const mg = state.mg;
@@ -1779,6 +1919,7 @@ function updateMinigame(dt) {
   if (mg.step === 'result' && (pressed('Enter') || pressed('Space'))) { afterResult(); return; }
   if (mg.step !== 'play') return;
   mg.elapsed += dt;
+  if (mg.bug) return updateBugs(dt);
   if (mg.phase === 0) {
     for (const b of mg.bolts) b.spin = Math.max(0, (b.spin || 0) - dt * 4);
   } else if (mg.phase === 1) {
@@ -2388,12 +2529,13 @@ function drawMachinePanel(t) {
   const B = [
     ['Sposta', () => { state.panel = null; state.placing = { kind: 'mach', m, dir: m.dir, rotated: true }; toast('Tocca una cella libera', '#bfe3ff'); }, '#9ad0ff', 'move'],
     ['Ricalibra', () => startBuild(m, true), '#7ef0a0', 'recal'],
-    [netLab, () => { if (state.level < tune.rackLvl) return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b'); startBuild(m, false, true); }, '#5bc7ff', 'net'],
+    [netLab, () => { if (state.level < tune.rackLvl) return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b'); if (F.netFault) return startBugs(F); openNetPick([m.id]); }, '#5bc7ff', 'net'],
     [`Vendi +${fmt(Math.round(mcfg('cost', m.type) * MK_COST[mkOf(m) - 1] * tune.sellRefund))}`, () => sellMachine(m), '#ff8a7a', 'sell'],
   ];
   B.forEach(([lab, fn, col, nm], i) => button(lab, P.x + 24 + i * 170, P.y + 474, 160, 58, fn, { color: col, name: nm, size: lab.length > 11 ? 15 : 17, enabled: !(nm === 'net' && state.level < tune.rackLvl) }));
 }
 function drawMinigame(t) {
+  if (state.mg.bug) return drawBugGame(t);
   const mg = state.mg, m = mg.m;
   ctx.fillStyle = 'rgba(8,12,18,0.7)'; ctx.fillRect(0, 0, W, H);
   btn(0, 0, W, H, () => {});
@@ -2401,7 +2543,7 @@ function drawMinigame(t) {
   rrect(x, y + 6, w, h, 18, 'rgba(0,0,0,0.4)');
   rrect(x, y, w, h, 18, '#4a2f1d', '#f2c230', 3);
   rrect(x + 3, y + 3, w - 6, 54, 15, '#6b4527');
-  const title = mg.repair ? `Riparazione · ${MACH[m.type].name}` : mg.phase === 1 ? `Collegamento in rete · ${MACH[m.type].name}` : mg.recal ? `Ricalibra · ${MACH[m.type].name}` : `Fase ${mg.phase === 0 ? 1 : 2}/2 · ${PHASES[mg.phase]} · ${MACH[m.type].name}`;
+  const title = mg.repair ? `Riparazione · ${MACH[m.type].name}` : mg.phase === 1 ? `Collegamento in rete · ${mg.group && mg.group.length > 1 ? mg.group.length + ' macchine' : MACH[m.type].name}` : mg.recal ? `Ricalibra · ${MACH[m.type].name}` : `Fase ${mg.phase === 0 ? 1 : 2}/2 · ${PHASES[mg.phase]} · ${MACH[m.type].name}`;
   text(title, x + w / 2, y + 31, 24, '#fff');
   for (let i = 0; i < 3; i++) { const on = i <= mg.phase; rrect(x + 24 + i * 34, y + 18, 26, 26, 6, on ? '#f2c230' : '#1b2229'); phaseIcon(i, x + 37 + i * 34, y + 31, 0.8, on ? '#2b2b2b' : '#59626b'); }
   const tl = TOOLS[mg.phase], tlv = state.tools[tl.key];
@@ -2433,6 +2575,7 @@ function drawMinigame(t) {
     textO(`${pct}%`, x + w / 2, y + 230, 110, col);
     text(`Tempo ${(mg.elapsed).toFixed(1)} s${mg.pen ? ` + ${mg.pen.toFixed(1)} s di errori` : ''} · ottimo ${mg.par.toFixed(1)} s`, x + w / 2, y + 320, 18, '#cfd6dd');
     if (mg.recal) text(mg.better ? 'Nuovo record: la qualità sale!' : `Resta il risultato migliore: ${m.pct[2]}%`, x + w / 2, y + 360, 18, '#bfe3ff');
+    else if (mg.phase === 1 && mg.group && mg.group.length > 1) text(`${mg.group.length} macchine collegate con un solo cavo: ognuna rende +${Math.round(netMax() * pct)}%`, x + w / 2, y + 360, 20, '#5bc7ff');
     else if (mg.phase === 1) text(`Collegata in rete: rende +${Math.round(netBonus(m) * 100)}%  ·  in tutto x${mult(m).toFixed(2)}`, x + w / 2, y + 360, 20, '#5bc7ff');
     else if (m.phase >= 2) text(`Qualità finale ${Math.round(m.quality * 100)}%  ·  la macchina rende x${mult(m).toFixed(2)}`, x + w / 2, y + 360, 20, '#7ef0a0');
     else text('Prossima fase: Configurazione', x + w / 2, y + 360, 18, '#bfe3ff');
@@ -2496,6 +2639,7 @@ function drawNetwork(mg, t) {
   for (let k = 0; k < 4; k++) { ctx.fillStyle = (k + Math.floor(t * 4)) % 3 ? '#4fdc7a' : '#244a30'; ctx.fillRect(ox - 48 + k * 10, oy + sr * S + 14, 6, 4); }
   text('RACK', ox - 31, oy + sr * S + S - 16, 13, '#5bc7ff');
   machineIcon(mg.m.type, ox + mg.gc * S + 40, oy + er * S + S - 6, 0.8, { status: mg.linked ? 'wait' : 'off', t, mk: mg.m.mk });
+  if (mg.group && mg.group.length > 1) { rrect(ox + mg.gc * S + 52, oy + er * S - 2, 40, 24, 10, '#5bc7ff', '#1d3e78', 2); text(`×${mg.group.length}`, ox + mg.gc * S + 72, oy + er * S + 10, 15, '#14283c'); }
   rrect(ox + mg.gc * S - 14, oy + er * S + S / 2 - 10, 20, 20, 4, '#3d8fd6', '#1d3e78', 2);
   // the cable
   ctx.beginPath(); mg.path.forEach(([c, r], i) => { const px = ox + c * S + S / 2, py = oy + r * S + S / 2; if (i) ctx.lineTo(px, py); else ctx.moveTo(ox - 6, py); ctx.lineTo(px, py); });
@@ -2564,7 +2708,7 @@ function drawTutorial(t) {
     say = state.level < tune.rackLvl ? `Al livello ${tune.rackLvl} si sbloccano Rack di rete e Postazione PC: intanto continua a vendere.` : 'Rack di rete e Postazione PC sbloccati! Piazzali entrambi: la rete fa rendere di più le macchine.';
     if (state.level >= tune.rackLvl) { const miss = ['rack', 'pc'].find(k => !countKind(k)); if (miss) shopFor({ tab: 1, btn: 'buy_' + miss, label: 'Negozio > Logistica' }); }
   } else if (g === 7) { say = 'La rete va tenuta in piedi: apri la Squadra e dai a qualcuno il lavoro di Informatico. Girerà a controllare i collegamenti.'; if (!state.panel) at(N.crew, 'Squadra'); }
-  else if (g === 8) say = 'Tocca una macchina e scegli "Collega in rete": col minigioco del cavo la macchina rende +10%.';
+  else if (g === 8) say = 'Tocca il Rack di rete e scegli quali macchine collegare: un solo minigioco del cavo e rendono tutte +10%.';
   else if (g === 9 && state.level >= tune.unlockF && state.coins >= costOf('F')) shopFor({ tab: 0, btn: 'buyF', label: 'Compra la Fresa' });
   else if (g === 11) { say = state.level < tune.shed1Lvl ? `Il capannone si fa stretto? Al livello ${tune.shed1Lvl} potremo comprare la vecchia officina di mattoni.` : 'L\'officina di mattoni è in vendita: Negozio > Sede. Questa sede resta tua e continua a produrre; la nuova parte vuota.'; if (state.level >= tune.shed1Lvl && state.coins >= tune.shed1Cost) shopFor({ tab: 2, btn: 'expand', label: 'Compra la sede' }); }
   if (!say) say = noahAdvice(t); // past the first steps Noah keeps advising on what matters now
@@ -2817,7 +2961,8 @@ SPR.noahTab = ['....HHHH....', '...HHHHHH...', '..HHHHHHHH..', '..HSSSSSSH..', '
 SPR.noahPoint = ['....HHHH....', '...HHHHHH...', '..HHHHHHHH..', '..HSSSSSSH.S', '..SLLgLLSS.S', '..SSSSSSSS.J', '...SSmmSS..J', '....ssss..J.', '..JJWTTWJJJ.', '.SJJWTTWJJ..', '.SJJWTTWJJ..', '..jJJBBJJj..', '...GGGGGG...', '...GG..GG...', '...GG..GG...', '..KKK..KKK..'];
 const NOAH_PAL = { H: '#2b1a12', L: '#bfe3ff', g: '#1b1b1b', m: '#a0503a', J: '#3a4654', j: '#262f39', W: '#f4f4f4', T: '#c0392b', B: '#1b1b1b', P: '#1b2229', C: '#5bc7ff', G: '#2b2f35', K: '#1b1b1b' };
 const NOAH_TIPS = [
-  'Una macchina nuova rende di più se la colleghi in rete: tocca la macchina > Collega in rete.',
+  'Le macchine rendono di più in rete: tocca il Rack, spunta quelle da collegare e fai un solo minigioco del cavo.',
+  'Se la rete si riempie di BUG le macchine perdono il bonus: tocca il Rack e schiacciali tutti. Un Informatico li tiene lontani.',
   'Le ricette nascono dall\'ordine delle macchine: Troncatrice, poi Tornio, poi Fresa... prova combinazioni diverse (R).',
   'Più la qualità di montaggio è alta, più rende ogni pezzo: se una macchina è venuta male, Ricalibrala.',
   'Il tempo veloce fa correre la produzione, ma durante il turno le macchine si guastano di più. Di notte puoi andare a x8 tranquillo.',
@@ -3423,7 +3568,7 @@ function worldTap(sx, sy) {
   if (false) { }
   else if (o && o.kind === 'crate') { state.panel = 'recipes'; sfx.click(); }
   else if (o && o.kind === 'src') { const open = MATS.filter(matOpen), i = open.findIndex(m => m.id === (o.mat || 'acc')), nx = open[(i + 1) % open.length]; o.mat = nx.id; o.stock = []; sfx.click(); save(); toast(open.length > 1 ? `Banco barre: ora prende ${nx.name.toLowerCase()} (in magazzino ${whStock(F)[nx.id] || 0}). Tocca ancora per cambiare` : `Banco barre: prende acciaio (in magazzino ${whStock(F).acc || 0}). Altri materiali dal livello ${MATS[1].lvl}`, nx.col === '#9aa3ab' ? '#bfe3ff' : nx.col); }
-  else if (o && o.kind === 'rack') toast('Rack di rete: ogni macchina si collega qui col minigioco Rete', '#bfe3ff');
+  else if (o && (o.kind === 'rack' || o.kind === 'pc')) { if (F.netFault) startBugs(F); else openNetPick(); }
 }
 
 // ---- Scenes -------------------------------------------------------------------------------
@@ -3810,8 +3955,8 @@ function drawStatusStrip(needs) { // under the clock, one strip for this site: c
   ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(sx[1], y + 6, 2, h - 12); ctx.fillRect(sx[2], y + 6, 2, h - 12);
   // crew
   sprite('walk0', sx[0] + 18, y + 28, 1.4, false, OP_PAL);
-  text(miss ? 'Manca un lavoro!' : `Squadra ${crewOf(F).length}/${staffCap(F)}`, sx[0] + 96, y + 16, 15, miss ? '#ffb3a8' : '#ffe8d0');
-  if (miss) { rrect(sx[0] + seg[0] - 22, y + 8, 16, 16, 8, '#d8433a', '#fff', 1.5); text('!', sx[0] + seg[0] - 14, y + 16, 11, '#fff'); }
+  text(miss ? 'Manca un lavoro' : `Squadra ${crewOf(F).length}/${staffCap(F)}`, sx[0] + (miss ? 88 : 96), y + 16, miss ? 14 : 15, miss ? '#ffb3a8' : '#ffe8d0');
+  if (miss) { rrect(sx[0] + seg[0] - 20, y + 8, 16, 16, 8, '#d8433a', '#fff', 1.5); text('!', sx[0] + seg[0] - 12, y + 16, 11, '#fff'); }
   btn(sx[0], y, seg[0], h, () => { sfx.click(); openPanel('crew'); }, 'crewChip');
   // bars
   rrect(sx[1] + 10, y + 10, 46, 12, 4, '#1b2229'); rrect(sx[1] + 10, y + 10, Math.max(0, 46 * tot / Math.max(1, cap)), 12, 4, low ? '#ff8a7a' : '#a7b0b8');
@@ -4065,6 +4210,11 @@ function onWorkHour() { // each hour of the shift every running machine has a sm
     if (m.phase < 2 || m.broken) continue;
     const p = breakE() * skip * (PK('tough' + m.type) ? 0.6 : 1) * (1 + fast * (tune.breakFastMult - 1)) * (1 + (m.age || 0) / tune.ageRef);
     if (rng() < p) { m.broken = 'repair'; incident(m, 'si è guastata: va riparata'); }
+  }
+  for (const b of state.buildings) { // the network of a site fills with bugs now and then; an IT person keeps it cleaner
+    if (b.netFault || !rackOf(b) || !b.machines.some(m => m.netPct != null)) continue;
+    const p = tune.netBreakBase * skip * (1 + fast * (tune.breakFastMult - 1)) * (crewIn(b, 'it').length ? tune.netItSave : 1);
+    if (rng() < p) { b.netFault = true; if (state.skip) state.skip.breaks++; else { sfx.wrong(); showBanner('Guasto di rete!', `La rete di ${b.name} è piena di BUG: tocca il Rack e ripuliscila`, '#ff8a7a'); } events.push({ type: 'netFault', b: b.id }); save(); }
   }
 }
 function endShift() {
@@ -4377,6 +4527,7 @@ const scenes = {
       else if (state.panel === 'wshop') drawWorldShop(t);
       else if (state.panel === 'crew') drawCrew(t);
       else if (state.panel === 'calendar') drawCalendar(t);
+      else if (state.panel === 'netpick') drawNetPick(t);
       else if (state.panel === 'routes') drawRoutes(t);
       if (state.mg) drawMinigame(t);
       if (!state.town) drawTutorial(t);

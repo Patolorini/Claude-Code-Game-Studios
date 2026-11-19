@@ -71,6 +71,7 @@ After play: Dobbiamo migliorare la parte di assegnazione degli operatori da una 
 After play: Dobbiamo migliorare l'assegnazione degli operatori alle proprie mansioni
 After play: Fai un check con le skills installate in precedenza e guarda cosa si può migliorare (scelti: telefono leggibile, Noah compatto, HUD in alto unificato, ritocchi ai pannelli)
 After play: Vorrei mettere la possibilità di selezionare il calendario e simulare fino ad un giorno specifico selezionato dal giocatore così facendo però le probabilità di guasto aumentano del 50%
+After play: Una volta posizionato il rack ed il pc puoi scegliere che macchinari collegare e fare una sola volta il mini gioco mentre per quanto riguarda i guasti crea anche un mini gioco del guasto della rete dove devi pulire uno schema di collegamenti di rete da letterali BUG
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 

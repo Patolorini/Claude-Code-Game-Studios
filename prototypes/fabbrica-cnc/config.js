@@ -61,6 +61,12 @@ window.CONFIG = {
   skipMaxDays: { value: 60, min: 1, max: 365, step: 1 },        // quanti giorni avanti si possono simulare al massimo
   skipSpeed: { value: 8, min: 1, max: 40, step: 1 },            // passo di tempo della simulazione (non cambia il risultato, solo la precisione)
   skipBudgetMs: { value: 12, min: 2, max: 40, step: 1 },        // millisecondi di calcolo per fotogramma mentre simula
+  netBreakBase: { value: 0.012, min: 0, max: 0.3, step: 0.001 }, // probabilità ogni ora di lavoro che la rete di una sede si riempia di BUG (a x1)
+  netItSave: { value: 0.5, min: 0, max: 1, step: 0.05 },       // con un Informatico nella sede i guasti di rete sono moltiplicati per questo
+  bugBase: { value: 6, min: 1, max: 30, step: 1 },             // BUG da schiacciare nel minigioco del guasto di rete
+  bugPerMach: { value: 1, min: 0, max: 5, step: 0.5 },         // BUG in più per ogni macchina in rete
+  parBug: { value: 0.8, min: 0.2, max: 4, step: 0.05 },        // s ottimi per schiacciare un BUG
+  bugSpeed: { value: 0.16, min: 0.02, max: 1, step: 0.01 },    // velocità dei BUG lungo i cavi (cavi al secondo)
   opsPerMag: { value: 4, min: 1, max: 10, step: 1 },        // macchine servite da un magazziniere quando la Squadra si organizza da sola
   opsPerLvl: { value: 0.5, min: 0, max: 5, step: 0.25 }, // operatori in più per ogni livello (0,5 = uno ogni due livelli)
   qualityBase: { value: 0.5, min: 0, max: 1, step: 0.05 },   // resa = qualityBase + qualità% / 100
