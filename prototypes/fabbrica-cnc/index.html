@@ -88,8 +88,25 @@ function rrect(x, y, w, h, r, fill, stroke, lw = 2) {
     ctx.restore();
     if (w > 70 && h > 36) for (const [nx, ny] of [[x + 7, y + 7], [x + w - 10, y + 7], [x + 7, y + h - 10], [x + w - 10, y + h - 10]]) { ctx.fillStyle = '#3a2416'; ctx.fillRect(nx, ny, 4, 4); ctx.fillStyle = '#d8b07a'; ctx.fillRect(nx, ny, 3, 3); }
   }
+  if (fill && TEX.has(fill) && h > 20) { ctx.save(); ctx.clip(); TEX.get(fill)(x, y, w, h); ctx.restore(); }
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
 }
+// each site has its own interface look: wood for the shed, brick for the workshop, riveted steel for the works, glass for the modern plant, dark and gold for the grand one
+const HUD_THEMES = [
+  { name: 'legno', panel: 'rgba(60,38,24,0.92)', frame: '#4a2f1d', head: '#6b4527', card: '#5c3b25', edge: '#e8b45a', accent: '#f2c230', btn: '#e6e1d3', btnText: '#2b2410', bar: 'rgba(52,32,20,0.95)' },
+  { name: 'mattoni', panel: 'rgba(96,42,32,0.93)', frame: '#5a2a20', head: '#8a3e2c', card: '#6e3426', edge: '#f0a878', accent: '#f2c230', btn: '#f0e2d2', btnText: '#3a1a12', bar: 'rgba(84,36,28,0.96)' },
+  { name: 'acciaio', panel: 'rgba(46,54,62,0.94)', frame: '#2e363e', head: '#4a5660', card: '#3c464f', edge: '#f2c230', accent: '#f2c230', btn: '#dfe4e8', btnText: '#1e252c', bar: 'rgba(38,45,52,0.97)' },
+  { name: 'vetro', panel: 'rgba(28,52,78,0.92)', frame: '#1e3550', head: '#2f5a85', card: '#27466a', edge: '#5bc7ff', accent: '#5bc7ff', btn: '#e8f2fa', btnText: '#14283c', bar: 'rgba(22,42,64,0.96)' },
+  { name: 'oro', panel: 'rgba(26,26,38,0.94)', frame: '#1c1c28', head: '#2e2c44', card: '#262536', edge: '#e0b84a', accent: '#e0b84a', btn: '#f2ecd8', btnText: '#22201a', bar: 'rgba(20,20,30,0.97)' },
+];
+const HT = () => HUD_THEMES[F && typeof F.stage === 'number' ? F.stage : 0] || HUD_THEMES[0];
+const texOf = i => [HUD_THEMES[i].panel, HUD_THEMES[i].frame, HUD_THEMES[i].card, HUD_THEMES[i].bar];
+const TEX = new Map([ // texture painted inside a themed box, by fill colour
+  ...texOf(1).map(f => [f, (x, y, w, h) => { ctx.strokeStyle = 'rgba(30,8,4,0.35)'; ctx.lineWidth = 1; for (let yy = y + 10, k = 0; yy < y + h - 4; yy += 10, k++) { ctx.beginPath(); ctx.moveTo(x, yy + 0.5); ctx.lineTo(x + w, yy + 0.5); ctx.stroke(); if (h >= 40) for (let xx = x + (k % 2) * 14; xx < x + w; xx += 28) { ctx.beginPath(); ctx.moveTo(xx + 0.5, yy - 10); ctx.lineTo(xx + 0.5, yy); ctx.stroke(); } } }]),
+  ...texOf(2).map(f => [f, (x, y, w, h) => { const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, 'rgba(255,255,255,0.1)'); g.addColorStop(1, 'rgba(0,0,0,0.15)'); ctx.fillStyle = g; ctx.fillRect(x, y, w, h); for (let xx = x + 8; xx < x + w - 4; xx += 22) for (const yy of [y + 5, y + h - 8]) { ctx.fillStyle = '#1a2026'; ctx.fillRect(xx, yy, 4, 4); ctx.fillStyle = '#9aa4ad'; ctx.fillRect(xx, yy, 3, 3); } }]),
+  ...texOf(3).map(f => [f, (x, y, w, h) => { const g = ctx.createLinearGradient(x, y, x + w * 0.6, y + h); g.addColorStop(0, 'rgba(190,230,255,0.16)'); g.addColorStop(0.5, 'rgba(190,230,255,0.03)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(x, y, w, h); ctx.fillStyle = 'rgba(91,199,255,0.5)'; ctx.fillRect(x, y + 2, w, 1); }]),
+  ...texOf(4).map(f => [f, (x, y, w, h) => { ctx.strokeStyle = 'rgba(224,184,74,0.45)'; ctx.lineWidth = 1; ctx.strokeRect(x + 4.5, y + 4.5, w - 9, h - 9); }]),
+]);
 const WOODS = new Set(['#4a2f1d', '#5c3b25', '#6b4527', '#3a2416', 'rgba(60,38,24,0.92)', 'rgba(58,36,22,0.92)', 'rgba(58,36,22,0.94)', 'rgba(58,36,22,0.88)', 'rgba(58,36,22,0.9)']);
 function wrapText(s, x, y, maxW, size, c, lineH, align = 'left') {
   ctx.font = `bold ${size}px ${FONT}`;
@@ -249,6 +266,8 @@ let F = null; // the building whose factory is being worked on (drawn, updated o
 // A building is a set of meadow tiles (any shape: rectangles drawn touching it join it); inside,
 // each tile is one cell of its floor, at the same coordinates.
 const inShed = (c, r) => F.cells.has(K(c, r));
+const inAnnex = (c, r) => !!(F.annex && F.annex.has(K(c, r)));
+const shellKeys = b => b.annex ? [...b.cells, ...b.annex] : [...b.cells]; // work floor plus the office and warehouse wing
 const cellList = b => [...b.cells].map(k => k.split(',').map(Number));
 function bboxOf(cells) { let c0 = 1e9, r0 = 1e9, c1 = -1e9, r1 = -1e9; for (const k of cells) { const [c, r] = k.split(',').map(Number); c0 = Math.min(c0, c); r0 = Math.min(r0, r); c1 = Math.max(c1, c + 1); r1 = Math.max(r1, r + 1); } return { c0, r0, c1, r1 }; }
 const rectCells = (bc, br, w, h) => { const s = new Set(); for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) s.add(K(bc + i, br + j)); return s; };
@@ -287,7 +306,7 @@ const GOALS = [
   { text: 'Costruisci il Centro di lavoro 5 assi', done: () => built('X') },
   { text: 'Produci la Pala aeronautica (5 macchine)', done: () => state.found.includes('TLFDX') },
   { text: 'Raggiungi il livello massimo', done: () => state.level >= tune.maxLevel, prog: () => [state.level, tune.maxLevel] },
-  { text: 'Capitolo 5: il grande stabilimento', done: () => anyB(b => b.stage >= 4), prog: () => [F ? F.stage + 1 : 1, 5] },
+  { text: 'Capitolo 5: il grande stabilimento', done: () => anyB(b => b.stage >= 4), prog: () => [TIER() + 1, 5] },
   { text: 'Scopri tutte le 15 ricette', done: () => state.found.length >= RECIPES.length, prog: () => [state.found.length, RECIPES.length] },
 ];
 function isU(b) { // a notch: some column or row of the bounding box has an outside gap with building on both ends
@@ -320,18 +339,20 @@ function reset() {
   F = b; layoutZones(b); state.cur = 0; state.entered = true; centerCam();
 }
 const shedSize = st => [tune['shed' + st + 'Cols'], tune['shed' + st + 'Rows']];
-function buyStage() {
-  const st = F.stage + 1; if (st > 4) return;
+function buyStage() { // a new, bigger site: it starts empty, the old one stays yours and keeps producing
+  const st = TIER() + 1; if (st > 4) return;
   const lvl = tune['shed' + st + 'Lvl'], cost = tune['shed' + st + 'Cost'];
   if (state.level < lvl) return toast(`Serve il livello ${lvl}`, '#ffb35b');
   if (siteProgress() < 1) return toast(`La nuova sede è ancora in costruzione: ${siteDaysLeft()} giorni`, '#ffb35b');
   if (state.coins < cost) return toast('Monete insufficienti', '#ffb35b');
-  const [C, R] = shedSize(st); state.coins -= cost; state.siteStart = state.t / tune.dayLength; state.siteToldDone = false; for (const m of F.machines) { m.cur = null; m.out = null; m.inbox = null; m.inRes = false; m.outRes = false; } F.haul = {}; F.itw = {}; F.stage = st; F.grown = true;
-  for (const k of rectCells(0, 0, C, R)) F.cells.add(k);
-  layoutZones(F); whOf(F).bars = 0; whOf(F).told = false;
-  staffUp(false); state.panel = null; state.placing = null; state.tool = null; sfx.level();
-  state.move = { from: TIERS[st - 1].site, to: TIERS[st].site, t: 0, st }; scene = 'move';
-  events.push({ type: 'expand', stage: st }); save();
+  const [C, R] = shedSize(st), from = TIERS[F ? F.stage : st - 1].site;
+  state.coins -= cost; state.siteStart = state.t / tune.dayLength; state.siteToldDone = false;
+  const keep = F, b = newBuilding(rectCells(0, 0, C, R)); F = keep;
+  b.stage = st; b.name = TIERS[st].short; b.grown = true; b.wh = { bars: 0, orders: [], auto: false }; layoutZones(b);
+  F = b; state.cur = state.buildings.indexOf(b);
+  state.panel = null; state.placing = null; state.tool = null; state.town = false; sfx.level();
+  state.move = { from, to: TIERS[st].site, t: 0, st }; scene = 'move';
+  events.push({ type: 'newSite', stage: st }); save();
 }
 function newBuilding(cells) {
   const b = { id: state.nextId++, name: `Capannone ${state.buildings.length + 1}`, cells: new Set(cells), stage: 0, grown: false, grid: {}, machines: [], workers: [], lastSale: -9 };
@@ -360,10 +381,10 @@ function serialize() {
   return JSON.stringify({
     v: 9, coins: state.coins, xp: state.xp, level: state.level, sold: state.sold, earned: state.earned,
     tools: state.tools, crew: state.crew, found: state.found, t: state.t, siteStart: state.siteStart, goal: state.goal, nextId: state.nextId,
-    entered: state.entered,
+    entered: state.entered, cur: Math.max(0, state.buildings.indexOf(F)),
     buildings: state.buildings.map(b => ({
       id: b.id, name: b.name, tiles: [...b.cells], stage: b.stage, grown: b.grown, workers: b.workers.length,
-      wh: b.wh, cells: Object.values(b.grid).filter(o => o.kind !== 'wh' && o.kind !== 'office').map(o => o.kind === 'mach'
+      wh: b.wh ? { ...b.wh, orders: b.wh.orders.concat((b.trucks || []).filter(k => k.ph !== 'out').map(k => ({ n: k.n, at: 0 }))) } : null, cells: Object.values(b.grid).filter(o => o.kind !== 'wh' && o.kind !== 'office').map(o => o.kind === 'mach'
         ? { k: 'mach', c: o.c, r: o.r, id: o.m.id, type: o.m.type, dir: o.m.dir, phase: o.m.phase, pct: o.m.pct, net: o.m.netPct, op: o.m.op, input: o.m.input, age: o.m.age || 0, broken: o.m.broken || null }
         : { k: o.kind, c: o.c, r: o.r, dir: o.dir }),
     })),
@@ -388,7 +409,7 @@ function load() {
     b.wh = bd.wh || null; layoutZones(b);
     for (let i = 0; i < (bd.workers || tune.workers); i++) addWorker(false);
   }
-  crewSync(); F = state.buildings[0]; state.cur = 0; centerCam();
+  crewSync(); state.cur = Math.min(state.buildings.length - 1, d.cur || 0); F = state.buildings[state.cur]; centerCam();
   return true;
 }
 function wipeSave() { try { localStorage.removeItem(SAVE_KEY); } catch (_) { /* nothing to wipe */ } }
@@ -414,14 +435,14 @@ function toCell(sx, sy) {
   const [wx, wy] = toWorld(sx, sy);
   return [(wx / (TW / 2) + wy / (TH / 2)) / 2, (wy / (TH / 2) - wx / (TW / 2)) / 2];
 }
-function setZoom(z) { cam.zoom = Math.max(tune.zoomMin, Math.min(tune.zoomMax, z)); clampCam(); }
+function setZoom(z) { const [a, b] = state && state.town ? [tune.townZoomMin, tune.townZoomMax] : [tune.zoomMin, tune.zoomMax]; cam.zoom = Math.max(a, Math.min(b, z)); clampCam(); }
 function clampCam() {
-  const bb = F ? bboxOf(F.cells) : { c0: 0, r0: 0, c1: WORLD().c, r1: WORLD().r };
+  const bb = state && state.town ? { c0: -OUT, r0: -OUT, c1: TOWN.c + OUT, r1: TOWN.r + OUT } : F ? bboxOf(shellKeys(F)) : { c0: 0, r0: 0, c1: WORLD().c, r1: WORLD().r };
   const xs = [iso(bb.c0, bb.r1)[0], iso(bb.c1, bb.r0)[0]], ys = [iso(bb.c0, bb.r0)[1], iso(bb.c1, bb.r1)[1]];
   cam.x = Math.max(xs[0] - 160, Math.min(xs[1] + 160, cam.x)); cam.y = Math.max(ys[0] - 160, Math.min(ys[1] + 100, cam.y));
 }
 function centerCam() {
-  const bb = bboxOf(F.cells), [x, y] = iso((bb.c0 + bb.c1) / 2, (bb.r0 + bb.r1) / 2, 0);
+  const bb = bboxOf(shellKeys(F)), [x, y] = iso((bb.c0 + bb.c1) / 2, (bb.r0 + bb.r1) / 2, 0);
   cam.x = x; cam.y = y - 24; cam.zoom = Math.max(tune.zoomMin, tune.zoomStart * Math.min(1, 11 / (bb.c1 - bb.c0 + bb.r1 - bb.r0))); clampCam();
 }
 function centerWorldCam() {
@@ -648,11 +669,78 @@ function drawPiece(ops, c, r) {
 }
 
 // ---- Factory: floor, walls, fixtures ------------------------------------------------------
-function drawGround() {
+function drawGround() { // the plot around the factory: grass, a road along the warehouse for the lorries, a road in front, pavements
   const g = ctx.createLinearGradient(0, -600, 0, 900); g.addColorStop(0, '#22303d'); g.addColorStop(1, '#3a4652');
   ctx.fillStyle = g; ctx.fillRect(-5000, -5000, 10000, 10000);
-  const bb = bboxOf(F.cells);
-  poly([iso(bb.c0 - 4, bb.r0 - 4), iso(bb.c1 + 4, bb.r0 - 4), iso(bb.c1 + 4, bb.r1 + 4), iso(bb.c0 - 4, bb.r1 + 4)], '#4d6a45');
+  const bb = bboxOf(shellKeys(F)), A = F.annexBox, M = 16, c0 = bb.c0 - M, c1 = bb.c1 + M, r0 = bb.r0 - M, r1 = bb.r1 + M;
+  poly([iso(c0, r0), iso(c1, r0), iso(c1, r1), iso(c0, r1)], '#4d6a45');
+  if (!CHEAP) for (let r = r0; r < r1; r += 2) for (let c = c0; c < c1; c += 2) { const h = hash(c + 50, r + 50); if (h % 3 === 0) poly(qT(c, r, c + 2, r + 2, 0), ['#527048', '#4a6540', '#557550'][h % 3]); }
+  const road = (ca, ra, cb, rb, along) => { // asphalt with kerbs and a dashed middle line
+    poly(qT(ca - 0.15, ra - 0.15, cb + 0.15, rb + 0.15, 0.2), '#a8a49a');
+    poly(qT(ca, ra, cb, rb, 0.3), '#4a4744');
+    const n = Math.round(along === 'r' ? rb - ra : cb - ca);
+    for (let i = 0; i < n; i += 1) { if (along === 'r') { const m = (ca + cb) / 2; poly(qT(m - 0.03, ra + i + 0.2, m + 0.03, ra + i + 0.6, 0.4), '#e8e2c8'); } else { const m = (ra + rb) / 2; poly(qT(ca + i + 0.2, m - 0.03, ca + i + 0.6, m + 0.03, 0.4), '#e8e2c8'); } }
+  };
+  const fr = bb.r1 + 0.8, rx = A ? A.c1 + 0.15 : bb.c1 + 0.15;
+  road(rx, r0, rx + 1.7, r1, 'r'); // the lorries come along here
+  road(c0, fr, c1, fr + 1.7, 'c');
+  poly(qT(rx - 0.15, fr - 0.15, rx + 1.85, fr + 1.85, 0.35), '#4a4744'); // the crossing
+  if (A) poly(qT(A.c0, A.r1, A.c1, A.r1 + 0.6, 0.3), '#8a8478'); // a loading apron by the warehouse
+}
+function neighbourhood(t) { // the buildings around your plot, so the factory stands in a town and not on an empty lawn
+  const bb = bboxOf(shellKeys(F)), A = F.annexBox, rx = (A ? A.c1 : bb.c1) + 2.3, fr = bb.r1 + 2.9, s = F.stage, out = [];
+  const put = (o, f) => out.push({ d: o.c + o.r + o.w + o.h, f });
+  // across the lorry road: other firms
+  put({ c: rx, r: -7, w: 4, h: 3 }, () => drawShedBig(rx, -7, 4, 3, t, s));
+  put({ c: rx + 0.2, r: -3, w: 3, h: 2 }, () => drawContainers({ c: rx + 0.2, r: -3, w: 3, h: 2, k: s }, t));
+  put({ c: rx, r: 0, w: 3, h: 3 }, () => drawWorkshop({ c: rx, r: 0, w: 3, h: 3, k: s }, t));
+  put({ c: rx, r: bb.r1 - 2, w: 3, h: 2 }, () => drawTruckLot({ c: rx, r: bb.r1 - 2, w: 3, h: 2, k: s }, t));
+  // behind the back wall: an old brick works and some trees
+  put({ c: bb.c0 + 1, r: bb.r0 - 7, w: 5, h: 3 }, () => drawBrickFactory({ c: bb.c0 + 1, r: bb.r0 - 7, w: 5, h: 3, k: 0 }, t));
+  for (let c = bb.c0 - 1; c < bb.c1; c += 2) put({ c, r: bb.r0 - 2.2, w: 0, h: 0 }, () => drawTree(c + 0.5, bb.r0 - 2));
+  // to the left: houses behind a hedge
+  put({ c: bb.c0 - 6, r: bb.r0, w: 3, h: 2 }, () => drawHouse(bb.c0 - 6, bb.r0, 3, 2, '#e8c88a', '#b0543c', t, false, 2));
+  put({ c: bb.c0 - 6, r: bb.r0 + 3, w: 2, h: 2 }, () => drawHouse(bb.c0 - 6, bb.r0 + 3, 2, 2, '#c8d8e8', '#7a4a3a', t, true, 1));
+  for (let r = bb.r0; r < bb.r1; r += 1.5) put({ c: bb.c0 - 2.2, r, w: 0, h: 0 }, () => drawTree(bb.c0 - 2, r + 0.5));
+  // across the front road: low houses, a small lot, trees (low, so they do not hide the floor)
+  put({ c: bb.c0 + 1, r: fr + 1, w: 3, h: 2 }, () => drawHouse(bb.c0 + 1, fr + 1, 3, 2, '#f0dcb8', '#b0543c', t, false, 1));
+  put({ c: bb.c0 + 5, r: fr + 1, w: 2, h: 2 }, () => drawHouse(bb.c0 + 5, fr + 1, 2, 2, '#e8b8a8', '#8a3a2e', t, true, 1));
+  put({ c: bb.c0 + 8, r: fr + 1, w: 3, h: 2 }, () => drawTruckLot({ c: bb.c0 + 8, r: fr + 1, w: 3, h: 2, k: s + 1 }, t));
+  for (let c = bb.c0 - 2; c < bb.c1 + 6; c += 3) put({ c, r: fr + 3.6, w: 0, h: 0 }, () => drawTree(c + 0.5, fr + 4));
+  return out;
+}
+// ---- Office clerks: they walk about the office and sit at a PC now and then to do their tasks ----
+function deskSpots(b) { return Object.values(b.grid).filter(o => o.kind === 'office').map(o => ({ c: o.c, r: o.r, x: o.c + 0.52, y: o.r + 0.82 })); }
+function updateClerks(b, dt) {
+  const O = b.officeBox; if (!O) return;
+  if (!onShift()) { b.clerks = []; return; }
+  const desks = deskSpots(b), want = Math.max(1, Math.ceil(desks.length * 0.6));
+  b.clerks = b.clerks || [];
+  while (b.clerks.length < want) b.clerks.push({ x: O.c0 + 0.5, y: O.r0 + 0.3, tx: null, ty: null, mode: 'idle', t: 0.5 + rng() * 2, desk: null, walkT: 0, dir: 1, pal: b.clerks.length });
+  for (const k of b.clerks) {
+    if (k.mode === 'walk') {
+      const dx = k.tx - k.x, dy = k.ty - k.y, d = Math.hypot(dx, dy), step = dt * 1.1;
+      k.walkT += dt; if (Math.abs(dx - dy) > 0.01) k.dir = dx - dy > 0 ? 1 : -1;
+      if (d <= step) { k.x = k.tx; k.y = k.ty; if (k.desk) { k.mode = 'sit'; k.t = 4 + rng() * 6; } else { k.mode = 'idle'; k.t = 1 + rng() * 2.5; } }
+      else { k.x += dx / d * step; k.y += dy / d * step; }
+    } else {
+      k.t -= dt; if (k.t > 0) continue;
+      k.desk = null;
+      const free = desks.filter(ds => !b.clerks.some(o => o !== k && o.desk && o.desk.c === ds.c && o.desk.r === ds.r));
+      if (free.length && rng() < 0.6) { const ds = free[Math.floor(rng() * free.length)]; k.desk = ds; k.tx = ds.x; k.ty = ds.y; }
+      else { k.tx = O.c0 + 0.25 + rng() * (O.c1 - O.c0 - 0.5); k.ty = O.r0 + 0.35 + rng() * (O.r1 - O.r0 - 0.5); }
+      k.mode = 'walk';
+    }
+  }
+}
+function drawClerk(k, t) {
+  const p = iso(k.x, k.y, k.mode === 'sit' ? 6 : 0), pal = CLERK_PALS[k.pal % CLERK_PALS.length];
+  if (k.mode !== 'sit') { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 8, p[1] - 2, 16, 4); }
+  if (k.mode === 'sit') {
+    const type = Math.sin(t * 9 + k.pal) > 0;
+    sprite(type ? 'work' : 'walk0', p[0], p[1], 2, false, pal);
+    if (type) { const q = iso(k.desk.c + 0.55, k.desk.r + 0.42, 29); ctx.fillStyle = 'rgba(126,240,160,0.85)'; ctx.fillRect(q[0] - 1, q[1], 3, 1); }
+  } else { const step = k.mode === 'walk' ? Math.floor(k.walkT * 6) % 2 : 0; sprite(step ? 'walk1' : 'walk0', p[0], p[1] - step, 2, k.dir < 0, pal); }
 }
 function drawFloor() {
   for (const [c, r] of cellList(F)) {
@@ -1009,7 +1097,7 @@ function sell(it, crate) {
   const [x, y] = iso(crate.c + 0.5, crate.r + 0.5, 72);
   state.floats.push({ wx: x, wy: y, txt: '+' + fmt(v), col: rec ? '#7ef0a0' : '#c9c9c9', life: 1.4, coin: true, b: F.id });
   if (state.t - F.lastSale > 0.6) { // seen from outside: one coin at a time over the roof
-    F.lastSale = state.t; const bb = bboxOf(F.cells), [wx, wy] = iso((bb.c0 + bb.c1) / 2, (bb.r0 + bb.r1) / 2, 150);
+    F.lastSale = state.t; const bb = bboxOf(shellKeys(F)), [wx, wy] = iso((bb.c0 + bb.c1) / 2, (bb.r0 + bb.r1) / 2, 150);
     state.floats.push({ wx, wy, txt: '+' + fmt(v), col: '#7ef0a0', life: 1.2, coin: true, b: 'w' });
   }
   addXp(tune.xpPerSale);
@@ -1327,9 +1415,10 @@ function panelFrame(title, w, h, onClose) {
   btn(0, 0, W, H, () => {}); // blocks taps below the panel
   const x = (W - w) / 2, y = (H - h) / 2;
   rrect(x, y + 6, w, h, 18, 'rgba(0,0,0,0.4)');
-  rrect(x, y, w, h, 18, '#4a2f1d', '#f2c230', 3);
-  rrect(x + 3, y + 3, w - 6, 54, 15, '#6b4527');
-  for (let i = 0; i < w - 40; i += 24) { ctx.fillStyle = (i / 24) % 2 ? '#2b2b2b' : '#f2c230'; ctx.fillRect(x + 20 + i, y + 57, 24, 5); }
+  const T = HT();
+  rrect(x, y, w, h, 18, T.frame, T.accent, 3);
+  rrect(x + 3, y + 3, w - 6, 54, 15, T.head);
+  for (let i = 0; i < w - 40; i += 24) { ctx.fillStyle = (i / 24) % 2 ? '#2b2b2b' : T.accent; ctx.fillRect(x + 20 + i, y + 57, 24, 5); }
   text(title, x + w / 2, y + 31, 28, '#fff');
   if (onClose) {
     const cx = x + w - 52, cy = y + 10;
@@ -1393,86 +1482,135 @@ function toolbarIcon(id, x, y) {
   }
   ctx.restore();
 }
-function drawHUD(t) {
+function drawHUD(t) { // top: money · time · level and goal; bottom: one bar of buttons, in the look of the site you are in
+  const T = HT();
   // money
-  rrect(14, 12, 236, 66, 14, 'rgba(60,38,24,0.92)', '#f2c230', 2);
+  rrect(14, 12, 236, 66, 14, T.panel, T.accent, 2);
   coinIcon(44, 38, 1.4);
   text(fmt(state.coins), 66, 36, 28, '#ffe08a', 'left');
   text(`+${fmt(incomePerMin())} al minuto`, 66, 62, 15, '#9ce8b4', 'left');
-  if (F) { // space left in this building, and the way out
-    const fc = freeCells();
-    rrect(14, 84, 236, 32, 10, 'rgba(60,38,24,0.92)', fc <= 3 ? '#ff8a7a' : '#5d6366', 2);
-    text(`Capitolo ${F.stage + 1} · ${fc} celle libere`, 132, 101, 14, fc <= 3 ? '#ffb3a8' : '#cfd6dd');
-  } else {
-    rrect(14, 84, 236, 32, 10, 'rgba(60,38,24,0.92)', '#5d6366', 2);
-    text(`Prato · capannoni ${state.buildings.length}/${tune.maxBuildings}`, 132, 101, 14, '#cfd6dd');
-  }
-  // operators: one more each level
+  // crew: one more each level
   const needs = F ? jobNeeds(F) : [];
-  rrect(262, 84, 270, 32, 10, 'rgba(60,38,24,0.92)', needs.length ? '#ff8a7a' : '#e07a2e', 2);
-  sprite('walk0', 282, 112, 1.5, false, OP_PAL);
-  text(needs.length ? 'Squadra: manca un lavoro!' : `Squadra ${state.crew.length} · operatori liberi ${opsFree()}`, 410, 101, 14, needs.length ? '#ffb3a8' : '#ffd0a8');
-  btn(262, 84, 270, 32, () => { sfx.click(); openPanel('crew'); }, 'crewChip');
-  if (F && needs.length && !state.panel && !state.mg) { ctx.font = `bold 16px ${FONT}`; const tw = ctx.measureText(needs[0]).width + 30; rrect(W / 2 - tw / 2, 580, tw, 32, 10, 'rgba(60,20,20,0.9)', '#ff8a7a', 2); text(needs[0], W / 2, 596, 16, '#ffd0c8'); }
+  rrect(262, 58, 270, 30, 10, T.panel, needs.length ? '#ff8a7a' : T.edge, 2);
+  sprite('walk0', 282, 85, 1.4, false, OP_PAL);
+  text(needs.length ? 'Squadra: manca un lavoro!' : `Squadra ${state.crew.length} · operatori liberi ${opsFree()}`, 410, 73, 14, needs.length ? '#ffb3a8' : '#ffe8d0');
+  btn(262, 58, 270, 30, () => { sfx.click(); openPanel('crew'); }, 'crewChip');
+  if (F && needs.length && !state.panel && !state.mg && !state.town) { ctx.font = `bold 16px ${FONT}`; const tw = ctx.measureText(needs[0]).width + 30; rrect(W / 2 - tw / 2, 578, tw, 32, 10, 'rgba(60,20,20,0.9)', '#ff8a7a', 2); text(needs[0], W / 2, 594, 16, '#ffd0c8'); }
   drawClock(t); drawStockChip();
-  // level and XP
-  rrect(262, 12, 270, 66, 14, 'rgba(60,38,24,0.92)', '#5bc7ff', 2);
-  gearIcon(300, 45, 1.9, '#5bc7ff'); text(String(state.level), 300, 45, 17, '#fff');
+  // level and XP, top right
+  const LX = W - 284;
+  rrect(LX, 12, 270, 66, 14, T.panel, '#5bc7ff', 2);
+  gearIcon(LX + 38, 45, 1.9, '#5bc7ff'); text(String(state.level), LX + 38, 45, 17, '#fff');
   const cur = levelXp(state.level), nxt = levelXp(state.level + 1), maxed = state.level >= tune.maxLevel;
-  text(maxed ? 'Livello massimo' : `Livello ${state.level}`, 334, 30, 17, '#fff', 'left');
-  rrect(334, 46, 182, 16, 8, '#1b2229');
+  text(maxed ? 'Livello massimo' : `Livello ${state.level}`, LX + 72, 30, 17, '#fff', 'left');
+  rrect(LX + 72, 46, 182, 16, 8, '#1b2229');
   const fr = maxed ? 1 : Math.max(0, Math.min(1, (state.xp - cur) / Math.max(1, nxt - cur)));
-  if (fr > 0) rrect(334, 46, Math.max(16, 182 * fr), 16, 8, '#5bc7ff');
-  text(maxed ? `${fmt(state.xp)} XP` : `${fmt(state.xp - cur)} / ${fmt(nxt - cur)} XP`, 425, 55, 13, '#fff');
-  // goal
-  rrect(544, 12, 722, 66, 14, 'rgba(60,38,24,0.92)', '#7ef0a0', 2);
-  const g = GOALS[state.goal];
-  text('OBIETTIVO', 562, 30, 13, '#7ef0a0', 'left');
-  if (g) {
-    text(g.text, 562, 54, 18, '#fff', 'left');
-    if (g.prog) { const [a, b] = g.prog(); text(`${Math.min(a, b)}/${b}`, 1250, 30, 15, '#7ef0a0', 'right'); }
-  } else text('Fabbrica al massimo: continua a ottimizzare spazi, qualità e ricette!', 562, 54, 18, '#fff', 'left');
-  // building tools
-  const TB = F ? [['op', 'Operatore'], ['demo', 'Demolisci']] : [];
-  if (!F) drawWorldHUDBottom(t);
-  TB.forEach(([id, lab], i) => {
-    const x = 214 + i * 104, y = 616, on = state.tool === id;
-    rrect(x, y + 4, 96, 92, 14, 'rgba(0,0,0,0.35)');
-    rrect(x, y, 96, 92, 14, on ? '#f2c230' : '#e6e1d3', on ? '#7a5a10' : '#2b2b2b', on ? 3 : 2);
-    toolbarIcon(id, x + 48, y + 36); text(lab, x + 48, y + 76, 16, '#2b2410');
-    text(String(i + 1), x + 12, y + 14, 12, '#7a7466');
-    btn(x, y, 96, 92, () => { sfx.click(); setTool(on ? null : id); }, 'tool_' + id);
-  });
-  // shop, recipes, tools
-  const B = [['Squadra', 'crew'], ['Attrezzi', 'tools'], ['Ricette', 'recipes'], ['Negozio', 'shop']];
-  B.forEach(([lab, id], i) => {
-    const x = 776 + i * 124, y = 616;
-    rrect(x, y + 4, 112, 92, 14, 'rgba(0,0,0,0.35)');
-    rrect(x, y, 112, 92, 14, id === 'shop' ? '#f2c230' : '#e6e1d3', '#2b2b2b', 2);
-    if (id === 'shop') { if (F) machineIcon('T', x + 56, y + 46, 0.62); else shedIcon(x + 56, y + 42); }
-    else if (id === 'recipes') { rrect(x + 36, y + 14, 40, 44, 4, '#b0543c', '#5a2a1e', 2); rrect(x + 41, y + 18, 32, 36, 2, '#f4f1e8'); for (let k = 0; k < 4; k++) ctx.fillRect(x + 45, y + 24 + k * 7, 24, 2); }
-    else if (id === 'crew') { sprite('walk0', x + 36, y + 62, 2.4, false, OP_PAL); sprite('walk0', x + 56, y + 62, 2.4, false, MAG_PAL); sprite('walk0', x + 76, y + 62, 2.4, false, IT_PAL); }
-    else toolIcon('W', x + 56, y + 36, 1.1);
-    text(lab, x + 56, y + 76, 17, '#2b2410');
-    btn(x, y, 112, 92, () => { sfx.click(); openPanel(id === 'shop' && !F ? 'wshop' : id); if (id === 'shop') state.shopTab = 0; }, id);
-  });
-  // zoom and pause
-  const sm = [['+', () => setZoom(cam.zoom * 1.2)], ['-', () => setZoom(cam.zoom / 1.2)], ['II', () => { scene = 'pause'; confirmNew = 0; }]];
-  sm.forEach(([lab, fn], i) => { const x = 14 + (i % 2) * 64, y = i < 2 ? 586 : 650; rrect(x, y, 54, 54, 12, 'rgba(60,38,24,0.92)', '#e6e1d3', 2); text(lab, x + 27, y + 28, 24, '#fff'); btn(x, y, 54, 54, fn, 'hud' + i); });
+  if (fr > 0) rrect(LX + 72, 46, Math.max(16, 182 * fr), 16, 8, '#5bc7ff');
+  text(maxed ? `${fmt(state.xp)} XP` : `${fmt(state.xp - cur)} / ${fmt(nxt - cur)} XP`, LX + 163, 55, 13, '#fff');
+  drawGoalChip(t, LX);
+  if (!F) return drawWorldHUDBottom(t);
+  if (state.town) hint('Trascina per guardarti intorno · tocca una tua fabbrica per entrarci');
+  drawBottomBar(t);
+}
+const BAR_H = 100;
+function barButton(x, y, w, h, label, key, icon, fn, name, o = {}) { // one square button of the bottom bar: icon, label, key
+  const T = HT(), on = !!o.on, hot = !!o.hot;
+  rrect(x, y + 3, w, h, 12, 'rgba(0,0,0,0.35)');
+  rrect(x, y, w, h, 12, on ? T.accent : hot ? '#f2c230' : T.btn, on ? '#2b2b2b' : '#1b1b1b', on ? 3 : 2);
+  ctx.save(); icon(x + w / 2, y + h * 0.42); ctx.restore();
+  text(label, x + w / 2, y + h - 13, 14, T.btnText);
+  if (key) { rrect(x + 4, y + 4, 18, 16, 4, 'rgba(0,0,0,0.15)'); text(key, x + 13, y + 12, 11, T.btnText); }
+  if (o.badge) { rrect(x + w - 20, y - 6, 24, 22, 11, '#d8433a', '#fff', 1.5); text(o.badge, x + w - 8, y + 5, 13, '#fff'); }
+  btn(x, y, w, h, fn, name);
+}
+function drawBottomBar(t) {
+  const T = HT(), y0 = H - BAR_H, by = y0 + 10, bh = BAR_H - 18, town = !!state.town;
+  rrect(-4, y0, W + 8, BAR_H + 8, 0, T.bar, T.edge, 2);
+  const sep = x => { ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(x, y0 + 14, 2, BAR_H - 28); };
+  // view: zoom and the game menu
+  const small = (x, y, lab, fn, name) => { rrect(x, y, 40, 38, 9, T.panel, T.edge, 1.5); text(lab, x + 20, y + 19, 20, '#fff'); btn(x, y, 40, 38, fn, name); };
+  small(12, by, '+', () => setZoom(cam.zoom * 1.2), 'hud0'); small(12, by + 44, '-', () => setZoom(cam.zoom / 1.2), 'hud1');
+  rrect(58, by, 44, bh, 9, T.panel, T.edge, 1.5); rrect(70, by + 24, 7, 22, 1, '#fff'); rrect(83, by + 24, 7, 22, 1, '#fff'); text('Menu', 80, by + bh - 12, 11, '#fff');
+  btn(58, by, 44, bh, () => { scene = 'pause'; confirmNew = 0; }, 'hud2');
+  sep(110);
+  let x = 120;
+  if (!town) { // working on the floor
+    [['op', 'Operatore', '1'], ['demo', 'Demolisci', '2']].forEach(([id, lab, k]) => {
+      const on = state.tool === id;
+      barButton(x, by, 90, bh, lab, k, (cx, cy) => toolbarIcon(id, cx, cy - 2), () => { sfx.click(); setTool(on ? null : id); }, 'tool_' + id, { on }); x += 96;
+    });
+    sep(x + 2); x += 12;
+    const nd = jobNeeds(F).length, low = whOf(F).bars < whCap(F) * tune.autoBelow && !onOrder(F);
+    [['crew', 'Squadra', 'Q', (cx, cy) => { sprite('walk0', cx - 18, cy + 18, 2, false, OP_PAL); sprite('walk0', cx, cy + 18, 2, false, MAG_PAL); sprite('walk0', cx + 18, cy + 18, 2, false, IT_PAL); }, nd ? '!' : ''],
+     ['office', 'Ufficio', 'U', (cx, cy) => officeIcon(cx, cy), low ? '!' : ''],
+     ['tools', 'Attrezzi', 'T', (cx, cy) => toolIcon('W', cx, cy - 4, 0.95), ''],
+     ['recipes', 'Ricette', 'R', (cx, cy) => { rrect(cx - 17, cy - 20, 34, 38, 4, '#b0543c', '#5a2a1e', 2); rrect(cx - 13, cy - 17, 26, 32, 2, '#f4f1e8'); ctx.fillStyle = '#5a2a1e'; for (let k = 0; k < 4; k++) ctx.fillRect(cx - 9, cy - 11 + k * 6, 18, 2); }, '']].forEach(([id, lab, k, ic, badge]) => {
+      barButton(x, by, 90, bh, lab, k, ic, () => { sfx.click(); openPanel(id); }, id, { badge }); x += 96;
+    });
+    sep(x + 2); x += 12;
+  }
+  barButton(x, by, 100, bh, town ? 'Rientra' : 'Città', 'E', (cx, cy) => cityIcon(cx, cy, town), toggleTown, 'townBtn', { on: town }); x += 112;
+  // which site you are in, and the way to the others
+  const sw = W - 12 - 150 - 12 - x;
+  if (sw > 140) drawSiteSwitch(x, by, sw, bh);
+  if (!town) barButton(W - 162, by, 150, bh, 'Negozio', 'B', (cx, cy) => machineIcon('T', cx, cy + 4, 0.6), () => { sfx.click(); openPanel('shop'); state.shopTab = 0; }, 'shop', { hot: true });
+}
+function drawSiteSwitch(x, y, w, h) { // the name of this site, free cells, and arrows to the other sites you own
+  const T = HT(), n = state.buildings.length, fc = freeCells(), i = state.buildings.indexOf(F);
+  rrect(x, y, w, h, 12, T.panel, T.edge, 2);
+  text(`Sede ${i + 1} di ${n} · capitolo ${F.stage + 1}`, x + w / 2, y + 16, 12, T.edge);
+  text(F.name, x + w / 2, y + 40, 18, '#fff');
+  text(`${fc} celle libere · stile ${T.name}`, x + w / 2, y + 63, 12, fc <= 3 ? '#ffb3a8' : '#cfd6dd');
+  if (n > 1) for (const [dx, d] of [[0, -1], [w - 34, 1]]) {
+    rrect(x + dx + 4, y + 18, 26, 44, 8, T.btn, '#1b1b1b', 1.5);
+    poly(d < 0 ? [[x + dx + 23, y + 30], [x + dx + 11, y + 40], [x + dx + 23, y + 50]] : [[x + dx + 11, y + 30], [x + dx + 23, y + 40], [x + dx + 11, y + 50]], T.btnText);
+    btn(x + dx, y, 34, h, () => switchSite(d), d < 0 ? 'sitePrev' : 'siteNext');
+  }
+}
+function switchSite(d) { // go into another of your sites; the others keep working
+  const n = state.buildings.length; if (n < 2) return;
+  const i = (state.buildings.indexOf(F) + d + n) % n; goToSite(state.buildings[i]);
+}
+function goToSite(b) {
+  F = b; state.cur = state.buildings.indexOf(b); state.placing = null; state.tool = null; state.demo = null; state.sel = null; state.panel = null;
+  state.town = false; centerCam(); sfx.click(); toast(`${b.name} · capitolo ${b.stage + 1}`, HT().edge);
+}
+function officeIcon(cx, cy) { rrect(cx - 16, cy - 18, 32, 38, 4, '#a0703e', '#4a2f1d', 2); rrect(cx - 12, cy - 13, 24, 30, 2, '#f4f1e6'); rrect(cx - 7, cy - 21, 14, 7, 2, '#9aa4ad', '#3a4148', 1); ctx.fillStyle = '#2f7fb0'; for (let k = 0; k < 4; k++) ctx.fillRect(cx - 8, cy - 7 + k * 6, k % 2 ? 10 : 16, 2); }
+function cityIcon(cx, cy, back) {
+  rrect(cx - 20, cy - 6, 14, 22, 2, '#e8c88a', '#4a2f1d', 1.5); poly([[cx - 22, cy - 6], [cx - 13, cy - 15], [cx - 4, cy - 6]], '#b0543c', '#4a2f1d', 1.5);
+  rrect(cx - 2, cy - 14, 12, 30, 2, '#c8d8e8', '#2b2b2b', 1.5); for (let k = 0; k < 3; k++) { ctx.fillStyle = '#2f7fb0'; ctx.fillRect(cx + 1, cy - 10 + k * 8, 6, 4); }
+  rrect(cx + 12, cy - 2, 10, 18, 2, '#9aa4ad', '#2b2b2b', 1.5); line([cx - 24, cy + 17], [cx + 24, cy + 17], '#4a7a2a', 3);
+  if (back) poly([[cx - 6, cy - 26], [cx - 16, cy - 20], [cx - 6, cy - 14]], '#d8433a');
+}
+function drawGoalChip(t, LX) { // a small button under the level; tap it to read the whole goal
+  const g = GOALS[state.goal], y = 84, open = !!state.goalOpen, prog = g && g.prog ? g.prog() : null;
+  const fresh = state.goal !== state.goalSeen, pulse = fresh ? 0.5 + 0.5 * Math.sin(t * 6) : 0;
+  rrect(LX, y, 270, 34, 10, open ? '#3e6b4a' : HT().panel, fresh ? `rgba(126,240,160,${0.5 + pulse * 0.5})` : '#7ef0a0', fresh ? 3 : 2);
+  poly([[LX + 20, y + 7], [LX + 24, y + 14], [LX + 32, y + 15], [LX + 26, y + 21], [LX + 28, y + 28], [LX + 20, y + 24], [LX + 12, y + 28], [LX + 14, y + 21], [LX + 8, y + 15], [LX + 16, y + 14]], '#f2c230', '#7a5a10', 1);
+  text(g ? 'Obiettivo' : 'Obiettivi completati', LX + 42, y + 17, 15, '#fff', 'left');
+  if (prog) text(`${Math.min(prog[0], prog[1])}/${prog[1]}`, LX + 222, y + 17, 14, '#7ef0a0', 'right');
+  poly(open ? [[LX + 240, y + 21], [LX + 256, y + 21], [LX + 248, y + 12]] : [[LX + 240, y + 13], [LX + 256, y + 13], [LX + 248, y + 22]], '#7ef0a0');
+  btn(LX, y, 270, 34, () => { state.goalOpen = !state.goalOpen; state.goalSeen = state.goal; sfx.click(); }, 'goalChip');
+  if (!open) return;
+  const msg = g ? g.text : 'Fabbrica al massimo: continua a ottimizzare spazi, qualità e ricette!', bw = 420, bx = W - 14 - bw;
+  ctx.font = `bold 16px ${FONT}`; const lines = Math.ceil(ctx.measureText(msg).width / (bw - 30)) || 1;
+  rrect(bx, y + 40, bw, 22 + lines * 22, 10, 'rgba(40,58,44,0.95)', '#7ef0a0', 2);
+  wrapText(msg, bx + 15, y + 62, bw - 30, 16, '#fff', 22, 'left');
+  btn(bx, y + 40, bw, 22 + lines * 22, () => { state.goalOpen = false; sfx.click(); });
 }
 function openPanel(id) { state.panel = id; state.placing = null; state.tool = null; state.demo = null; state.wtool = null; state.wplacing = null; }
 function drawShop(t) {
   const P = panelFrame('Negozio', 1060, 580, () => { state.panel = null; });
   ['Macchine CNC', 'Logistica', 'Sede'].forEach((lab, i) => {
     const x = P.x + 30 + i * 200, y = P.y + 74, on = state.shopTab === i;
-    rrect(x, y, 186, 40, 10, on ? '#f2c230' : '#5c3b25', '#1b2229', 2);
+    rrect(x, y, 186, 40, 10, on ? '#f2c230' : HT().card, '#1b2229', 2);
     text(lab, x + 93, y + 21, 18, on ? '#2b2410' : '#cfd6dd'); btn(x, y, 186, 40, () => { state.shopTab = i; sfx.click(); }, 'tab' + i);
   });
   text(`Monete: ${fmt(state.coins)}`, P.x + P.w - 30, P.y + 94, 20, '#ffe08a', 'right');
   if (state.shopTab === 0) {
     ORDER.forEach((tp, i) => {
       const x = P.x + 26 + i * 204, y = P.y + 132, w = 192, h = 420, lvl = mcfg('unlock', tp), locked = state.level < lvl, cost = costOf(tp);
-      rrect(x, y, w, h, 14, locked ? '#3a2416' : '#5c3b25', MACH[tp].color, 2);
+      rrect(x, y, w, h, 14, locked ? '#3a2416' : HT().card, MACH[tp].color, 2);
       ctx.save(); if (locked) ctx.globalAlpha = 0.35;
       ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + 10, y + 12, w - 20, 130);
       machineIcon(tp, x + w / 2, y + 112, 1.45, { t, busy: !locked, status: locked ? 'off' : 'work' });
@@ -1497,7 +1635,7 @@ function drawShop(t) {
     ];
     cards.forEach(([name, desc, info, k], i) => {
       const x = P.x + 26 + i * 254, y = P.y + 136, w = 240, h = 410;
-      rrect(x, y, w, h, 14, '#5c3b25', '#f0923a', 2);
+      rrect(x, y, w, h, 14, HT().card, '#f0923a', 2);
       ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + 12, y + 12, w - 24, 140);
       ctx.save(); ctx.translate(x + w / 2, y + 96); ctx.scale(1.4, 1.4);
       if (k === 'rack') { ctx.scale(0.8, 0.8); ctx.translate(-iso(0.5, 0.5)[0], -iso(0.5, 0.5)[1] + 34); drawRack(0, 0, t); }
@@ -1514,8 +1652,8 @@ function drawShop(t) {
     for (let st = 1; st <= 4; st++) {
       const i = st - 1, x = P.x + 26 + i * 254, y = P.y + 136, w = 240, h = 410;
       const [C, R] = shedSize(st), [pC, pR] = shedSize(st - 1), lvl = tune['shed' + st + 'Lvl'], cost = tune['shed' + st + 'Cost'];
-      const done = F.stage >= st, next = F.stage === st - 1;
-      rrect(x, y, w, h, 14, done || next ? '#5c3b25' : '#3a2416', done ? '#7ef0a0' : next ? '#5bc7ff' : '#59626b', 2);
+      const done = TIER() >= st, next = TIER() === st - 1;
+      rrect(x, y, w, h, 14, done || next ? HT().card : '#3a2416', done ? '#7ef0a0' : next ? '#5bc7ff' : '#59626b', 2);
       const sc = Math.min(0.42, 200 / ((C + R) * 32)); ctx.save(); ctx.translate(x + w / 2 - (C - R) * 16 * sc, y + 40); ctx.scale(sc, sc); // the new floor against the old one
       for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) poly(qT(c, r, c + 1, r + 1, 0), c < pC && r < pR ? '#b47c45' : done ? '#c89058' : '#5bc7ff', 'rgba(60,34,14,0.6)');
       ctx.restore();
@@ -1530,7 +1668,7 @@ function drawShop(t) {
         text(pr >= 1 ? 'Cantiere finito' : `Cantiere ${Math.round(pr * 100)}% · ${siteDaysLeft()} giorni`, x + w / 2, y + 312, 14, pr >= 1 ? '#9ce8b4' : '#ffe08a');
         rrect(x + 30, y + 326, w - 60, 48, 10, '#3a2416', '#59626b', 2); text(state.level < lvl ? `Livello ${lvl}` : 'Aspetta il cantiere', x + w / 2, y + 350, 16, '#ffb35b');
       }
-      else { coinIcon(x + 70, y + 296, 0.9); text(fmt(cost), x + 88, y + 296, 20, state.coins >= cost ? '#ffe08a' : '#ff8a7a', 'left'); button('Trasferisciti', x + 20, y + 320, w - 40, 56, buyStage, { enabled: state.coins >= cost, color: '#5bc7ff', name: 'expand', size: 18 }); }
+      else { coinIcon(x + 70, y + 296, 0.9); text(fmt(cost), x + 88, y + 296, 20, state.coins >= cost ? '#ffe08a' : '#ff8a7a', 'left'); button('Compra la sede', x + 20, y + 320, w - 40, 56, buyStage, { enabled: state.coins >= cost, color: '#5bc7ff', name: 'expand', size: 18 }); }
     }
   }
 }
@@ -1545,14 +1683,15 @@ function drawCrew(t) { // the crew panel: one box per person to pick the job, an
     const col = i % 2, row = Math.floor(i / 2), x = P.x + 24 + col * 530, y = P.y + 150 + row * 64;
     if (y > P.y + P.h - 60) return;
     const J = JOBS[cw.job];
-    rrect(x, y, 514, 56, 10, '#5c3b25', cw.job === 'none' ? '#59626b' : '#f2c230', 2);
+    rrect(x, y, 514, 56, 10, HT().card, cw.job === 'none' ? '#59626b' : '#f2c230', 2);
     sprite(cw.job === 'mach' ? 'work' : 'walk0', x + 30, y + 50, 2.6, false, J.pal());
     text(cw.name, x + 58, y + 28, 18, '#fff', 'left');
     button(J.short, x + 150, y + 8, 160, 40, () => cycleJob(cw), { color: cw.job === 'mach' ? '#e07a2e' : cw.job === 'mag' ? '#7ed08a' : cw.job === 'it' ? '#5bc7ff' : '#9aa4ad', size: 16, name: 'job' + cw.id });
     let where = '';
     if (cw.job === 'mach') { const m = allMachines().find(x2 => x2.id === cw.m); where = m ? MACH[m.type].name : 'da piazzare: strumento Operatore'; }
     else if (cw.job === 'none') where = 'tocca il lavoro per cambiarlo';
-    if (cw.job === 'mag') button(cw.routes ? `Percorsi: ${cw.routes.length}` : 'Percorsi: tutti', x + 322, y + 8, 180, 40, () => { state.routeCw = cw.id; state.panel = 'routes'; sfx.click(); }, { color: '#e6e1d3', size: 15, name: 'routes' + cw.id });
+    if (cw.job === 'mag' && state.buildings.length > 1) { button(crewB(cw).name, x + 322, y + 8, 92, 40, () => { cycleCrewB(cw); cw.routes = null; }, { color: '#e6e1d3', size: 12, name: 'cb' + cw.id }); button(cw.routes ? `Perc. ${cw.routes.length}` : 'Perc.: tutti', x + 418, y + 8, 88, 40, () => { state.routeCw = cw.id; state.panel = 'routes'; sfx.click(); }, { color: '#e6e1d3', size: 12, name: 'routes' + cw.id }); }
+    else if (cw.job === 'mag') button(cw.routes ? `Percorsi: ${cw.routes.length}` : 'Percorsi: tutti', x + 322, y + 8, 180, 40, () => { state.routeCw = cw.id; state.panel = 'routes'; sfx.click(); }, { color: '#e6e1d3', size: 15, name: 'routes' + cw.id });
     else if (cw.job === 'it') {
       if (state.buildings.length > 1) button(crewB(cw) ? crewB(cw).name : '-', x + 322, y + 8, 180, 40, () => cycleCrewB(cw), { color: '#e6e1d3', size: 15, name: 'cb' + cw.id });
       else text(crewB(cw) ? crewB(cw).name : 'nessun capannone', x + 412, y + 28, 15, '#cfd6dd');
@@ -1568,7 +1707,7 @@ function drawRoutes(t) { // which trips one warehouse worker makes
   const routes = routesOf(b), all = !cw.routes;
   text('Ogni percorso: va a prendere il pezzo e lo porta a destinazione. Puoi dargliene quanti vuoi.', P.x + P.w / 2, P.y + 128, 14, '#b9c4ce');
   const toggleAll = () => { cw.routes = all ? [] : null; sfx.click(); save(); };
-  rrect(P.x + 40, P.y + 148, P.w - 80, 48, 10, all ? '#3f5a3f' : '#5c3b25', all ? '#7ef0a0' : '#59626b', 2);
+  rrect(P.x + 40, P.y + 148, P.w - 80, 48, 10, all ? '#3f5a3f' : HT().card, all ? '#7ef0a0' : '#59626b', 2);
   rrect(P.x + 54, P.y + 160, 24, 24, 5, all ? '#7ef0a0' : '#1b2229', '#2b2b2b', 2); if (all) { line([P.x + 59, P.y + 172], [P.x + 65, P.y + 178], '#14301c', 3); line([P.x + 65, P.y + 178], [P.x + 74, P.y + 165], '#14301c', 3); }
   text('Tutti i percorsi (anche quelli nuovi)', P.x + 92, P.y + 172, 17, '#fff', 'left');
   btn(P.x + 40, P.y + 148, P.w - 80, 48, toggleAll, 'routeAll');
@@ -1576,7 +1715,7 @@ function drawRoutes(t) { // which trips one warehouse worker makes
   routes.slice(0, 7).forEach((rt, i) => {
     const y = P.y + 210 + i * 52, on = all || cw.routes.includes(rt.id);
     const others = state.crew.filter(o => o !== cw && o.job === 'mag' && crewB(o) === b && mayDo(o, rt.id)).length;
-    rrect(P.x + 40, y, P.w - 80, 44, 10, on ? '#5c3b25' : '#3a2416', on ? '#f2c230' : '#3a4148', 2);
+    rrect(P.x + 40, y, P.w - 80, 44, 10, on ? HT().card : '#3a2416', on ? '#f2c230' : '#3a4148', 2);
     rrect(P.x + 54, y + 10, 24, 24, 5, on ? '#f2c230' : '#1b2229', '#2b2b2b', 2); if (on) { line([P.x + 59, y + 22], [P.x + 65, y + 28], '#2b2410', 3); line([P.x + 65, y + 28], [P.x + 74, y + 15], '#2b2410', 3); }
     text(rt.label, P.x + 92, y + 22, 17, on ? '#fff' : '#9aa4ad', 'left');
     text(others ? `lo fanno anche altri ${others}` : on ? 'solo lui' : 'NESSUNO lo fa', P.x + P.w - 60, y + 22, 14, others || on ? '#9ce8b4' : '#ff8a7a', 'right');
@@ -1593,7 +1732,7 @@ function drawRecipes(t) {
   RECIPES.forEach((rc, i) => {
     const col = i % 2, row = Math.floor(i / 2), x = P.x + 26 + col * 510, y = P.y + 110 + row * 58;
     const known = state.found.includes(rc.seq);
-    rrect(x, y, 494, 50, 10, known ? '#5c3b25' : '#3a2416', known ? '#f0923a' : '#3a4148', 2);
+    rrect(x, y, 494, 50, 10, known ? HT().card : '#3a2416', known ? '#f0923a' : '#3a4148', 2);
     if (known) {
       rc.seq.split('').forEach((ch, k) => badge(ch, x + 10 + k * 62, y + 12));
       text(rc.name, x + 330, y + 26, 16, '#fff');
@@ -1609,7 +1748,7 @@ function drawTools(t) {
   text('Attrezzi migliori = minigiochi più veloci = percentuali più alte', P.x + P.w / 2, P.y + 90, 16, '#cfd6dd');
   TOOLS.forEach((tl, i) => {
     const x = P.x + 30, y = P.y + 120 + i * 128, l = state.tools[tl.key], max = l >= tune.toolMax;
-    rrect(x, y, P.w - 60, 114, 14, '#5c3b25', '#f2c230', 2);
+    rrect(x, y, P.w - 60, 114, 14, HT().card, '#f2c230', 2);
     rrect(x + 14, y + 14, 86, 86, 12, '#3a2416'); toolIcon(tl.key, x + 57, y + 57, 1.7);
     text(tl.name, x + 120, y + 30, 21, '#fff', 'left');
     text(`Minigioco: ${PHASES[tl.phase]}`, x + 120, y + 56, 15, '#b9c4ce', 'left');
@@ -1638,7 +1777,7 @@ function drawMachinePanel(t) {
   });
   // what it works and what it makes
   const out = m.input + m.type, have = !!m.inbox;
-  rrect(P.x + 24, P.y + 296, P.w - 48, 92, 12, '#3a2416', '#5c3b25', 2);
+  rrect(P.x + 24, P.y + 296, P.w - 48, 92, 12, '#3a2416', HT().card, 2);
   text(`Lavora: ${partName(m.input)}`, P.x + 44, P.y + 320, 17, '#fff', 'left');
   text(`Produce: ${partName(out)}  ·  ${fmt(recipeVal(out) * mult(m))} al pezzo`, P.x + 44, P.y + 346, 16, recipeOf(out) ? '#ffd9a8' : '#c9c9c9', 'left');
   text(!m.op ? 'Ferma: serve un Operatore macchina' : m.out ? 'Pezzo pronto: aspetta un magazziniere' : m.cur ? 'Al lavoro' : have ? 'In partenza' : crewIn(F, 'mag').length ? `In attesa che un magazziniere porti "${partShort(m.input)}"` : 'Ferma: nessun magazziniere porta i pezzi', P.x + 44, P.y + 372, 14, !m.op || m.out ? '#ffb35b' : '#9ce8b4', 'left');
@@ -1790,7 +1929,7 @@ function drawConfig(mg, t) {
   btn(MG.x, MG.y + 60, MG.w, MG.h - 60, stopNeedle, 'dial');
   mg.dials.forEach((d, i) => {
     const cx = MG.x + MG.w / 2 + (i - (n - 1) / 2) * (gw + 16), cy = MG.y + 360, R = gw / 2 - 12, act = i === mg.cur;
-    rrect(cx - gw / 2, cy - R - 40, gw, R + 130, 14, act ? '#5c3b25' : '#3a2416', act ? '#f2c230' : '#3a4148', 2);
+    rrect(cx - gw / 2, cy - R - 40, gw, R + 130, 14, act ? HT().card : '#3a2416', act ? '#f2c230' : '#3a4148', 2);
     ctx.beginPath(); ctx.arc(cx, cy, R, Math.PI, 0); ctx.lineTo(cx + R, cy + 6); ctx.lineTo(cx - R, cy + 6); ctx.closePath(); ctx.fillStyle = '#f4f1e8'; ctx.fill(); ctx.strokeStyle = '#2b3138'; ctx.lineWidth = 3; ctx.stroke();
     ctx.beginPath(); ctx.arc(cx, cy, R - 12, Math.PI + d.z0 * Math.PI, Math.PI + (d.z0 + d.z) * Math.PI); ctx.strokeStyle = '#4caf6a'; ctx.lineWidth = 16; ctx.stroke();
     for (let k = 0; k <= 10; k++) { const a = Math.PI + k * Math.PI / 10; line([cx + Math.cos(a) * (R - 4), cy + Math.sin(a) * (R - 4)], [cx + Math.cos(a) * (R - (k % 5 ? 10 : 16)), cy + Math.sin(a) * (R - (k % 5 ? 10 : 16))], '#2b3138', 2); }
@@ -2064,7 +2203,7 @@ function drawWorldHUDBottom(t) {
 function drawWorldShop(t) {
   const P = panelFrame('Negozio · Esterno', 640, 520, () => { state.panel = null; });
   const n = state.buildings.length, x = P.x + 40, y = P.y + 84, w = P.w - 80, h = 410;
-  rrect(x, y, w, h, 14, '#5c3b25', '#5bc7ff', 2);
+  rrect(x, y, w, h, 14, HT().card, '#5bc7ff', 2);
   ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + 12, y + 12, w - 24, 130);
   shedIcon(x + w / 2, y + 96);
   text('Capannone', x + w / 2, y + 172, 22, '#fff');
@@ -2370,14 +2509,15 @@ function drawTown(t) {
   for (const [c, r] of L.trees) objs.push({ d: c + r, f: () => drawTree(c, r) });
   const tier = TIER();
   TIERS.forEach((T, i) => { const st = T.site, d = st.c + st.r + st.w + st.h;
-    if (i === tier) objs.push({ d, f: () => drawSite(st, T.style, t) });
-    else if (i < tier) objs.push({ d, f: () => drawShedBig(st.c + 0.3, st.r + 0.3, st.w - 0.6, st.h - 0.6, t, i) }); // an old home, someone else's now
-    else if (i === tier + 1 && F && siteProgress() < 1) objs.push({ d, f: () => { drawWorksite(st, t); const p = iso(st.c + 0.5, st.r + st.h - 0.2, 0); rrect(p[0] - 26, p[1] - 30, 52, 14, 3, '#f2c230', '#2b2b2b', 1); textW(`CANTIERE ${Math.round(siteProgress() * 100)}%`, p[0], p[1] - 23, 6, '#2b2b2b'); } });
+    if (i <= tier && state.buildings.some(b => b.stage === i)) objs.push({ d, f: () => drawSite(st, T.style, t) }); // every site you own
+    else if (i < tier) objs.push({ d, f: () => drawShedBig(st.c + 0.3, st.r + 0.3, st.w - 0.6, st.h - 0.6, t, i) });
+    else if (i === tier + 1 && F && siteProgress() < 1) objs.push({ d, f: () => { drawWorksite(st, t, siteProgress()); const p = iso(st.c + 0.5, st.r + st.h - 0.2, 0); rrect(p[0] - 26, p[1] - 30, 52, 14, 3, '#f2c230', '#2b2b2b', 1); textW(`CANTIERE ${Math.round(siteProgress() * 100)}%`, p[0], p[1] - 23, 6, '#2b2b2b'); } });
     else if (i === tier + 1) objs.push({ d, f: () => { drawSite(st, T.style, t); const p = iso(st.c + 0.5, st.r + st.h - 0.2, 0); line(p, [p[0], p[1] - 22], '#6b4527', 2); rrect(p[0] - 22, p[1] - 34, 44, 14, 3, '#f2c230', '#2b2b2b', 1); textW('IN VENDITA', p[0], p[1] - 27, 6, '#2b2b2b'); } });
     else if (false) objs.push({ d: d - 1, f: () => { poly(qT(st.c, st.r, st.c + st.w, st.r + st.h, 0.2), '#9a8a6a'); const p = iso(st.c + 0.5, st.r + st.h - 0.2, 0); line(p, [p[0], p[1] - 22], '#6b4527', 2); rrect(p[0] - 22, p[1] - 34, 44, 14, 3, '#f2c230', '#2b2b2b', 1); textW('IN VENDITA', p[0], p[1] - 27, 6, '#2b2b2b'); } }); });
   for (const g of GROWTH) { const d = g.c + g.r + g.w + g.h;
-    if (tier >= g.min) objs.push({ d, f: () => drawGrowth(g, t) });
-    else if (tier === g.min - 1) objs.push({ d, f: () => drawWorksite(g, t) }); }
+    const gp = growthProgress(g);
+    if (tier >= g.min || gp >= 1) objs.push({ d, f: () => drawGrowth(g, t) });
+    else if (tier === g.min - 1) objs.push({ d, f: () => drawWorksite(g, t, gp) }); }
   objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
   const main = L.streets[0].pts;
   for (let i = 0; i < 3; i++) { // little cars along the main street
@@ -2408,7 +2548,7 @@ const GROWTH = [ // what the town builds as the company grows
   { min: 4, kind: 'stadium', c: -14, r: 6, w: 9, h: 7 },
   { min: 4, kind: 'houses', c: 46, r: 25, w: 6, h: 2 },
 ];
-const TIER = () => (state && state.buildings && state.buildings[0] ? state.buildings[0].stage : 0);
+const TIER = () => (state && state.buildings && state.buildings.length ? Math.max(...state.buildings.map(b => b.stage)) : 0); // your newest site
 function drawModern(s, t, big) { // white concrete, a band of blue glass, solar panels on a flat roof, loading bays
   const { c, r, w, h } = s, Hh = big ? 46 : 40;
   box(c + 0.1, r + 0.1, c + w - 0.1, r + h - 0.1, 0, Hh, '#e8eaec');
@@ -2434,12 +2574,70 @@ function drawCrane(c, r, t) { // a tower crane over a building site
   const hk = iso(c + 1.5 + Math.sin(t * 0.5), r, 110); line(hk, [hk[0], hk[1] + 40], '#3a3a3a', 1); ctx.fillStyle = '#5d6366'; ctx.fillRect(hk[0] - 4, hk[1] + 40, 8, 6);
   box(c - 1.3, r - 0.15, c - 0.9, r + 0.15, 104, 112, '#7d878f');
 }
-function drawWorksite(g, t) { // a fenced lot, piles of material, a crane
+function drawWorksite(g, t, prog = 0) { // a fenced lot; day after day a slab, then pillars and walls rise inside scaffolding
   poly(qT(g.c, g.r, g.c + g.w, g.r + g.h, 0.2), '#9a8a6a');
+  const a = { c: g.c + 0.35, r: g.r + 0.35, c1: g.c + g.w - 0.35, r1: g.r + g.h - 0.35 }, H = 26 + Math.min(g.w, g.h) * 4;
+  if (prog > 0.08) box(a.c, a.r, a.c1, a.r1, 0, 3, '#b8b2a4'); // the slab
+  const wall = Math.max(0, (prog - 0.15) / 0.75) * H;
+  if (wall > 0) {
+    const pil = [];
+    for (let u = a.c; u <= a.c1 + 0.01; u += Math.max(0.8, (a.c1 - a.c) / 4)) pil.push([u, a.r1]);
+    for (let v = a.r; v < a.r1; v += Math.max(0.8, (a.r1 - a.r) / 3)) pil.push([a.c1, v]);
+    for (const [c, r] of pil) box(c - 0.08, r - 0.08, c + 0.08, r + 0.08, 3, 3 + wall, '#9aa4ad');
+    const brick = Math.max(0, wall - 8);
+    if (brick > 0) { box(a.c, a.r, a.c1, a.r1, 3, 3 + brick, '#c0785a'); for (let z = 9; z < brick; z += 6) { line(iso(a.c, a.r1, 3 + z), iso(a.c1, a.r1, 3 + z), 'rgba(80,40,30,0.35)', 1); line(iso(a.c1, a.r, 3 + z), iso(a.c1, a.r1, 3 + z), 'rgba(80,40,30,0.35)', 1); } }
+    for (let z = 10; z < wall; z += 10) { line(iso(a.c - 0.1, a.r1 + 0.12, z), iso(a.c1 + 0.12, a.r1 + 0.12, z), '#c9a25a', 1.5); line(iso(a.c1 + 0.12, a.r - 0.1, z), iso(a.c1 + 0.12, a.r1 + 0.12, z), '#b8924a', 1.5); }
+    for (let u = a.c; u <= a.c1 + 0.12; u += 0.5) line(iso(u, a.r1 + 0.12, 0), iso(u, a.r1 + 0.12, wall), '#c9a25a', 1);
+    if (prog > 0.85) poly(qT(a.c, a.r, a.c1, a.r1, 3 + wall), '#7a8088', EDGE);
+  }
   for (let u = 0; u <= g.w; u += 0.5) { box(g.c + u, g.r + g.h - 0.04, g.c + u + 0.05, g.r + g.h + 0.02, 0, 8, '#e07a2e'); }
-  box(g.c + 0.5, g.r + 0.5, g.c + 1.2, g.r + 1, 0, 6, '#c8bea8'); box(g.c + 0.6, g.r + 0.55, g.c + 1.1, g.r + 0.95, 6, 10, '#c8bea8');
+  if (prog < 0.9) { box(g.c + 0.2, g.r + 0.2, g.c + 0.8, g.r + 0.6, 0, 6, '#c8bea8'); box(g.c + 0.25, g.r + 0.25, g.c + 0.7, g.r + 0.55, 6, 10, '#c8bea8'); }
   drawCrane(g.c + g.w / 2, g.r + g.h / 2, t);
 }
+const GROWTH_NAME = { school: 'Scuola', houses: 'Case nuove', station: 'Scalo merci', offices: 'Uffici in vetro', market: 'Supermercato', stadium: 'Stadio' };
+function growthProgress(g) { // the town's new buildings go up alongside your next site, each a little behind the one before
+  if (!F || TIER() !== g.min - 1) return TIER() >= g.min ? 1 : 0;
+  const i = GROWTH.filter(x => x.min === g.min).indexOf(g);
+  return Math.max(0, Math.min(1, siteProgress() * 1.15 - i * 0.12));
+}
+function townCam() { const s = TIERS[F ? F.stage : TIER()].site, p = iso(s.c + s.w / 2, s.r + s.h / 2, 0); cam.x = p[0]; cam.y = p[1] - 30; cam.zoom = tune.townZoom; clampCam(); }
+function toggleTown() {
+  if (!F) return;
+  state.placing = null; state.tool = null; state.demo = null; state.panel = null; state.sel = null;
+  if (!state.town) { state.icam = { x: cam.x, y: cam.y, zoom: cam.zoom }; state.town = true; townCam(); events.push({ type: 'town' }); }
+  else { state.town = false; if (state.icam) Object.assign(cam, state.icam); else centerCam(); clampCam(); }
+  sfx.click();
+}
+function townSpots() { // what can be tapped outside, with its label
+  const tier = TIER(), out = [];
+  TIERS.forEach((T, i) => {
+    const own = state.buildings.find(b => b.stage === i);
+    if (own) out.push({ s: T.site, title: own === F ? `${own.name} · sei qui` : own.name, sub: own === F ? 'Tocca per rientrare' : `In produzione · tocca per entrare`, col: own === F ? '#7ef0a0' : '#bfe3ff', home: own });
+    else if (i === tier + 1) { const p = siteProgress(), lv = tune['shed' + i + 'Lvl'];
+      out.push({ s: T.site, title: `${T.short} · capitolo ${i + 1}`, sub: p < 1 ? `Cantiere ${Math.round(p * 100)}% · ${siteDaysLeft()} giorni` : state.level >= lv ? 'Pronta: comprala dal Negozio > Sede' : `Pronta · serve il livello ${lv}`, col: p < 1 ? '#f2c230' : '#5bc7ff', prog: p }); }
+  });
+  for (const g of GROWTH) if (tier === g.min - 1) { const p = growthProgress(g); out.push({ s: g, title: GROWTH_NAME[g.kind], sub: p >= 1 ? 'Finito!' : `Cantiere ${Math.round(p * 100)}%`, col: p >= 1 ? '#7ef0a0' : '#e6e1d3', prog: p, small: true }); }
+  return out;
+}
+function drawTownLabels(t) { // floating signs over your site, the next one and the town's building sites
+  for (const sp of townSpots()) {
+    const s = sp.s, p = iso(s.c + s.w / 2, s.r + s.h / 2, 70 + Math.min(s.w, s.h) * 6), [sx, sy0] = toScreen(p[0], p[1]), sy = sy0 + Math.sin(t * 2 + s.c) * 2;
+    if (sx < -100 || sx > W + 100 || sy < 60 || sy > H + 40) continue;
+    const fs = sp.small ? 13 : 16; ctx.font = `bold ${fs}px ${FONT}`;
+    const tw = Math.max(ctx.measureText(sp.title).width, ctx.measureText(sp.sub).width * 0.85) + 26, h = sp.small ? 40 : 48;
+    rrect(sx - tw / 2, sy - h, tw, h, 9, 'rgba(58,36,22,0.9)', sp.col, 2); poly([[sx - 6, sy], [sx + 6, sy], [sx, sy + 8]], sp.col);
+    text(sp.title, sx, sy - h + 13, fs, sp.col); text(sp.sub, sx, sy - (sp.small ? 11 : 14), sp.small ? 11 : 13, '#e6e1d3');
+    if (sp.prog != null && sp.prog < 1) { rrect(sx - tw / 2 + 8, sy - 6, tw - 16, 4, 2, '#1b2229'); rrect(sx - tw / 2 + 8, sy - 6, (tw - 16) * sp.prog, 4, 2, sp.col); }
+  }
+}
+function townTap(sx, sy) {
+  const [cf, rf] = toCell(sx, sy);
+  const hit = townSpots().find(sp => cf >= sp.s.c - 0.5 && cf <= sp.s.c + sp.s.w + 0.5 && rf >= sp.s.r - 0.5 && rf <= sp.s.r + sp.s.h + 0.5);
+  if (!hit) return;
+  if (hit.home) return hit.home === F ? toggleTown() : goToSite(hit.home);
+  toast(`${hit.title}: ${hit.sub}`, hit.col);
+}
+function doorIcon(x, y, out) { rrect(x - 10, y - 14, 20, 28, 3, out ? '#7a5228' : '#b07a3e', '#2b2410', 1.5); ctx.fillStyle = '#ffe08a'; ctx.fillRect(x + 4, y, 3, 3); poly(out ? [[x - 18, y], [x - 12, y - 6], [x - 12, y + 6]] : [[x + 18, y], [x + 12, y - 6], [x + 12, y + 6]], out ? '#2b2410' : '#ffe08a'); }
 function drawGrowth(g, t) {
   const { c, r, w, h } = g;
   if (g.kind === 'school') { box(c, r, c + w, r + h, 0, 30, '#f2d27a'); for (let i = 0; i < w * 2; i++) poly(qL(c + i / 2 + 0.1, c + i / 2 + 0.4, r + h, 12, 22), '#3a5a8a'); poly(qT(c, r, c + w, r + h, 30), '#b0543c', EDGE); const p = iso(c + w + 0.3, r + 0.3, 0); line(p, [p[0], p[1] - 50], '#9aa4ad', 1.5); ctx.fillStyle = '#4caf6a'; ctx.fillRect(p[0], p[1] - 50, 10, 4); ctx.fillStyle = '#fff'; ctx.fillRect(p[0], p[1] - 46, 10, 3); ctx.fillStyle = '#d8433a'; ctx.fillRect(p[0], p[1] - 43, 10, 3); }
@@ -2487,14 +2685,15 @@ function machineAt(sx, sy) {
 function worldTap(sx, sy) {
   const [cf, rf] = toCell(sx, sy), c = Math.floor(cf), r = Math.floor(rf);
   if (state.placing) {
-    if (inShed(c, r)) placeAt(c, r); else { state.placing = null; toast('Piazzamento annullato'); }
+    if (inShed(c, r)) placeAt(c, r); else if (inAnnex(c, r)) { sfx.wrong(); toast('Ufficio e magazzino sono un\'ala fissa: le macchine vanno nella zona di lavoro', '#ffb35b'); } else { state.placing = null; toast('Piazzamento annullato'); }
     return;
   }
   if (state.tool) { const m = machineAt(sx, sy); if (m) toolTap(m.c, m.r); else toolTap(c, r); return; }
   const m = machineAt(sx, sy);
   if (m) { if (m.phase < 2) startBuild(m); else { state.sel = m; state.panel = 'machine'; sfx.click(); } return; }
+  if (inAnnex(c, r)) { openPanel('office'); sfx.click(); return; }
   const o = inShed(c, r) ? cellAt(c, r) : null;
-  if (o && (o.kind === 'wh' || o.kind === 'office')) { openPanel('office'); sfx.click(); }
+  if (false) { }
   else if (o && o.kind === 'crate') { state.panel = 'recipes'; sfx.click(); }
   else if (o && o.kind === 'src') toast(`Banco barre: prende una barra dalla zona magazzino ogni ${tune.spawnGap.toFixed(1)} s (in magazzino: ${whOf(F).bars})`, '#bfe3ff');
   else if (o && o.kind === 'rack') toast('Rack di rete: ogni macchina si collega qui col minigioco Rete', '#bfe3ff');
@@ -2502,12 +2701,13 @@ function worldTap(sx, sy) {
 
 // ---- Scenes -------------------------------------------------------------------------------
 function updateWorld(dt) {
-  const sdt = dt * (state.speed || 1), day0 = dayNum(), h0 = workHour();
+  const shift0 = onShift(), sdt = state.timeStop ? 0 : dt * (state.speed || 1), day0 = dayNum(), h0 = workHour();
   state.t += sdt;
+  if (shift0 && !onShift()) endShift(); // 16:00: everyone goes home, the machines stop until 08:00
   if (dayNum() !== day0) onNewDay();
   const h1 = workHour(); if (h1 >= 0 && h1 !== h0) onWorkHour();
-  const view = F, shift = onShift();
-  for (const b of state.buildings) { F = b; updateStock(b); if (shift) updateFactory(sdt); updateWorkers(sdt); }
+  const view = F, shift = shift0 && onShift();
+  for (const b of state.buildings) { F = b; updateStock(b); updateTrucks(b, state.timeStop ? 0 : dt); updateClerks(b, state.timeStop ? 0 : dt * Math.min(2, state.speed || 1)); if (shift) { updateFactory(sdt); updateWorkers(sdt); } }
   F = view;
   for (const f of state.floats) { f.life -= dt; f.wy -= 22 * dt; }
   state.floats = state.floats.filter(f => f.life > 0);
@@ -2529,9 +2729,9 @@ function drawWorld(t) {
   ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-cam.x, -cam.y);
   drawGround(); drawFloor(); drawCables();
   const cells = Object.values(F.grid);
-  drawCellMarks(t); drawZoneFloor();
+  drawCellMarks(t); drawAnnexFloor();
   if (!CHEAP) drawShadows(cells.filter(o => o.kind !== 'belt').map(o => [o.c + 0.12, o.r + 0.12, o.c + 0.88, o.r + 0.88, o.kind === 'mach' ? machineTop(o.m.type) : o.kind === 'rack' ? 60 : o.kind === 'wh' ? 48 : o.kind === 'pc' || o.kind === 'office' ? 30 : 22]));
-  const objs = wallSegs();
+  const objs = wallSegs().concat(annexWalls());
   for (const o of cells) {
     const d = o.c + o.r + 1;
     if (o.kind === 'rack') objs.push({ d, f: () => drawRack(o.c, o.r, t) });
@@ -2555,6 +2755,9 @@ function drawWorld(t) {
     }
   }
   for (const w of F.workers) objs.push({ d: w.c + w.r, f: () => drawWorker(w, t) });
+  for (const k of F.clerks || []) objs.push({ d: k.x + k.y + (k.mode === 'sit' ? 0.3 : 0), f: () => drawClerk(k, t) });
+  objs.push(...neighbourhood(t));
+  for (const k of F.trucks || []) objs.push({ d: F.annexBox.c1 + 1 + k.r + 0.6, f: () => drawTruck(k, t) });
   for (const w of Object.values(F.itw || {})) objs.push({ d: w.c + w.r + 0.01, f: () => {
     const p = iso(w.c, w.r, 0), moving = w.path.length > 0, step = moving ? Math.floor(w.walkT * 6) % 2 : 0;
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
@@ -2608,22 +2811,15 @@ function drawOverlaysWorld(t) {
 function whOf(b) { if (!b.wh) b.wh = { bars: tune.barsStart, orders: [], auto: false }; return b.wh; }
 const whCells = b => Object.values(b.grid).filter(o => o.kind === 'wh');
 const whCap = b => whCells(b).length * tune.barsPerCell;
-const onOrder = b => whOf(b).orders.reduce((n, o) => n + o.n, 0);
-function layoutZones(b) { // shelves in the back-right corner, the office desk just beside them; whatever stood there moves to a free cell
+const onOrder = b => whOf(b).orders.reduce((n, o) => n + o.n, 0) + (b.trucks || []).filter(k => k.ph !== 'out').reduce((n, k) => n + k.n, 0);
+function layoutZones(b) { // two fixed areas outside the work floor: the warehouse wing on the right, the office apart in front; both grow with the site and cannot be edited
   const keep = F; F = b;
   for (const o of Object.values(b.grid)) if (o.kind === 'wh' || o.kind === 'office') clearCell(o.c, o.r);
-  const [C] = shedSize(b.stage), w = tune['wh' + b.stage + 'W'], h = tune['wh' + b.stage + 'H'], zone = [];
-  for (let r = 0; r < h; r++) for (let c = C - w; c < C; c++) zone.push([c, r, 'wh']);
-  zone.push([C - w - 1, 0, 'office']);
-  const inZone = (c, r) => zone.some(z => z[0] === c && z[1] === r);
-  for (const [c, r] of zone) {
-    const o = cellAt(c, r); if (!o) continue;
-    const free = cellList(F).find(([fc, fr]) => !cellAt(fc, fr) && !inZone(fc, fr)); clearCell(c, r);
-    if (!free) { if (o.kind === 'mach') b.machines = b.machines.filter(m => m !== o.m); continue; }
-    if (o.kind === 'mach') { o.m.c = free[0]; o.m.r = free[1]; o.m.cur = null; o.m.out = null; }
-    setCell(free[0], free[1], o);
-  }
-  zone.forEach(([c, r, k], i) => setCell(c, r, k === 'wh' ? { kind: 'wh', i } : { kind: 'office' }));
+  const [C, R] = shedSize(b.stage), w = tune['annex' + b.stage + 'W'], ow = tune['officeW' + b.stage], oh = tune['office' + b.stage + 'H'];
+  b.annex = new Set(); b.annexBox = { c0: C, c1: C + w, r0: 0, r1: R }; b.officeBox = { c0: 0, c1: ow, r0: R, r1: R + oh + 1 }; // a free aisle behind the glass, desks after it
+  let i = 0;
+  for (let r = 0; r < R; r++) for (let c = C; c < C + w; c++) { b.annex.add(K(c, r)); if (r % 2 === 0 || r === R - 1) setCell(c, r, { kind: 'wh', i: i++ }); } // shelves with aisles between
+  for (let r = R; r < R + oh + 1; r++) for (let c = 0; c < ow; c++) { b.annex.add(K(c, r)); if (r > R) setCell(c, r, { kind: 'office' }); }
   whOf(b).bars = Math.min(whOf(b).bars, whCap(b));
   F = keep;
 }
@@ -2637,26 +2833,81 @@ function orderBars(b, n, auto) {
   events.push({ type: 'order', n, auto: !!auto }); save();
 }
 function autoOrder(b) { const wh = whOf(b); if (wh.auto && wh.bars + onOrder(b) < whCap(b) * tune.autoBelow) orderBars(b, whCap(b), true); }
-function updateStock(b) { // deliveries that have arrived go on the shelves
+function updateStock(b) { // an order that is due sends a truck; the bars go on the shelves once it has unloaded
   const wh = whOf(b), come = wh.orders.filter(o => o.at <= state.t);
   if (!come.length) return;
   wh.orders = wh.orders.filter(o => o.at > state.t);
-  const n = come.reduce((a, o) => a + o.n, 0); wh.bars = Math.min(whCap(b), wh.bars + n); wh.told = false;
-  if (b === F) toast(`Consegna arrivata: +${n} barre in magazzino`, '#7ef0a0');
-  autoOrder(b);
+  b.trucks = b.trucks || [];
+  b.trucks.push({ n: come.reduce((a, o) => a + o.n, 0), ph: 'in', r: -10, t: 0 });
+  if (b === F) toast('Il camion delle barre sta arrivando', '#bfe3ff');
+}
+function updateTrucks(b, dt) { // drive in along the warehouse, unload, drive away
+  if (!b.trucks || !b.trucks.length || !b.annexBox) return;
+  const park = Math.max(1.6, b.annexBox.r1 / 2 + 0.6), out = b.annexBox.r1 + 12;
+  for (const k of b.trucks) {
+    k.t += dt;
+    if (k.ph === 'in') { k.r = Math.min(park, k.r + dt * 3.2 * Math.min(1, (park - k.r) / 2 + 0.25)); if (park - k.r < 0.02) { k.ph = 'unload'; k.t = 0; } }
+    else if (k.ph === 'unload') { if (k.t > tune.unloadTime) { const wh = whOf(b); wh.bars = Math.min(whCap(b), wh.bars + k.n); wh.told = false; k.ph = 'out'; k.t = 0; if (b === F) { toast(`Consegna scaricata: +${k.n} barre in magazzino`, '#7ef0a0'); sfx.ding(); } autoOrder(b); } }
+    else k.r += dt * 3.2 * Math.min(1, k.t * 0.8 + 0.2);
+  }
+  b.trucks = b.trucks.filter(k => k.r < out);
+}
+function drawTruck(k, t) { // a small lorry with a load of bar bundles; while it unloads a worker carries them in
+  const A = F.annexBox, c = A.c1 + 0.95, r = k.r, cols = ['#d8433a', '#2f7fb0', '#e8b45a', '#4caf6a'];
+  for (const [dr, dc] of [[-1.2, -0.3], [-1.2, 0.3], [0.25, -0.3], [0.25, 0.3]]) box(c + dc - 0.06, r + dr - 0.1, c + dc + 0.06, r + dr + 0.1, 0, 6, '#1b1b1b');
+  box(c - 0.4, r - 1.65, c + 0.4, r - 0.05, 5, 9, '#3a4148'); // chassis
+  const left = k.ph === 'unload' ? Math.max(0, 1 - k.t / tune.unloadTime) : k.ph === 'out' ? 0 : 1;
+  box(c - 0.38, r - 1.6, c + 0.38, r - 0.1, 9, 12, '#7a5228'); // flatbed
+  for (let i = 0; i < 4; i++) if (i / 4 < left) box(c - 0.3, r - 1.5 + i * 0.35, c + 0.3, r - 1.22 + i * 0.35, 12, 22, '#a7b0b8', 'rgba(40,46,52,0.6)');
+  box(c - 0.4, r - 0.02, c + 0.4, r + 0.5, 5, 30, cols[(k.n + 1) % 4]); // cab
+  poly(qL(c - 0.32, c + 0.32, r + 0.5, 18, 27), '#9ad0f0', '#2a4a6a', 1);
+  poly(qT(c - 0.4, r - 0.02, c + 0.4, r + 0.5, 30), '#e8e2d4', EDGE);
+  if (k.ph === 'unload') { // a warehouse worker walking bundles from the lorry to the shelves
+    const u = (Math.sin(k.t * 2.4) + 1) / 2, wc = A.c1 + 0.3 - u * 0.9, p = iso(wc, r - 0.8, 0), carry = Math.cos(k.t * 2.4) < 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
+    sprite(Math.floor(k.t * 6) % 2 ? 'walk1' : 'walk0', p[0], p[1], 2, !carry, MAG_PAL);
+    if (carry) box(wc - 0.18, r - 0.86, wc + 0.18, r - 0.74, 26, 30, '#a7b0b8');
+  }
 }
 function warnEmpty(b) {
   const wh = whOf(b); autoOrder(b);
   if (wh.told || onOrder(b)) return; wh.told = true;
   showBanner('Magazzino vuoto', 'Ordina barre dall\'Ufficio per tenere le macchine al lavoro', '#ffb35b');
 }
-function drawZoneFloor() { // yellow and black tape around the warehouse zone
-  const cs = whCells(F); if (!cs.length) return;
-  const c0 = Math.min(...cs.map(o => o.c)), c1 = Math.max(...cs.map(o => o.c)) + 1, r0 = Math.min(...cs.map(o => o.r)), r1 = Math.max(...cs.map(o => o.r)) + 1;
-  poly([iso(c0, r0, 0.5), iso(c1, r0, 0.5), iso(c1, r1, 0.5), iso(c0, r1, 0.5)], 'rgba(90,96,100,0.35)');
-  const edge = (a, b) => { const n = 14; for (let i = 0; i < n; i++) { const u0 = i / n, u1 = (i + 0.5) / n; line(iso(a[0] + (b[0] - a[0]) * u0, a[1] + (b[1] - a[1]) * u0, 1), iso(a[0] + (b[0] - a[0]) * u1, a[1] + (b[1] - a[1]) * u1, 1), '#f2c230', 2.5); } };
-  edge([c0 + 0.06, r1 - 0.06], [c1 - 0.06, r1 - 0.06]); edge([c0 + 0.06, r0 + 0.06], [c0 + 0.06, r1 - 0.06]);
-  const p = iso(c0 + 0.5, r1 - 0.2, 1); textW('MAGAZZINO', p[0], p[1], 6, '#f2c230');
+function drawAnnexFloor() { // the warehouse wing on the right (grey concrete, taped), the office apart in front (blue carpet)
+  const A = F.annexBox, O = F.officeBox; if (!A) return;
+  for (const k of F.annex) {
+    const [c, r] = k.split(',').map(Number), off = O && c >= O.c0 && c < O.c1 && r >= O.r0 && r < O.r1, h = hash(c, r);
+    poly(qT(c, r, c + 1, r + 1, 0), off ? ['#5f7898', '#5a7290'][h % 2] : ['#9a9890', '#95938b', '#a09e96'][h % 3], 'rgba(40,40,40,0.35)');
+    if (!inAnnex(c, r + 1)) poly([iso(c, r + 1, 0), iso(c + 1, r + 1, 0), iso(c + 1, r + 1, -9), iso(c, r + 1, -9)], '#6d6b64', EDGE);
+    if (!inAnnex(c + 1, r)) poly([iso(c + 1, r, 0), iso(c + 1, r + 1, 0), iso(c + 1, r + 1, -9), iso(c + 1, r, -9)], '#56544e', EDGE);
+  }
+  const tape = (a, b) => { const n = Math.max(6, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) * 6)); for (let i = 0; i < n; i += 2) line(iso(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n, 0.5), iso(a[0] + (b[0] - a[0]) * (i + 1) / n, a[1] + (b[1] - a[1]) * (i + 1) / n, 0.5), '#f2c230', 2.5); };
+  tape([A.c0 + 0.05, A.r1 - 0.05], [A.c1 - 0.05, A.r1 - 0.05]); tape([A.c1 - 0.05, A.r0 + 0.05], [A.c1 - 0.05, A.r1 - 0.05]);
+  // a gravel path from the work floor to the office door
+}
+function annexWalls() { // warehouse: back wall and a low rail toward the work floor (open at the door); office: low glass walls with a door
+  const A = F.annexBox, O = F.officeBox; if (!A) return [];
+  const out = [], door = Math.floor((A.r1 - A.r0) / 2);
+  const wallFn = (along, dark, seed) => F.stage >= 3 ? panelWall(along, dark, seed) : F.stage === 2 ? brickWall([along(0, 0), along(1, 0), along(1, WALL_H), along(0, WALL_H)], 1, along, 0, WALL_H, dark) : timberWall(along, dark, seed);
+  for (let c = A.c0; c < A.c1; c++) out.push({ d: c + 0.2, f: () => { wallFn((u, z) => iso(c + u, 0, z), false, c * 13); poly([iso(c, -0.12, WALL_H), iso(c + 1, -0.12, WALL_H), iso(c + 1, 0, WALL_H), iso(c, 0, WALL_H)], '#4a2f1d', EDGE); } });
+  for (let r = A.r0; r < A.r1; r++) {
+    if (r === door) continue;
+    out.push({ d: A.c0 + r + 0.15, f: () => {
+      for (const u of [0.02, 0.98]) box(A.c0 - 0.05, r + u - 0.05, A.c0 + 0.05, r + u + 0.05, 0, 22, '#f2c230');
+      for (const z of [8, 20]) { poly([iso(A.c0, r, z + 3), iso(A.c0, r + 1, z + 3), iso(A.c0, r + 1, z), iso(A.c0, r, z)], '#2b2b2b'); for (let k = 0; k < 5; k++) poly([iso(A.c0, r + k * 0.2, z + 3), iso(A.c0, r + 0.1 + k * 0.2, z + 3), iso(A.c0, r + 0.1 + k * 0.2, z), iso(A.c0, r + k * 0.2, z)], '#f2c230'); }
+    } });
+  }
+  const sign = (c, r, z, label, col) => { const p = iso(c, r, z); ctx.font = `bold 8px ${FONT}`; const tw = ctx.measureText(label).width + 10; rrect(p[0] - tw / 2, p[1] - 7, tw, 13, 2, '#3a2416', col, 1); textW(label, p[0], p[1], 8, col); };
+  out.push({ d: A.c1 + A.r1 + 2, f: () => { line(iso(A.c0, door + 0.5, 58), iso(A.c0, door + 0.5, 22), '#2b2b2b', 1); sign(A.c0, door + 0.5, 62, 'MAGAZZINO', '#f2c230'); } });
+  if (O) {
+    const glass = (q, d) => out.push({ d, f: () => { glassQ(q); line(q[3], q[2], '#5d6366', 2); line(q[0], q[3], '#5d6366', 2); line(q[1], q[2], '#5d6366', 2); } });
+    const odoor = O.c0 + Math.floor((O.c1 - O.c0) / 2);
+    for (let c = O.c0; c < O.c1; c++) if (c !== odoor) glass([iso(c, O.r0, 0), iso(c + 1, O.r0, 0), iso(c + 1, O.r0, 24), iso(c, O.r0, 24)], c + O.r0 + 0.1); // glass toward the floor, with a door
+    for (let r = O.r0; r < O.r1; r++) out.push({ d: O.c0 + r + 0.2, f: () => { wallFn((u, z) => iso(O.c0, r + u, z), true, r * 17 + 3); poly([iso(O.c0 - 0.12, r, WALL_H), iso(O.c0, r, WALL_H), iso(O.c0, r + 1, WALL_H), iso(O.c0 - 0.12, r + 1, WALL_H)], '#3e2718', EDGE); } }); // the factory's own side wall runs on
+    out.push({ d: O.c1 + O.r1 + 2, f: () => sign((O.c0 + O.c1) / 2, O.r0, 40, 'UFFICIO', '#ffe8b0') });
+  }
+  return out;
 }
 function drawShelf(o, t) { // a metal shelving unit; its bar bundles show how full the warehouse is
   const c = o.c + 0.5, r = o.r + 0.5, cs = whCells(F).length, per = whOf(F).bars - o.i * tune.barsPerCell, fill = Math.max(0, Math.min(1, per / tune.barsPerCell));
@@ -2664,14 +2915,14 @@ function drawShelf(o, t) { // a metal shelving unit; its bar bundles show how fu
   const lv = 3, slots = 3;
   for (let k = 0; k < lv; k++) {
     const z = 4 + k * 14;
-    box(c - 0.4, r - 0.34, c + 0.4, r + 0.34, z, z + 2, '#3d8fd6');
+    box(c - 0.4, r - 0.34, c + 0.4, r + 0.34, z, z + 1.5, '#8a949c'); line(iso(c - 0.4, r + 0.34, z + 1), iso(c + 0.4, r + 0.34, z + 1), '#e07a2e', 2);
     for (let j = 0; j < slots; j++) {
       if ((k * slots + j + 1) / (lv * slots) > fill + 0.001) continue;
       const y0 = r - 0.26 + j * 0.2;
       for (let q = 0; q < 3; q++) box(c - 0.34, y0 + q * 0.045, c + 0.34, y0 + q * 0.045 + 0.04, z + 2 + (q % 2) * 3, z + 6 + (q % 2) * 3, '#a7b0b8', 'rgba(40,46,52,0.5)');
     }
   }
-  box(c - 0.4, r - 0.34, c + 0.4, r + 0.34, 46, 48, '#3d8fd6');
+  box(c - 0.4, r - 0.34, c + 0.4, r + 0.34, 46, 47.5, '#8a949c'); line(iso(c - 0.4, r + 0.34, 47), iso(c + 0.4, r + 0.34, 47), '#e07a2e', 2);
   if (cs && o.i === 0 && fill <= 0 && Math.sin(t * 5) > 0) { const p = iso(c, r, 60); textW('VUOTO', p[0], p[1], 8, '#ff8a7a'); }
 }
 function drawOffice(col, row, t) { // a glass-walled corner with a desk, a binder shelf and a screen of orders
@@ -2685,23 +2936,22 @@ function drawOffice(col, row, t) { // a glass-walled corner with a desk, a binde
   for (let i = 0; i < 3; i++) { const a = iso(c - 0.05, r - 0.06, 31 - i * 3), b = iso(c + 0.05 + 0.04 * ((i + Math.floor(t * 2)) % 3), r - 0.06, 31 - i * 3); line(a, b, '#7ef0a0', 1); }
   box(c - 0.24, r - 0.04, c - 0.1, r + 0.06, 21, 22, '#f4f1e6'); // papers
   box(c - 0.1, r + 0.26, c + 0.14, r + 0.44, 8, 12, '#2c3540'); box(c - 0.1, r + 0.4, c + 0.14, r + 0.46, 12, 24, '#2c3540');
-  glassQ([iso(c + 0.48, r - 0.48, 0), iso(c + 0.48, r + 0.48, 0), iso(c + 0.48, r + 0.48, 30), iso(c + 0.48, r - 0.48, 30)]);
-  const p = iso(c, r, 46); textW('UFFICIO', p[0], p[1], 7, '#ffe8b0');
 }
+const CLERK_PALS = [{ Y: '#6b4527', y: '#4a2f1d', B: '#e8eef4', b: '#9fb0c4', O: '#2f7fb0' }, { Y: '#e8c070', y: '#b89040', B: '#c0392b', b: '#8a2a20', O: '#ffffff' }, { Y: '#2b2b2b', y: '#1b1b1b', B: '#7ed08a', b: '#4a8a5a', O: '#ffffff' }];
 function drawStockChip() { // under the clock: what is on the shelves, tap to open the office
-  if (!F) return;
-  const x = 544, y = 122, wh = whOf(F), cap = whCap(F), low = wh.bars < cap * tune.autoBelow, ord = onOrder(F);
-  rrect(x, y, 300, 30, 10, 'rgba(60,38,24,0.92)', low ? '#ff8a7a' : '#a7b0b8', 2);
-  rrect(x + 10, y + 9, 90, 12, 4, '#1b2229'); rrect(x + 10, y + 9, Math.max(0, 90 * wh.bars / Math.max(1, cap)), 12, 4, low ? '#ff8a7a' : '#a7b0b8');
-  text(`Barre ${wh.bars}/${cap}${ord ? ` · in arrivo ${ord}` : ''}`, x + 202, y + 16, 13, low ? '#ffb3a8' : '#e6e1d3');
-  btn(x, y, 300, 30, () => { sfx.click(); openPanel('office'); }, 'stockChip');
+  if (!F || state.town) return;
+  const x = 538, y = 58, wh = whOf(F), cap = whCap(F), low = wh.bars < cap * tune.autoBelow, ord = onOrder(F);
+  rrect(x, y, 268, 30, 10, HT().panel, low ? '#ff8a7a' : '#a7b0b8', 2);
+  rrect(x + 10, y + 9, 70, 12, 4, '#1b2229'); rrect(x + 10, y + 9, Math.max(0, 70 * wh.bars / Math.max(1, cap)), 12, 4, low ? '#ff8a7a' : '#a7b0b8');
+  text(`Barre ${wh.bars}/${cap}${ord ? ` · +${ord} in arrivo` : ''}`, x + 174, y + 16, 13, low ? '#ffb3a8' : '#e6e1d3');
+  btn(x, y, 268, 30, () => { sfx.click(); openPanel('office'); }, 'stockChip');
 }
 function drawOfficePanel(t) {
   const b = F; if (!b) { state.panel = null; return; }
   const P = panelFrame('Ufficio · Magazzino', 820, 520, () => { state.panel = null; }), wh = whOf(b), cap = whCap(b), ord = onOrder(b);
   const x = P.x + 34, w = P.w - 68;
   // stock
-  rrect(x, P.y + 82, w, 112, 14, '#5c3b25', '#a7b0b8', 2);
+  rrect(x, P.y + 82, w, 112, 14, HT().card, '#a7b0b8', 2);
   text('Barre grezze in magazzino', x + 20, P.y + 106, 18, '#fff', 'left');
   rrect(x + 20, P.y + 126, w - 40, 26, 8, '#1b2229');
   rrect(x + 20, P.y + 126, (w - 40) * wh.bars / Math.max(1, cap), 26, 8, wh.bars < cap * tune.autoBelow ? '#ff8a7a' : '#a7b0b8');
@@ -2744,11 +2994,11 @@ function clockText() {
 }
 const workHour = () => onShift() ? dayNum() * 8 + Math.floor(dayPhase() / WORK * 8) : -1;
 function siteProgress() { // how far the next site's building work has got
-  const st = F.stage + 1; if (st > 4) return 1;
+  const st = TIER() + 1; if (st > 4) return 1;
   const days = tune['build' + st + 'Days']; if (!days) return 1;
   return Math.max(0, Math.min(1, (state.t / tune.dayLength - (state.siteStart || 0)) / days));
 }
-const siteDaysLeft = () => { const st = F.stage + 1; if (st > 4) return 0; return Math.max(0, Math.ceil(tune['build' + st + 'Days'] * (1 - siteProgress()))); };
+const siteDaysLeft = () => { const st = TIER() + 1; if (st > 4) return 0; return Math.max(0, Math.ceil(tune['build' + st + 'Days'] * (1 - siteProgress()))); };
 function onWorkHour() { // each hour of the shift every running machine has a small chance to break, more when time runs fast or it is old
   const fast = (state.speed - 1) / Math.max(1, tune.speedFast - 1);
   for (const b of state.buildings) for (const m of b.machines) {
@@ -2757,6 +3007,11 @@ function onWorkHour() { // each hour of the shift every running machine has a sm
     if (rng() < p) { m.broken = 'repair'; incident(m, 'si è guastata: va riparata'); }
   }
 }
+function endShift() {
+  sfx.level(); showBanner('Fine turno: sono le 16:00', 'Le macchine si fermano fino alle 08: niente produzione e niente guasti', '#e8b45a');
+  events.push({ type: 'endShift', day: dayNum() }); save();
+}
+function toggleTime() { state.timeStop = !state.timeStop; sfx.click(); toast(state.timeStop ? 'Tempo fermo: sistema la fabbrica con calma' : 'Il tempo riparte', '#ffe08a'); }
 function onNewDay() { // every machine ages a day; the old ones need replacing
   for (const b of state.buildings) for (const m of b.machines) {
     if (m.phase < 2) continue;
@@ -2765,7 +3020,7 @@ function onNewDay() { // every machine ages a day; the old ones need replacing
     if (m.age >= tune.maxAge) { m.broken = 'old'; incident(m, 'è troppo vecchia: va sostituita'); }
   }
   for (const b of state.buildings) { const keep = F; F = b; autoOrder(b); F = keep; }
-  if (siteProgress() >= 1 && !state.siteToldDone && F.stage < 4) { state.siteToldDone = true; toast(`La sede del capitolo ${F.stage + 2} è pronta: ${TIERS[F.stage + 1].name}`, '#5bc7ff'); }
+  if (siteProgress() >= 1 && !state.siteToldDone && TIER() < 4) { state.siteToldDone = true; toast(`La sede del capitolo ${TIER() + 2} è pronta: ${TIERS[TIER() + 1].name}`, '#5bc7ff'); }
 }
 function incident(m, what) {
   m.cur = null; sfx.wrong();
@@ -2778,19 +3033,25 @@ function replaceMachine(m) {
   state.coins -= cost; m.age = 0; m.broken = null; sfx.ding(); state.panel = null;
   toast(`${MACH[m.type].name} sostituita con una nuova: -${fmt(cost)} monete`, '#7ef0a0'); save();
 }
-function drawClock(t) { // the date, a sun or moon, and the three speeds
-  const x = 544, y = 84, nk = nightK();
-  rrect(x, y, 300, 32, 10, 'rgba(60,38,24,0.92)', '#e8b45a', 2);
-  if (nk < 0.5) { ctx.beginPath(); ctx.ellipse(x + 18, y + 16, 7, 7, 0, 0, Math.PI * 2); ctx.fillStyle = '#ffd34a'; ctx.fill(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; line([x + 18 + Math.cos(a) * 9, y + 16 + Math.sin(a) * 9], [x + 18 + Math.cos(a) * 12, y + 16 + Math.sin(a) * 12], '#ffd34a', 1.5); } }
-  else { ctx.beginPath(); ctx.ellipse(x + 18, y + 16, 8, 8, 0, 0, Math.PI * 2); ctx.fillStyle = '#e8e2c8'; ctx.fill(); ctx.beginPath(); ctx.ellipse(x + 22, y + 13, 7, 7, 0, 0, Math.PI * 2); ctx.fillStyle = '#3a2416'; ctx.fill(); }
-  text(clockText(), x + 62, y + 17, 16, onShift() ? '#ffe8b0' : '#9fb3d6');
-  text(onShift() ? dateText() : 'Fuori turno · si riapre alle 08', x + 192, y + 17, onShift() ? 14 : 12, onShift() ? '#ffe8b0' : '#9fb3d6');
+function drawClock(t) { // the time and date, a sun or moon, the stop button and the three speeds
+  const x = 262, y = 12, nk = nightK(), stop = !!state.timeStop, off = !onShift();
+  rrect(x, y, 300, 40, 10, HT().panel, stop ? '#ff8a7a' : HT().edge, 2);
+  const cy = y + 20;
+  if (nk < 0.5) { ctx.beginPath(); ctx.ellipse(x + 20, cy, 7, 7, 0, 0, Math.PI * 2); ctx.fillStyle = '#ffd34a'; ctx.fill(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; line([x + 20 + Math.cos(a) * 9, cy + Math.sin(a) * 9], [x + 20 + Math.cos(a) * 12, cy + Math.sin(a) * 12], '#ffd34a', 1.5); } }
+  else { ctx.beginPath(); ctx.ellipse(x + 20, cy, 8, 8, 0, 0, Math.PI * 2); ctx.fillStyle = '#e8e2c8'; ctx.fill(); ctx.beginPath(); ctx.ellipse(x + 24, cy - 3, 7, 7, 0, 0, Math.PI * 2); ctx.fillStyle = '#3a2416'; ctx.fill(); }
+  text(clockText(), x + 66, cy, 18, off ? '#9fb3d6' : '#ffe8b0');
+  text(stop ? 'Tempo fermo' : off ? 'Fuori turno · macchine ferme' : dateText(), x + 200, cy, 13, stop ? '#ffb3a8' : off ? '#9fb3d6' : '#ffe8b0');
+  const px = x + 306; // stop / go
+  rrect(px, y, 50, 40, 8, stop ? '#ff8a7a' : HT().panel, stop ? '#7a2a20' : HT().edge, 2);
+  if (stop) poly([[px + 19, cy - 9], [px + 34, cy], [px + 19, cy + 9]], '#2b2410');
+  else { rrect(px + 17, cy - 9, 6, 18, 1, '#ffe8b0'); rrect(px + 27, cy - 9, 6, 18, 1, '#ffe8b0'); }
+  btn(px, y, 50, 40, toggleTime, 'timeStop');
   speeds().forEach((sp, i) => {
-    const bx = x + 308 + i * 64, on = state.speed === sp;
-    rrect(bx, y, 58, 32, 8, on ? '#f2c230' : 'rgba(60,38,24,0.92)', on ? '#7a5a10' : '#e8b45a', 2);
-    for (let k = 0; k <= i; k++) poly([[bx + 9 + k * 7, y + 9], [bx + 16 + k * 7, y + 16], [bx + 9 + k * 7, y + 23]], on ? '#2b2410' : '#ffe8b0');
-    text(`x${sp}`, bx + 44, y + 17, 13, on ? '#2b2410' : '#ffe8b0');
-    btn(bx, y, 58, 32, () => { state.speed = sp; sfx.click(); if (sp > 1 && !state.toldFast) { state.toldFast = true; toast('Tempo veloce: le macchine si guastano più spesso!', '#ffb35b'); } }, 'speed' + i);
+    const bx = px + 56 + i * 62, on = !stop && state.speed === sp;
+    rrect(bx, y, 58, 40, 8, on ? HT().accent : HT().panel, on ? '#7a5a10' : HT().edge, 2);
+    for (let k = 0; k <= i; k++) poly([[bx + 8 + k * 7, cy - 7], [bx + 15 + k * 7, cy], [bx + 8 + k * 7, cy + 7]], on ? '#2b2410' : '#ffe8b0');
+    text(`x${sp}`, bx + 44, cy + 1, 13, on ? '#2b2410' : '#ffe8b0');
+    btn(bx, y, 58, 40, () => { state.speed = sp; state.timeStop = false; sfx.click(); if (sp > 1 && !state.toldFast) { state.toldFast = true; toast('Tempo veloce: durante il turno le macchine si guastano più spesso!', '#ffb35b'); } }, 'speed' + i);
   });
 }
 function dayPhase() { return state ? (state.t / tune.dayLength) % 1 : 0.1; } // 0 is 08:00
@@ -2799,7 +3060,7 @@ function nightK() { // 0 by day, 1 deep at night, with dusk and dawn between
   if (p < 0.72) return 0; if (p < WORK) return (p - 0.72) / (WORK - 0.72); if (p < 0.95) return 1; return 1 - (p - 0.95) / 0.05;
 }
 function pixelPass(drawFn, alpha) {
-  const P = CHEAP ? 1 : Math.max(2, Math.min(5, Math.round(cam.zoom * 4) / 2)), w = Math.ceil(W / P), h = Math.ceil(H / P);
+  const P = CHEAP ? 1 : scene === 'play' && state.town ? tune.pixelTown : scene === 'play' && F ? tune.pixelInside : Math.max(2, Math.min(5, Math.round(cam.zoom * 4) / 2)), w = Math.ceil(W / P), h = Math.ceil(H / P);
   if (pcan.width !== w || pcan.height !== h) { pcan.width = w; pcan.height = h; }
   const keep = ctx; ctx = pctx;
   ctx.setTransform(1 / P, 0, 0, 1 / P, 0, 0); ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, W, H);
@@ -2808,7 +3069,7 @@ function pixelPass(drawFn, alpha) {
   ctx.fillStyle = 'rgba(255,186,104,0.08)'; ctx.fillRect(0, 0, w, h); // warm light
   const nk = nightK(), p = dayPhase(), dusk = p > 0.5 && p < 0.75 ? Math.max(0, 1 - Math.abs(p - 0.62) / 0.1) : 0;
   if (dusk > 0) { ctx.fillStyle = `rgba(255,120,50,${0.16 * dusk})`; ctx.fillRect(0, 0, w, h); }
-  if (nk > 0) { ctx.fillStyle = `rgba(20,30,80,${tune.nightDark * nk * (F ? 0.6 : 1)})`; ctx.fillRect(0, 0, w, h); }
+  if (nk > 0) { ctx.fillStyle = `rgba(20,30,80,${tune.nightDark * nk * (F && !(scene === 'play' && state.town) ? 0.6 : 1)})`; ctx.fillRect(0, 0, w, h); }
   const g = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.95); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(30,16,8,${alpha})`); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   ctx = keep; ctx.imageSmoothingEnabled = false; ctx.drawImage(pcan, 0, 0, w * P, h * P); ctx.imageSmoothingEnabled = true;
 }
@@ -2877,7 +3138,7 @@ const scenes = {
   move: {
     update(dt) {
       const M = state.move; M.t += dt; state.t += dt * 0.3;
-      if (M.t > tune.moveLength && (taps.splice(0).length || pressed('Enter') || pressed('Space'))) { scene = 'play'; centerCam(); showBanner(`Capitolo ${M.st + 1}: ${TIERS[M.st].name}`, `Nuova sede: ${shedSize(M.st).join('×')} celle`, '#5bc7ff'); }
+      if (M.t > tune.moveLength && (taps.splice(0).length || pressed('Enter') || pressed('Space'))) { scene = 'play'; centerCam(); showBanner(`Capitolo ${M.st + 1}: ${TIERS[M.st].name}`, `Nuova sede vuota da ${shedSize(M.st).join('×')} celle · le altre continuano a produrre`, '#5bc7ff'); }
       else if (M.t < tune.moveLength && (pressed('Enter') || pressed('Escape'))) M.t = tune.moveLength;
       taps.length = 0;
     },
@@ -2945,6 +3206,7 @@ const scenes = {
         if (pressed('KeyR')) openPanel('recipes');
         if (pressed('KeyT')) openPanel('tools');
         if (pressed('KeyQ')) openPanel('crew');
+        if (pressed('KeyU') && F) openPanel('office');
         if (!state.panel) {
           if (F) {
             if (pressed('Digit1')) setTool(state.tool === 'op' ? null : 'op');
@@ -2963,14 +3225,16 @@ const scenes = {
         if (!ptr.down) { const d = state.wallDrag; state.wallDrag = null; if (d.a && d.b && (d.a[0] !== d.b[0] || d.a[1] !== d.b[1])) commitDraw(rectOf(d.a, d.b)); }
       }
       const tp = taps.splice(0);
-      for (const p of tp) { if (!hitButtons(p.x, p.y) && !state.mg && !state.panel) { if (F) worldTap(p.x, p.y); else outsideTap(p.x, p.y); } }
+      if (pressed('KeyE') && !state.mg && !state.panel) toggleTown();
+      if (pressed('KeyF') && !state.mg) toggleTime();
+      for (const p of tp) { if (!hitButtons(p.x, p.y) && !state.mg && !state.panel) { if (state.town) townTap(p.x, p.y); else if (F) worldTap(p.x, p.y); else outsideTap(p.x, p.y); } }
       updateWorld(dt);
     },
     draw() {
       const t = state.t;
       ui = { buttons: [], named: {} };
-      pixelPass(() => { if (F) drawWorld(t); else drawOutside(t); }, F ? 0.34 : 0.22);
-      if (F) drawOverlaysWorld(t); else drawOverlaysOut(t);
+      if (state.town) { pixelPass(() => { ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-cam.x, -cam.y); drawTown(t); ctx.restore(); }, 0.22); drawTownLabels(t); }
+      else { pixelPass(() => { if (F) drawWorld(t); else drawOutside(t); }, F ? 0.34 : 0.22); if (F) drawOverlaysWorld(t); else drawOverlaysOut(t); }
       drawHUD(t);
       drawTopLayer(t);
       if (state.panel === 'shop') drawShop(t);
@@ -2982,7 +3246,7 @@ const scenes = {
       else if (state.panel === 'crew') drawCrew(t);
       else if (state.panel === 'routes') drawRoutes(t);
       if (state.mg) drawMinigame(t);
-      drawTutorial(t);
+      if (!state.town) drawTutorial(t);
     },
   },
   pause: {

@@ -183,7 +183,11 @@ window.CONFIG = {
   zoomStart: { value: 1.75, min: 0.5, max: 3, step: 0.05 },
   panSpeed: { value: 420, min: 50, max: 2000, step: 10 },    // px/s con le frecce
   workerSpeed: { value: 1.3, min: 0.2, max: 5, step: 0.1 },  // celle al secondo
-  dayLength: { value: 120, min: 20, max: 1800, step: 10 },   // s reali di una giornata lavorativa (8 ore di gioco, 08:00-16:00) a velocità x1
+  dayLength: { value: 525, min: 50, max: 3000, step: 5 },   // s reali di una giornata a x1: il turno di 8 ore (08-16) ne è l'80% = 7 minuti; a fine turno il tempo si ferma
+  pixelInside: { value: 1, min: 1, max: 5, step: 1 },        // grandezza del pixel dentro la fabbrica (1 = nitido)
+  pixelTown: { value: 2, min: 1, max: 5, step: 1 },          // grandezza del pixel nella vista della città
+  townZoomMin: { value: 0.35, min: 0.2, max: 1, step: 0.05 }, townZoomMax: { value: 2.4, min: 1, max: 4, step: 0.1 },
+  townZoom: { value: 1.1, min: 0.3, max: 3, step: 0.05 },    // zoom quando esci dalla fabbrica
   nightDark: { value: 0.4, min: 0, max: 0.8, step: 0.05 },    // quanto si scurisce di notte
   // ---- Calendario, velocità e imprevisti ----
   speedMid: { value: 3, min: 1, max: 20, step: 1 },          // velocità del secondo pulsante
@@ -196,14 +200,15 @@ window.CONFIG = {
   // ---- Magazzino e ufficio ----
   barsStart: { value: 40, min: 0, max: 500, step: 5 },        // barre in magazzino all'inizio
   barCost: { value: 1, min: 0, max: 100, step: 1 },           // monete per barra ordinata
-  barsPerCell: { value: 25, min: 1, max: 100, step: 1 },      // barre che stanno in una cella della zona magazzino
+  barsPerCell: { value: 20, min: 1, max: 100, step: 1 },      // barre che stanno in una cella della zona magazzino
   deliveryHours: { value: 2, min: 0, max: 24, step: 0.5 },    // ore di gioco perché arrivi un ordine
+  unloadTime: { value: 3.5, min: 0.5, max: 15, step: 0.5 }, // secondi reali che il camion impiega a scaricare
   autoBelow: { value: 0.25, min: 0, max: 0.9, step: 0.05 },   // il riordino automatico scatta sotto questa quota del magazzino
-  wh0W: { value: 2, min: 1, max: 8, step: 1 }, wh0H: { value: 1, min: 1, max: 8, step: 1 }, // zona magazzino per sede (celle)
-  wh1W: { value: 2, min: 1, max: 8, step: 1 }, wh1H: { value: 2, min: 1, max: 8, step: 1 },
-  wh2W: { value: 3, min: 1, max: 8, step: 1 }, wh2H: { value: 2, min: 1, max: 8, step: 1 },
-  wh3W: { value: 3, min: 1, max: 8, step: 1 }, wh3H: { value: 3, min: 1, max: 8, step: 1 },
-  wh4W: { value: 4, min: 1, max: 8, step: 1 }, wh4H: { value: 3, min: 1, max: 8, step: 1 },
+  annex0W: { value: 2, min: 1, max: 6, step: 1 }, officeW0: { value: 2, min: 1, max: 8, step: 1 }, office0H: { value: 1, min: 1, max: 6, step: 1 }, // per sede: colonne dell'ala magazzino a destra; larghezza e profondità dell'ufficio staccato davanti
+  annex1W: { value: 3, min: 1, max: 6, step: 1 }, officeW1: { value: 3, min: 1, max: 8, step: 1 }, office1H: { value: 1, min: 1, max: 6, step: 1 },
+  annex2W: { value: 3, min: 1, max: 6, step: 1 }, officeW2: { value: 3, min: 1, max: 8, step: 1 }, office2H: { value: 2, min: 1, max: 6, step: 1 },
+  annex3W: { value: 4, min: 1, max: 6, step: 1 }, officeW3: { value: 4, min: 1, max: 8, step: 1 }, office3H: { value: 2, min: 1, max: 6, step: 1 },
+  annex4W: { value: 4, min: 1, max: 6, step: 1 }, officeW4: { value: 5, min: 1, max: 8, step: 1 }, office4H: { value: 2, min: 1, max: 6, step: 1 },
   build1Days: { value: 8, min: 0, max: 200, step: 1 },        // giorni di cantiere della sede del capitolo 2
   build2Days: { value: 14, min: 0, max: 200, step: 1 },
   build3Days: { value: 20, min: 0, max: 200, step: 1 },
