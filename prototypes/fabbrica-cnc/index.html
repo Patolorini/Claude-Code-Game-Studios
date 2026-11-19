@@ -34,8 +34,8 @@ const TITLE = 'Fabbrica CNC';
 const CONTROLS = [
   'Tocca o clicca: compra, piazza, costruisci e assegna i lavori',
   'Trascina: sposta la visuale  ·  Rotella o pizzico: zoom',
-  'Dentro: 1 Operatore · 2 Demolisci · Q squadra · B negozio · R ricette · T attrezzi',
-  'Frecce: sposta · + / -: zoom · Spazio: ferma l\'ago · P: pausa · M: audio',
+  'Dentro: 1 Operatore · 2 Demolisci · Q squadra · U ufficio · K abilità · B negozio · E città',
+  'Frecce: sposta · + / -: zoom · F: ferma il tempo · Spazio: ferma l\'ago · P: pausa · M: audio',
 ];
 const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
 const CHEAP = params.get('render') === 'cheap';
@@ -248,7 +248,7 @@ const recipeOf = seq => RECIPES.find(r => r.seq === seq);
 const recipeVal = seq => recipeOf(seq) ? tune['val_' + seq] : tune.val_scrap;
 const PHASES = ['Montaggio', 'Rete', 'Configurazione'];
 const TOOLS = [
-  { key: 'W', name: 'Chiave dinamometrica', phase: 0, req: 'toolReqW', eff: l => `${boltTurnsAt(l)} giri per bullone` },
+  { key: 'W', name: 'Chiave dinamometrica', phase: 0, req: 'toolReqW', eff: l => `${boltTurnsAt(l)} ${boltTurnsAt(l) === 1 ? 'giro' : 'giri'} per bullone` },
   { key: 'C', name: 'Crimpatrice', phase: 1, req: 'toolReqC', eff: l => `${crimpTapsAt(l)} tocchi, rete +${Math.round(netMax(l) * 100)}%` },
   { key: 'Te', name: 'Tester digitale', phase: 2, req: 'toolReqT', eff: l => `zona verde ${Math.round(zoneAt(l) * 100)}%${l > 1 ? ', ago più lento' : ''}` },
 ];
@@ -297,12 +297,12 @@ const GOALS = [
   { text: 'Collega una macchina in rete: toccala > Collega in rete', done: () => allMachines().some(m => m.netPct != null) },
   { text: 'Costruisci la Fresa CNC', done: () => built('F') },
   { text: 'Scopri una ricetta con 3 macchine', done: () => state.found.some(s => s.length >= 3) },
-  { text: 'Capitolo 2: trasferisciti nell\'officina di mattoni (Negozio > Sede)', done: () => anyB(b => b.stage >= 1) },
+  { text: 'Capitolo 2: compra l\'officina di mattoni (Negozio > Sede)', done: () => anyB(b => b.stage >= 1) },
   { text: 'Potenzia un attrezzo', done: () => state.tools.W + state.tools.C + state.tools.Te > 3 },
   { text: 'Scopri 6 ricette', done: () => state.found.length >= 6, prog: () => [state.found.length, 6] },
   { text: 'Costruisci la Foratrice CNC', done: () => built('D') },
   { text: 'Produci l\'Albero motore (4 macchine)', done: () => state.found.includes('TLFD') },
-  { text: 'Capitolo 3: trasferisciti nello stabilimento', done: () => anyB(b => b.stage >= 2) },
+  { text: 'Capitolo 3: compra lo stabilimento', done: () => anyB(b => b.stage >= 2) },
   { text: 'Capitolo 4: la fabbrica moderna', done: () => anyB(b => b.stage >= 3) },
   { text: 'Costruisci il Centro di lavoro 5 assi', done: () => built('X') },
   { text: 'Produci la Pala aeronautica (5 macchine)', done: () => state.found.includes('TLFDX') },
@@ -344,7 +344,7 @@ function buyStage() { // a new, bigger site: it starts empty, the old one stays 
   const st = TIER() + 1; if (st > 4) return;
   const lvl = tune['shed' + st + 'Lvl'], cost = tune['shed' + st + 'Cost'];
   if (state.level < lvl) return toast(`Serve il livello ${lvl}`, '#ffb35b');
-  if (siteProgress() < 1) return toast(`La nuova sede è ancora in costruzione: ${siteDaysLeft()} giorni`, '#ffb35b');
+  if (siteProgress() < 1) return toast(`La nuova sede è ancora in costruzione: ${daysTxt(siteDaysLeft())}`, '#ffb35b');
   if (state.coins < cost) return toast('Monete insufficienti', '#ffb35b');
   const [C, R] = shedSize(st), from = TIERS[F ? F.stage : st - 1].site;
   state.coins -= cost; state.siteStart = state.t / tune.dayLength; state.siteToldDone = false;
@@ -584,7 +584,8 @@ function drawMachineSprite(im, col, row, w, h, dir, st, t, busy) {
   ctx.imageSmoothingEnabled = Math.abs(ctx.getTransform().a) * dw / im.naturalWidth < 1;
   ctx.drawImage(im, -dw / 2, -dh, dw, dh); ctx.restore();
   const top = spriteTop(im, w, h);
-  stackLight(col + w / 2, row + h / 2, top - 4, st, t); // the status light, on top of the art
+  const lc = col + 0.14, lr = row + h - 0.14; // the status light: an andon pole standing on the floor at the front-left corner, not floating over the art
+  line(iso(lc, lr, 0), iso(lc, lr, 16), '#555c63', 2); stackLight(lc, lr, 14, st, t);
   return top;
 }
 const GEN = { // the look of each generation: paint, base, how much it shines
@@ -792,6 +793,18 @@ function drawGround() { // the ground round the factory (like the map, but close
   for (let i = 0; i < 4; i++) { const r = Y.r0 + 0.5 + i * 0.6; poly([iso(Y.c0 + 0.12, r - 0.18, 0.42), iso(Y.c0 + 0.3, r, 0.42), iso(Y.c0 + 0.12, r + 0.18, 0.42)], '#f2c230'); }
   box(Y.c0 + 0.02, Y.r0 + 0.2, Y.c0 + 0.14, Y.r1 - 0.2, 0, 6, '#2b2b2b');
   const p = iso(Y.c1 - 0.3, Y.r0 + 0.05, 0); line(p, [p[0], p[1] - 26], '#5d6366', 1.5); rrect(p[0] - 16, p[1] - 36, 32, 11, 2, '#2f7fb0', '#fff', 1); textW('SCARICO', p[0], p[1] - 30, 6, '#fff');
+}
+const bgCan = document.createElement('canvas'), bgCtx = bgCan.getContext('2d'); let bgKey = '';
+function drawBackdrop(t) { // the ground and the neighbourhood round the factory, kept as a picture: redrawn when the view moves, else once a second
+  const tgt = ctx.canvas, m = ctx.getTransform(), key = [tgt.width, tgt.height, m.a, m.e, m.f, F.id, F.stage, F.machines.length, Math.floor(performance.now() / 1000)].map(v => typeof v === 'number' ? Math.round(v * 100) / 100 : v).join('|');
+  if (key !== bgKey) {
+    if (bgCan.width !== tgt.width || bgCan.height !== tgt.height) { bgCan.width = tgt.width; bgCan.height = tgt.height; }
+    const keep = ctx; ctx = bgCtx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, bgCan.width, bgCan.height); ctx.setTransform(m); ctx.imageSmoothingEnabled = keep.imageSmoothingEnabled;
+    drawGround(); neighbourObjs(t).sort((a, b) => a.d - b.d).forEach(o => o.f());
+    ctx = keep; bgKey = key;
+  }
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(bgCan, 0, 0); ctx.restore();
 }
 function neighbourObjs(t) { // the buildings and trees of the lots, in depth order with everything else
   const S = surroundings(), out = [], pal = ['#e8c88a', '#f0dcb8', '#c8d8e8', '#e8b8a8'];
@@ -1415,7 +1428,7 @@ function addXp(n) {
 function unlocksAt(L) {
   const a = [];
   ORDER.forEach(t => { if (mcfg('unlock', t) === L) a.push(MACH[t].name); });
-  for (let st = 1; st <= 4; st++) if (tune['shed' + st + 'Lvl'] === L) a.push(`ampliamento ${shedSize(st).join('×')}`);
+  for (let st = 1; st <= 4; st++) if (tune['shed' + st + 'Lvl'] === L) a.push(`nuova sede ${shedSize(st).join('×')}`);
   TOOLS.forEach(tl => { for (let l = 1; l < tune.toolMax; l++) if (toolReq(tl, l) === L) a.push(`${tl.name} liv. ${l + 1}`); });
   return a;
 }
@@ -1441,14 +1454,14 @@ function buy(type, mk = 1) {
   if (state.level < mcfg('unlock', type)) return toast(`Si sblocca al livello ${mcfg('unlock', type)}`, '#ffb35b');
   if (state.coins < cost) return toast('Monete insufficienti', '#ffb35b');
   if (powerUsed(F) + powerOf(type, mk) > powerCap(F)) return toast(`Corrente insufficiente: servono ${powerOf(type, mk)} kW, ne restano ${powerCap(F) - powerUsed(F)}`, '#ffb35b');
-  if (!freeCells()) return toast('Capannone pieno: amplialo o demolisci qualcosa', '#ffb35b');
+  if (!freeCells()) return toast('Sede piena: demolisci qualcosa o compra una sede più grande', '#ffb35b');
   state.panel = null; state.tool = null; state.placing = { kind: 'mach', type, cost, mk, dir: 0, rotated: false }; sfx.click();
 }
 function buyLogi(k) {
   if ((k === 'rack' || k === 'pc') && state.level < tune.rackLvl) return toast(`${LOGI[k].name}: si sblocca al livello ${tune.rackLvl}`, '#ffb35b');
   const cost = logiCost(k);
   if (state.coins < cost) return toast('Monete insufficienti', '#ffb35b');
-  if (!freeCells()) return toast('Capannone pieno: amplialo o demolisci qualcosa', '#ffb35b');
+  if (!freeCells()) return toast('Sede piena: demolisci qualcosa o compra una sede più grande', '#ffb35b');
   state.panel = null; state.tool = null; state.placing = { kind: k, cost, dir: 0, rotated: false }; sfx.click();
 }
 function canPlaceAt(c, r, P) {
@@ -1460,7 +1473,7 @@ function canPlaceAt(c, r, P) {
 function rotatePlacing() { if (!state.placing) return; state.placing.dir = (state.placing.dir + 1) % 4; state.placing.rotated = true; sfx.click(); }
 function placeAt(c, r) {
   const P = state.placing;
-  if (!canPlaceAt(c, r, P)) { sfx.wrong(); return toast('Qui non c\'è spazio: scegli una cella libera o un nastro', '#ffb35b'); }
+  if (!canPlaceAt(c, r, P)) { sfx.wrong(); return toast(P.kind === 'mach' ? 'Qui non ci sta: la macchina occupa più celle, cerca uno spazio libero più grande' : 'Qui non c\'è spazio: scegli una cella libera', '#ffb35b'); }
   const old = cellAt(c, r);
   const dir = P.dir;
   if (P.m) { // moving a machine that is already built
@@ -1487,7 +1500,7 @@ function toggleOp(m) {
   if (m.phase < 2) return toast('Prima finisci di costruire la macchina', '#ffb35b');
   const cw = freeOps()[0];
   if (!cw) return toast('Nessun Operatore macchina libero: cambia lavoro a qualcuno nella Squadra (Q)', '#ffb35b');
-  cw.m = m.id; m.op = true; sfx.clack(); events.push({ type: 'op', m: m.type }); save();
+  cw.m = m.id; m.op = true; m.present = true; sfx.clack(); events.push({ type: 'op', m: m.type }); save();
   toast(`${cw.name} sulla ${MACH[m.type].name}: lavora ${partShort(m.input)}`, '#7ef0a0');
 }
 function cycleJob(cw) { // the job box in the crew panel
@@ -1754,7 +1767,7 @@ function toolIcon(key, x, y, s) {
   ctx.restore();
 }
 function machineIcon(type, x, y, s, o = {}) { // a mini machine in its world look
-  const mk = o.mk || 1, [w, h] = fpDims(mk, 0, type), k = 1 / Math.max(1, (w + h) / 2.2), c = iso(w / 2, h / 2, 0);
+  const mk = o.mk || 1, [w, h] = fpDims(mk, 0, type), k = 1 / Math.max(1, (w + h) / 1.8), c = iso(w / 2, h / 2, 0);
   ctx.save(); ctx.translate(x, y); ctx.scale(s * k, s * k); ctx.translate(-c[0], -c[1] - 16 + 16);
   drawMachine(type, 0, 0, { status: o.status || 'wait', t: o.t || 0, busy: o.busy, mk });
   ctx.restore();
@@ -1936,7 +1949,7 @@ function drawShop(t) {
       text(`Lavora un pezzo in ${(timeOf(tp) * MK_T[mk - 1]).toFixed(1)} s`, x + w / 2, y + 240, 13, mk > 1 ? '#ffe08a' : '#b9c4ce');
       if (av > 1 && !locked) for (let k = 1; k <= av; k++) { const bx = x + w / 2 - av * 18 + (k - 1) * 36; button(['I', 'II', 'III', 'IV', 'V'][k - 1], bx, y + 280, 34, 28, () => { state.shopMk[tp] = k; sfx.click(); }, { size: 13, color: k === mk ? '#e0b84a' : '#e6e1d3', name: `mk${tp}${k}` }); }
       const pw = powerOf(tp, mk), pwOk = powerUsed(F) + pw <= powerCap(F);
-      text(`Ingombro ${fpDims(mk, 0, tp)[0]}×${fpDims(mk, 0, tp)[1]} · consumo ${pw} kW`, x + w / 2, y + 262, 13, pwOk ? '#b9c4ce' : '#ff8a7a');
+      text(`${fpDims(mk, 0, tp)[0]}×${fpDims(mk, 0, tp)[1]} celle · ${pw} kW`, x + w / 2, y + 262, 13, pwOk ? '#b9c4ce' : '#ff8a7a');
       if (owned(tp) && av < 2) text(`Ne possiedi ${owned(tp)}`, x + w / 2, y + 290, 14, '#7ef0a0');
       if (locked) { rrect(x + 30, y + 330, w - 60, 56, 10, '#1b2229', '#59626b', 2); text(`Livello ${lvl}`, x + w / 2, y + 358, 18, '#ffb35b'); }
       else {
@@ -1983,7 +1996,7 @@ function drawShop(t) {
       else if (siteProgress() < 1 || state.level < lvl) {
         const pr = siteProgress();
         rrect(x + 20, y + 286, w - 40, 14, 7, '#3a2416'); if (pr > 0) rrect(x + 20, y + 286, Math.max(14, (w - 40) * pr), 14, 7, pr >= 1 ? '#7ef0a0' : '#f2c230');
-        text(pr >= 1 ? 'Cantiere finito' : `Cantiere ${Math.round(pr * 100)}% · ${siteDaysLeft()} giorni`, x + w / 2, y + 312, 14, pr >= 1 ? '#9ce8b4' : '#ffe08a');
+        text(pr >= 1 ? 'Cantiere finito' : `Cantiere ${Math.round(pr * 100)}% · ${daysTxt(siteDaysLeft())}`, x + w / 2, y + 312, 14, pr >= 1 ? '#9ce8b4' : '#ffe08a');
         rrect(x + 30, y + 326, w - 60, 48, 10, '#3a2416', '#59626b', 2); text(state.level < lvl ? `Livello ${lvl}` : 'Aspetta il cantiere', x + w / 2, y + 350, 16, '#ffb35b');
       }
       else { coinIcon(x + 70, y + 296, 0.9); text(fmt(cost), x + 88, y + 296, 20, state.coins >= cost ? '#ffe08a' : '#ff8a7a', 'left'); button('Compra la sede', x + 20, y + 320, w - 40, 56, buyStage, { enabled: state.coins >= cost, color: '#5bc7ff', name: 'expand', size: 18 }); }
@@ -2103,7 +2116,7 @@ function drawMachinePanel(t) {
   text(!m.op ? 'Ferma: serve un Operatore macchina' : m.out ? 'Pezzo pronto: aspetta un magazziniere' : m.cur ? 'Al lavoro' : have ? 'In partenza' : crewIn(F, 'mag').length ? `In attesa che un magazziniere porti "${partShort(m.input)}"` : 'Ferma: nessun magazziniere porta i pezzi', P.x + 44, P.y + 372, 14, !m.op || m.out ? '#ffb35b' : '#9ce8b4', 'left');
   if (!m.broken) button(m.op ? 'Togli operatore' : `Metti operatore (${opsFree()} liberi)`, P.x + 24, P.y + 402, 300, 58, () => toggleOp(m), { color: '#e07a2e', size: 17, name: 'opm', enabled: m.op || (opsFree() > 0 && m.phase >= 2) });
   if (!m.broken) button('Cambia lavorazione', P.x + 340, P.y + 402, 356, 58, () => cycleInput(m), { color: '#f2c230', size: 17, name: 'inputm' });
-  text(`Età: ${m.age || 0} giorni · da sostituire a ${maxAgeE()}`, P.x + P.w - 30, P.y + 100, 13, (m.age || 0) > maxAgeE() * 0.8 ? '#ffb35b' : '#d8c8a8', 'right');
+  text(`Età: ${m.age || 0} ${(m.age || 0) === 1 ? 'giorno' : 'giorni'} · da sostituire a ${maxAgeE()}`, P.x + P.w - 30, P.y + 100, 13, (m.age || 0) > maxAgeE() * 0.8 ? '#ffb35b' : '#d8c8a8', 'right');
   if (m.broken) {
     rrect(P.x + 24, P.y + 402, P.w - 48, 58, 10, 'rgba(120,30,20,0.6)', '#ff8a7a', 2);
     text(m.broken === 'old' ? 'Troppo vecchia: non lavora più' : 'Guasta: non lavora', P.x + 44, P.y + 431, 17, '#ffd0c8', 'left');
@@ -2292,7 +2305,7 @@ function drawTutorial(t) {
   } else if (g === 7) { say = 'La rete va tenuta in piedi: apri la Squadra e dai a qualcuno il lavoro di Informatico. Girerà a controllare i collegamenti.'; if (!state.panel) at(N.crew, 'Squadra'); }
   else if (g === 8) say = 'Tocca una macchina e scegli "Collega in rete": col minigioco del cavo la macchina rende +10%.';
   else if (g === 9 && state.level >= tune.unlockF && state.coins >= costOf('F')) shopFor({ tab: 0, btn: 'buyF', label: 'Compra la Fresa' });
-  else if (g === 11) { say = state.level < tune.shed1Lvl ? `Il capannone si fa stretto? Al livello ${tune.shed1Lvl} potremo trasferirci nella vecchia officina di mattoni.` : 'L\'officina di mattoni è in vendita: Negozio > Sede. Le macchine traslocano con noi!'; if (state.level >= tune.shed1Lvl && state.coins >= tune.shed1Cost) shopFor({ tab: 2, btn: 'expand', label: 'Amplia il capannone' }); }
+  else if (g === 11) { say = state.level < tune.shed1Lvl ? `Il capannone si fa stretto? Al livello ${tune.shed1Lvl} potremo comprare la vecchia officina di mattoni.` : 'L\'officina di mattoni è in vendita: Negozio > Sede. Questa sede resta tua e continua a produrre; la nuova parte vuota.'; if (state.level >= tune.shed1Lvl && state.coins >= tune.shed1Cost) shopFor({ tab: 2, btn: 'expand', label: 'Compra la sede' }); }
   if (say && !state.panel && !state.placing) drawNarrator(t, say);
   if (!target) return;
   const ax = target.x, ay = target.y - 20 + bounce;
@@ -2930,7 +2943,7 @@ const TIERS = [
   { short: 'Capannone', name: 'Il capannone in affitto', site: { c: 36, r: 14, w: 4, h: 3 }, style: 'barn',
     text: 'Tutto comincia qui: un vecchio capannone di legno ai margini della zona industriale. Pochi soldi, tanta voglia.' },
   { short: 'Officina', name: 'L\'officina di mattoni', site: { c: 28, r: 8, w: 5, h: 3 }, style: 'brick',
-    text: 'Gli ordini crescono. Ti trasferisci nella vecchia officina di mattoni accanto alla ferrovia. In città apre la nuova scuola.' },
+    text: 'Gli ordini crescono. Compri la vecchia officina di mattoni accanto alla ferrovia. In città apre la nuova scuola.' },
   { short: 'Stabilimento', name: 'Lo stabilimento', site: { c: 37, r: 19, w: 6, h: 4 }, style: 'brickBig',
     text: 'Ormai sei un nome conosciuto: compri lo stabilimento in fondo alla zona industriale. Accanto alla ferrovia nasce la stazione merci.' },
   { short: 'Fabbrica moderna', name: 'La fabbrica moderna', site: { c: 35, r: 1, w: 7, h: 4 }, style: 'modern',
@@ -3021,7 +3034,7 @@ function townSpots() { // what can be tapped outside, with its label
     const own = state.buildings.find(b => b.stage === i);
     if (own) out.push({ s: T.site, title: own === F ? `${own.name} · sei qui` : own.name, sub: own === F ? 'Tocca per rientrare' : `In produzione · tocca per entrare`, col: own === F ? '#7ef0a0' : '#bfe3ff', home: own });
     else if (i === tier + 1) { const p = siteProgress(), lv = tune['shed' + i + 'Lvl'];
-      out.push({ s: T.site, title: `${T.short} · capitolo ${i + 1}`, sub: p < 1 ? `Cantiere ${Math.round(p * 100)}% · ${siteDaysLeft()} giorni` : state.level >= lv ? 'Pronta: comprala dal Negozio > Sede' : `Pronta · serve il livello ${lv}`, col: p < 1 ? '#f2c230' : '#5bc7ff', prog: p }); }
+      out.push({ s: T.site, title: `${T.short} · capitolo ${i + 1}`, sub: p < 1 ? `Cantiere ${Math.round(p * 100)}% · ${daysTxt(siteDaysLeft())}` : state.level >= lv ? 'Pronta: comprala dal Negozio > Sede' : `Pronta · serve il livello ${lv}`, col: p < 1 ? '#f2c230' : '#5bc7ff', prog: p }); }
   });
   for (const g of GROWTH) if (tier === g.min - 1) { const p = growthProgress(g); out.push({ s: g, title: GROWTH_NAME[g.kind], sub: p >= 1 ? 'Finito!' : `Cantiere ${Math.round(p * 100)}%`, col: p >= 1 ? '#7ef0a0' : '#e6e1d3', prog: p, small: true }); }
   return out;
@@ -3121,7 +3134,7 @@ function updateWorld(dt) {
   state.floats = state.floats.filter(f => f.life > 0);
   for (const tt of state.toasts) tt.life -= dt;
   state.toasts = state.toasts.filter(tt => tt.life > 0);
-  if (state.banner) { state.banner.life -= dt; if (state.banner.life <= 0) state.banner = null; }
+  if (state.banner && !state.panel && !state.mg) { state.banner.life -= dt; if (state.banner.life <= 0) state.banner = null; } // a big banner waits while a panel is open
   state.welcome = Math.max(0, state.welcome - dt);
   checkGoals();
   state.score = state.earned;
@@ -3135,7 +3148,7 @@ function drawGhost(P, c, r, t) {
 }
 function drawWorld(t) {
   ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-cam.x, -cam.y);
-  drawGround(); drawFloor(); drawCables();
+  drawBackdrop(t); drawFloor(); drawCables();
   const cells = Object.values(F.grid);
   drawCellMarks(t); drawAnnexFloor();
   if (!CHEAP) drawShadows(cells.filter(o => o.kind !== 'belt' && !(o.kind === 'mach' && !o.main)).map(o => o.kind === 'mach' ? [o.c + 0.12, o.r + 0.12, o.c + fpOf(o.m)[0] - 0.12, o.r + fpOf(o.m)[1] - 0.12, machineTopM(o.m.type, o.m.mk)] : [o.c + 0.12, o.r + 0.12, o.c + 0.88, o.r + 0.88, o.kind === 'mach' ? (o.main ? machineTopM(o.m.type, o.m.mk) : 0) : o.kind === 'rack' ? 60 : o.kind === 'wh' ? 48 : o.kind === 'pc' || o.kind === 'office' ? 30 : 22]));
@@ -3166,7 +3179,6 @@ function drawWorld(t) {
   const atWork = onShift();
   for (const k of F.commute || []) objs.push({ d: k.x + k.y, f: () => drawCommuter(k, t) });
   for (const w of F.workers) if (atWork && !w.hidden) objs.push({ d: w.c + w.r, f: () => drawWorker(w, t) });
-  objs.push(...neighbourObjs(t));
   for (const k of F.clerks || []) objs.push({ d: k.x + k.y + (k.mode === 'sit' ? 0.3 : 0), f: () => drawClerk(k, t) });
   for (const k of F.trucks || []) objs.push({ d: k.c + k.r + 0.8, f: () => drawTruck(k, t) });
   for (const w of Object.values(F.itw || {})) if (atWork && !w.hidden) objs.push({ d: w.c + w.r + 0.01, f: () => {
@@ -3240,7 +3252,7 @@ function orderBars(b, n, auto) {
   const cost = Math.ceil(n * barCostE());
   if (state.coins < cost) return auto || toast('Monete insufficienti', '#ffb35b');
   state.coins -= cost; whOf(b).orders.push({ n, at: state.t + deliveryE() * hourSec() });
-  if (!auto) { sfx.click(); toast(`Ordinate ${n} barre: -${fmt(cost)} monete, arrivano in ${deliveryE()} ore`, '#bfe3ff'); }
+  if (!auto) { sfx.click(); toast(`Ordinate ${n} barre: -${fmt(cost)} monete, arrivano in ${hoursTxt(deliveryE())}`, '#bfe3ff'); }
   events.push({ type: 'order', n, auto: !!auto }); save();
 }
 function autoOrder(b) { const wh = whOf(b); if (wh.auto && wh.bars + onOrder(b) < whCap(b) * tune.autoBelow) orderBars(b, whCap(b), true); }
@@ -3413,7 +3425,7 @@ function drawOfficePanel(t) {
   text(perH ? `Consumo: fino a ${perH} barre l'ora di turno` : 'Nessuna macchina sta prendendo barre ora', x + 20, P.y + 176, 14, '#cfd6dd', 'left');
   // orders
   text('Ordina materiale', x, P.y + 226, 20, '#ffe08a', 'left');
-  text(`${barCostE()} monete a barra · consegna in ${deliveryE()} ore di turno`, x + w, P.y + 226, 14, '#cfd6dd', 'right');
+  text(`${String(barCostE()).replace('.', ',')} monete a barra · consegna in ${hoursTxt(deliveryE())} di turno`, x + w, P.y + 226, 14, '#cfd6dd', 'right');
   const room = Math.max(0, cap - wh.bars - ord);
   [[10, '+'], [30, '+'], [room, 'Riempi +']].forEach(([n, lab], i) => {
     const nn = Math.min(n, room);
@@ -3450,6 +3462,8 @@ function siteProgress() { // how far the next site's building work has got
   const days = tune['build' + st + 'Days']; if (!days) return 1;
   return Math.max(0, Math.min(1, (state.t / tune.dayLength - (state.siteStart || 0)) / days));
 }
+const hoursTxt = h => h < 1 ? `${Math.round(h * 60)} minuti` : `${String(Math.round(h * 10) / 10).replace('.', ',')} ${h === 1 ? 'ora' : 'ore'}`;
+const daysTxt = n => `${n} ${n === 1 ? 'giorno' : 'giorni'}`;
 const siteDaysLeft = () => { const st = TIER() + 1; if (st > 4) return 0; return Math.max(0, Math.ceil(tune['build' + st + 'Days'] * (1 - siteProgress()))); };
 function onWorkHour() { // each hour of the shift every running machine has a small chance to break, more when time runs fast or it is old
   const fast = (state.speed - 1) / Math.max(1, tune.speedFast - 1);
@@ -3513,17 +3527,19 @@ function nightK() { // 0 by day, 1 deep at night, with dusk and dawn between
 }
 function pixelPass(drawFn, alpha) {
   const P = CHEAP ? 1 : scene === 'play' && state.town ? tune.pixelTown : scene === 'play' && F ? tune.pixelInside : Math.max(2, Math.min(5, Math.round(cam.zoom * 4) / 2)), w = Math.ceil(W / P), h = Math.ceil(H / P);
-  if (pcan.width !== w || pcan.height !== h) { pcan.width = w; pcan.height = h; }
-  const keep = ctx; ctx = pctx;
-  ctx.setTransform(1 / P, 0, 0, 1 / P, 0, 0); ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, W, H);
+  const direct = P === 1; // no pixelation: draw straight onto the screen and skip the copy
+  if (!direct && (pcan.width !== w || pcan.height !== h)) { pcan.width = w; pcan.height = h; }
+  const keep = ctx; if (!direct) ctx = pctx;
+  const base = ctx.getTransform(); // the screen's own scale (device pixels)
+  ctx.save(); if (direct) ctx.setTransform(base); else { ctx.setTransform(1 / P, 0, 0, 1 / P, 0, 0); ctx.imageSmoothingEnabled = false; ctx.clearRect(0, 0, W, H); }
   drawFn();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (direct) ctx.setTransform(base); else ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = 'rgba(255,186,104,0.08)'; ctx.fillRect(0, 0, w, h); // warm light
-  const nk = nightK(), p = dayPhase(), dusk = p > 0.5 && p < 0.75 ? Math.max(0, 1 - Math.abs(p - 0.62) / 0.1) : 0;
+  const nk = nightK(), p = dayPhase(), dusk = p > 0.64 && p < 0.88 ? Math.max(0, 1 - Math.abs(p - 0.76) / 0.1) : 0; // sunset glow round the end of the shift
   if (dusk > 0) { ctx.fillStyle = `rgba(255,120,50,${0.16 * dusk})`; ctx.fillRect(0, 0, w, h); }
   if (nk > 0) { ctx.fillStyle = `rgba(20,30,80,${tune.nightDark * nk * (F && !(scene === 'play' && state.town) ? 0.6 : 1)})`; ctx.fillRect(0, 0, w, h); }
   const g = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.95); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(30,16,8,${alpha})`); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-  ctx = keep; ctx.imageSmoothingEnabled = false; ctx.drawImage(pcan, 0, 0, w * P, h * P); ctx.imageSmoothingEnabled = true;
+  ctx.restore(); ctx = keep; if (!direct) { ctx.imageSmoothingEnabled = false; ctx.drawImage(pcan, 0, 0, w * P, h * P); ctx.imageSmoothingEnabled = true; }
 }
 function vignette(alpha) { // darker toward the edges of the screen, the eye goes to the middle
   if (CHEAP) return;
@@ -3534,12 +3550,13 @@ function hint(msg) {
   ctx.font = `bold 17px ${FONT}`; const tw = ctx.measureText(msg).width + 30;
   rrect(W / 2 - tw / 2, 124, tw, 34, 10, 'rgba(58,36,22,0.92)', '#f2c230', 1.5); text(msg, W / 2, 142, 17, '#fff');
 }
-function drawTopLayer(t) {
-  if (state.banner) {
+function drawTopLayer(t, part = 'all') {
+  if (state.banner && part !== 'toasts') {
     const b = state.banner, a = Math.min(1, b.life * 2, (3.2 - b.life) * 4), y = 222 + (1 - a) * -30;
     ctx.globalAlpha = a; rrect(W / 2 - 330, y, 660, 76, 16, 'rgba(58,36,22,0.94)', b.col, 3);
     text(b.title, W / 2, y + 26, 26, b.col); text(b.sub, W / 2, y + 56, 16, '#e6e1d3'); ctx.globalAlpha = 1;
   }
+  if (part === 'banner') return;
   state.toasts.forEach((tt, i) => {
     const y = 540 - i * 44; ctx.globalAlpha = Math.min(1, tt.life * 2);
     ctx.font = `bold 17px ${FONT}`; const tw = ctx.measureText(tt.msg).width + 30;
@@ -3642,7 +3659,7 @@ const scenes = {
       text('Compra, monta, cabla e configura le tue macchine CNC', W / 2, 232, 22, '#e6e1d3');
       rrect(W / 2 - 440, 266, 880, 148, 14, 'rgba(20,26,34,0.9)', '#3a4552', 2);
       CONTROLS.forEach((c, i) => text(c, W / 2, 290 + i * 34, 18, '#cfd6dd'));
-      ORDER.forEach((tp, i) => machineIcon(tp, W / 2 - 400 + i * 200, 520, 1.3, { t: clock.now(), busy: true, status: 'work' }));
+      ORDER.forEach((tp, i) => machineIcon(tp, W / 2 - 400 + i * 200, 536, 0.95, { t: clock.now(), busy: true, status: 'work' }));
       const sv = hasSave();
       button(sv ? 'Continua' : 'Gioca', W / 2 - 150, 560, 300, 70, () => startGame(true), { size: 28, name: 'play' });
       if (sv) button(confirmNew ? 'Sicuro? Tocca ancora' : 'Nuova partita (N)', W / 2 - 150, 642, 300, 50, () => startGame(false), { size: 18, color: '#9aa4ad', name: 'new' });
@@ -3691,7 +3708,7 @@ const scenes = {
       if (state.town) { pixelPass(() => { ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-cam.x, -cam.y); drawTown(t); ctx.restore(); }, 0.22); drawTownLabels(t); }
       else { pixelPass(() => { if (F) drawWorld(t); else drawOutside(t); }, F ? 0.34 : 0.22); if (F) drawOverlaysWorld(t); else drawOverlaysOut(t); }
       drawHUD(t);
-      drawTopLayer(t);
+      if (!state.panel && !state.mg) drawTopLayer(t, 'banner');
       if (state.panel === 'shop') drawShop(t);
       else if (state.panel === 'recipes') drawRecipes(t);
       else if (state.panel === 'tools') drawTools(t);
@@ -3703,6 +3720,7 @@ const scenes = {
       else if (state.panel === 'routes') drawRoutes(t);
       if (state.mg) drawMinigame(t);
       if (!state.town) drawTutorial(t);
+      drawTopLayer(t, 'toasts'); // short messages last: never hidden under a panel or the foreman's bubble
     },
   },
   pause: {

@@ -54,6 +54,8 @@ After play: pur non avendo raggiunto il livello mi chiede di comprare il tornio 
 After play: ok l`omino che da consigli sulla sinistra non si puo togliere la casella di testo metti che se cllicco sul personaggio la casella puo scomparire e ricomparire
 After play: modifica gli uffici falli più estetici prendi spunto da uffici reali esistenti e poi ad inizio e fine turno fai in modo che gli operatori entrino a lavorare e se ne vadano quando finiscono
 After play: usa SpriteCook per rifare la grafica delle macchine: 25 sprite isometrici in pixel art (5 tipi x 5 generazioni), posizionati e scalati sull'ingombro, specchiati per le rotazioni, con spia di stato, targhetta Mk, operatore e pezzi sopra; il disegno vettoriale resta come ripiego
+After play: mentre rifaccio la grafica tu fai un check di tutto il gioco approfondito e fixa tutti i possibili bug sia visivi che di gioco
+After play: prendi le grafiche fatte tramite spritecook e implementale controllando che non ci siano bug visivi nel gioco
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 
