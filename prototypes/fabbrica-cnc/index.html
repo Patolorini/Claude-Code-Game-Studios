@@ -291,7 +291,7 @@ const GOALS = [
   { text: 'Costruiscila: montaggio e configurazione', done: () => built('T') },
   { text: 'Strumento Operatore: metti un operatore sulla Troncatrice', done: () => allMachines().some(m => m.op) },
   { text: 'Vendi i tuoi primi 5 pezzi', done: () => state.sold >= 5, prog: () => [state.sold, 5] },
-  { text: 'Un Tornio che lavora le Barre tagliate: Perno tornito', done: () => state.found.includes('TL') },
+  { text: `Livello ${CONFIG.unlockL.value}: un Tornio che lavora le Barre tagliate (Perno tornito)`, done: () => state.found.includes('TL'), prog: () => [Math.min(state.level, tune.unlockL), tune.unlockL] },
   { text: `Livello ${CONFIG.rackLvl.value}: piazza Rack di rete e Postazione PC`, done: () => anyB(b => hasKind(b, 'rack') && hasKind(b, 'pc')) },
   { text: 'Squadra (Q): dai a qualcuno il lavoro di Informatico', done: () => state.crew.some(cw => cw.job === 'it') },
   { text: 'Collega una macchina in rete: toccala > Collega in rete', done: () => allMachines().some(m => m.netPct != null) },
@@ -382,7 +382,7 @@ function levelXp(L) { return L <= 1 ? 0 : Math.round(tune.xpBase * Math.pow(L - 
 function serialize() {
   return JSON.stringify({
     v: 9, coins: state.coins, xp: state.xp, level: state.level, sold: state.sold, earned: state.earned,
-    tools: state.tools, tokens: state.tokens || 0, perks: state.perks || {}, crew: state.crew, found: state.found, t: state.t, siteStart: state.siteStart, goal: state.goal, nextId: state.nextId,
+    tools: state.tools, guideHidden: !!state.guideHidden, tokens: state.tokens || 0, perks: state.perks || {}, crew: state.crew, found: state.found, t: state.t, siteStart: state.siteStart, goal: state.goal, nextId: state.nextId,
     entered: state.entered, cur: Math.max(0, state.buildings.indexOf(F)),
     buildings: state.buildings.map(b => ({
       id: b.id, name: b.name, tiles: [...b.cells], stage: b.stage, grown: b.grown, workers: b.workers.length,
@@ -399,6 +399,7 @@ function load() {
   if (!d || d.v !== 9) return false;
   reset(); state.buildings = [];
   Object.assign(state, { coins: d.coins, xp: d.xp, level: d.level, sold: d.sold, earned: d.earned || 0, tools: d.tools, crew: d.crew || [], found: d.found, t: d.t || 0, siteStart: d.siteStart || 0, goal: d.goal, nextId: d.nextId, entered: !!d.entered, welcome: 0 });
+  state.guideHidden = !!d.guideHidden;
   state.perks = d.perks || {}; state.tokens = d.tokens != null ? d.tokens : Math.max(0, (d.level || 1) - 1); // older saves: the tokens their levels would have given
   state.xp = Math.max(state.xp || 0, levelXp(state.level)); // the curve got steeper: an old save keeps its level
   for (const bd of d.buildings) {
@@ -782,8 +783,52 @@ function neighbourObjs(t) { // the buildings and trees of the lots, in depth ord
   for (const [c, r] of S.trees) out.push({ d: c + r, f: () => drawTree(c, r) });
   return out;
 }
+// ---- Coming to work and going home: at 08:00 the crew walks in through the door, at 16:00 they walk out ----
+function doorOf(b) { // a floor cell by the front edge, next to the office, and the street outside it
+  const [C, R] = shedSize(b.stage), O = b.officeBox, c = Math.min(C - 1, O ? O.c1 : 1), keep = F; F = b;
+  let cell = [c, R - 1]; if (!walkable(cell[0], cell[1])) { const w = walkCells().sort((a, q) => Math.hypot(a[0] - c, a[1] - R) - Math.hypot(q[0] - c, q[1] - R))[0]; if (w) cell = w; }
+  F = keep; return { cell, out: [c + 0.5, R + (O ? O.r1 - O.r0 : 0) + 3.5] };
+}
+function opSpot(m) { const [fw, fh] = fpOf(m); return [m.c + fw - 0.14, m.r + fh + 0.02]; }
+function pathFor(b, from, to) { const keep = F; F = b; const p = bfs([Math.floor(from[0]), Math.floor(from[1])], [Math.floor(to[0]), Math.floor(to[1])]); F = keep; return p; }
+function shiftStartFor(b) { // everyone walks in from the street to their place; operators start their machine when they get there
+  const D = doorOf(b), door = [D.cell[0] + 0.5, D.cell[1] + 0.5]; b.commute = [];
+  let k = 0; const add = (pal, to, done) => { b.commute.push({ x: D.out[0], y: D.out[1], path: [door, ...pathFor(b, door, to)], end: done, pal, wait: 0.5 + k++ * 0.7, walkT: 0, dir: 1, fade: 0 }); };
+  for (const m of b.machines) if (m.op) { m.present = false; const keep = F; F = b; const st = nearWalkable(m, D.cell); F = keep; add(OP_PAL, st, () => { m.present = true; }); }
+  for (const [id, w] of Object.entries(b.haul || {})) { w.hidden = true; add(MAG_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }); }
+  for (const [id, w] of Object.entries(b.itw || {})) { w.hidden = true; add(IT_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }); }
+  for (const w of b.workers) { w.hidden = true; add(null, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }); }
+}
+function shiftEndFor(b) { // the machines stop, everyone walks to the door and out to the street
+  const D = doorOf(b), door = [D.cell[0] + 0.5, D.cell[1] + 0.5]; b.commute = [];
+  let k = 0; const add = (pal, from) => { b.commute.push({ x: from[0], y: from[1], path: [...pathFor(b, from, door), door, D.out], pal, wait: k++ * 0.5, walkT: 0, dir: 1, leaving: true, fade: 1 }); };
+  for (const m of b.machines) if (m.op) { m.present = false; add(OP_PAL, opSpot(m)); }
+  for (const w of Object.values(b.haul || {})) { w.hidden = true; add(MAG_PAL, [w.c, w.r]); }
+  for (const w of Object.values(b.itw || {})) { w.hidden = true; add(IT_PAL, [w.c, w.r]); }
+  for (const w of b.workers) { w.hidden = true; add(null, [w.c, w.r]); }
+}
+function updateCommute(b, dt) {
+  if (!b.commute || !b.commute.length) return;
+  for (const k of b.commute) {
+    if (k.wait > 0) { k.wait -= dt; continue; }
+    if (!k.leaving) k.fade = Math.min(1, k.fade + dt * 2);
+    if (!k.path.length) { if (k.leaving) k.fade -= dt * 2; else { k.done = true; if (k.end) k.end(k); } continue; }
+    const [tc, tr] = k.path[0], dx = tc - k.x, dy = tr - k.y, d = Math.hypot(dx, dy), sp = tune.workerSpeed * dt;
+    k.walkT += dt; if (Math.abs(dx - dy) > 0.01) k.dir = dx - dy > 0 ? 1 : -1;
+    if (d <= sp) { k.x = tc; k.y = tr; k.path.shift(); } else { k.x += dx / d * sp; k.y += dy / d * sp; }
+  }
+  b.commute = b.commute.filter(k => !k.done && (!k.leaving || k.fade > 0));
+}
+function drawCommuter(k, t) {
+  if (k.wait > 0) return;
+  const p = iso(k.x, k.y, 0), step = Math.floor(k.walkT * 6) % 2;
+  ctx.globalAlpha = Math.max(0, Math.min(1, k.fade));
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
+  sprite(step ? 'walk1' : 'walk0', p[0], p[1] - step, 2, k.dir < 0, k.pal || undefined);
+  ctx.globalAlpha = 1;
+}
 // ---- Office clerks: they walk about the office and sit at a PC now and then to do their tasks ----
-function deskSpots(b) { return Object.values(b.grid).filter(o => o.kind === 'office').map(o => ({ c: o.c, r: o.r, x: o.c + 0.52, y: o.r + 0.82 })); }
+function deskSpots(b) { return Object.values(b.grid).filter(o => o.kind === 'office').map(o => ({ c: o.c, r: o.r, x: o.c + 0.46, y: o.r + 0.84 })); }
 function updateClerks(b, dt) {
   const O = b.officeBox; if (!O) return;
   if (!onShift()) { b.clerks = []; return; }
@@ -1168,7 +1213,7 @@ function updateFactory(dt) {
   }
   for (const m of F.machines) {
     m.pop = Math.max(0, (m.pop || 0) - dt * 1.6);
-    if (m.phase < 2 || !m.op || m.broken) continue;
+    if (m.phase < 2 || !m.op || m.broken || m.present === false) continue;
     if (!m.cur && m.inbox) { m.cur = m.inbox; m.inbox = null; m.proc = timeOfM(m); }
     if (m.cur && !m.out) {
       m.proc -= dt;
@@ -2214,8 +2259,9 @@ function drawTutorial(t) {
   else if (g === 3) { say = 'Una macchina lavora solo con un operatore. Prendi lo strumento Operatore e tocca la Troncatrice.'; if (state.tool !== 'op' && !state.panel && !state.placing) at(N.tool_op, 'Operatore'); }
   else if (g === 4) say = 'Guarda Luca, il magazziniere in verde: porta i pezzi. In alto c\'è il calendario: con x3 e x8 il tempo corre, ma le macchine si guastano più spesso!';
   else if (g === 5) {
-    say = opsFree() > 0 ? 'Compra un Tornio e mettigli un operatore libero: lavorerà le Barre tagliate e farà Perni torniti, che valgono il triplo.' : 'Ti serve un Operatore macchina libero: salendo di livello arriva gente nuova, dalle quel lavoro nella Squadra (Q).';
-    if (!state.placing && state.coins >= costOf('L') && !F.machines.some(m => m.type === 'L')) shopFor({ tab: 0, btn: 'buyL', label: 'Compra il Tornio' });
+    if (state.level < tune.unlockL) say = `Il Tornio si sblocca al livello ${tune.unlockL}: intanto vendi i pezzi della Troncatrice per fare esperienza (ora sei al livello ${state.level}).`;
+    else say = opsFree() > 0 ? 'Compra un Tornio e mettigli un operatore libero: lavorerà le Barre tagliate e farà Perni torniti, che valgono il triplo.' : 'Ti serve un Operatore macchina libero: salendo di livello arriva gente nuova, dalle quel lavoro nella Squadra (Q).';
+    if (state.level >= tune.unlockL && !state.placing && state.coins >= costOf('L') && !F.machines.some(m => m.type === 'L')) shopFor({ tab: 0, btn: 'buyL', label: 'Compra il Tornio' });
     else if (!state.panel && !state.placing && state.tool !== 'op' && F.machines.some(m => m.type === 'L' && m.phase >= 2 && !m.op)) at(N.tool_op, 'Operatore');
   } else if (g === 6) {
     say = state.level < tune.rackLvl ? `Al livello ${tune.rackLvl} si sbloccano Rack di rete e Postazione PC: intanto continua a vendere.` : 'Rack di rete e Postazione PC sbloccati! Piazzali entrambi: la rete fa rendere di più le macchine.';
@@ -2465,8 +2511,16 @@ function drawWorldShop(t) {
   button('Disegna', x + 100, y + 340, w - 200, 52, () => setWTool('draw'), { name: 'drawB', size: 20, color: '#5bc7ff' });
 }
 function drawNarrator(t, msg) { // the foreman: a pixel worker with a speech bubble, bottom left
-  const x = 60, y = 556;
-  sprite(Math.sin(t * 4) > 0 ? 'wave' : 'walk0', x, y, 4, false);
+  const x = 60, y = 556, hide = !!state.guideHidden, fresh = state.guideSeen !== msg;
+  sprite(hide ? 'walk0' : Math.sin(t * 4) > 0 ? 'wave' : 'walk0', x, y, 4, false);
+  btn(x - 34, y - 72, 68, 76, () => { state.guideHidden = !state.guideHidden; state.guideSeen = msg; sfx.click(); }, 'guide'); // tap the foreman to hide or show his advice
+  if (hide) { // only a small bubble: a dot when nothing new, an exclamation mark when he has new advice
+    const bx = x + 18, by = y - 92 + (fresh ? Math.sin(t * 6) * 3 : 0);
+    rrect(bx, by, 30, 24, 10, fresh ? '#f2c230' : '#fff', '#2b2b2b', 2); poly([[bx + 4, by + 22], [bx - 4, by + 30], [bx + 12, by + 22]], fresh ? '#f2c230' : '#fff', '#2b2b2b', 2);
+    text(fresh ? '!' : '…', bx + 15, by + 12, 16, '#2b2b2b');
+    return;
+  }
+  state.guideSeen = msg;
   ctx.font = `bold 16px ${FONT}`;
   const maxW = 380, words = msg.split(' '); let lines = [], cur = '';
   for (const w of words) { const tt = cur ? cur + ' ' + w : w; if (ctx.measureText(tt).width > maxW && cur) { lines.push(cur); cur = w; } else cur = tt; }
@@ -2474,6 +2528,8 @@ function drawNarrator(t, msg) { // the foreman: a pixel worker with a speech bub
   const bh = lines.length * 22 + 18, bx = x + 34, by = y - 70 - bh / 2;
   rrect(bx, by, maxW + 24, bh, 12, '#fff', '#2b2b2b', 2); poly([[bx, by + bh - 20], [bx - 14, by + bh - 6], [bx, by + bh - 8]], '#fff', '#2b2b2b', 2);
   lines.forEach((l, i) => text(l, bx + 12, by + 20 + i * 22, 16, '#2b2b2b', 'left'));
+  text('tocca l\'omino per nascondere', bx + maxW + 14, by + bh - 9, 10, '#9aa4ad', 'right');
+  btn(bx, by, maxW + 24, bh, () => { state.guideHidden = true; state.guideSeen = msg; sfx.click(); }, 'guideBubble');
 }
 
 // ---- Intro: a flight over the town, into the industrial zone, down to the little factory ----------
@@ -3031,11 +3087,12 @@ function worldTap(sx, sy) {
 function updateWorld(dt) {
   const shift0 = onShift(), sdt = state.timeStop ? 0 : dt * (state.speed || 1), day0 = dayNum(), h0 = workHour();
   state.t += sdt;
-  if (shift0 && !onShift()) endShift(); // 16:00: everyone goes home, the machines stop until 08:00
+  if (shift0 && !onShift()) { endShift(); for (const b of state.buildings) shiftEndFor(b); } // 16:00: everyone goes home, the machines stop until 08:00
+  if (!shift0 && onShift()) for (const b of state.buildings) shiftStartFor(b); // 08:00: the crew comes in
   if (dayNum() !== day0) onNewDay();
   const h1 = workHour(); if (h1 >= 0 && h1 !== h0) onWorkHour();
   const view = F, shift = shift0 && onShift();
-  for (const b of state.buildings) { F = b; updateStock(b); updateTrucks(b, state.timeStop ? 0 : dt); updateClerks(b, state.timeStop ? 0 : dt * Math.min(2, state.speed || 1)); if (shift) { updateFactory(sdt); updateWorkers(sdt); } }
+  for (const b of state.buildings) { F = b; updateStock(b); updateTrucks(b, state.timeStop ? 0 : dt); updateCommute(b, state.timeStop ? 0 : dt * Math.min(3, state.speed || 1)); updateClerks(b, state.timeStop ? 0 : dt * Math.min(2, state.speed || 1)); if (shift) { updateFactory(sdt); updateWorkers(sdt); } }
   F = view;
   for (const f of state.floats) { f.life -= dt; f.wy -= 22 * dt; }
   state.floats = state.floats.filter(f => f.life > 0);
@@ -3075,7 +3132,7 @@ function drawWorld(t) {
         if (m.phase < 2) { ctx.globalAlpha = moving ? 0.3 : 0.6; drawMachine(m.type, m.c, m.r, { ...mo, status: 'off', t }); ctx.globalAlpha = 1; drawScaffold(m.c, m.r, machineTopM(m.type, m.mk), fw, fh); }
         else drawMachine(m.type, m.c, m.r, { ...mo, status: m.cur ? 'work' : m.op ? 'wait' : 'off', busy: !!m.cur, t });
         if (m.mk > 1 && m.phase >= 2) { const q = iso(m.c + fw / 2, m.r + fh - 0.04, 8); rrect(q[0] - 9, q[1] - 6, 18, 11, 2, '#e0b84a', '#2b2410', 1); textW(['', 'II', 'III', 'IV', 'V'][mkOf(m) - 1], q[0], q[1], 7, '#2b2410'); } // the Mk plate
-        if (m.op) { const p = iso(m.c + fw - 0.14, m.r + fh + 0.02, 0); sprite(m.cur && Math.sin(t * 9) > 0 ? 'work' : 'walk0', p[0], p[1], 2, true, OP_PAL); }
+        if (m.op && atWork && m.present !== false) { const p = iso(m.c + fw - 0.14, m.r + fh + 0.02, 0); sprite(m.cur && Math.sin(t * 9) > 0 ? 'work' : 'walk0', p[0], p[1], 2, true, OP_PAL); }
         if (m.out) drawPiece(m.out.ops, m.c + 0.15, m.r + fh - 0.1);
         if (m.inbox) drawPiece(m.inbox.ops, m.c + fw - 0.1, m.r + 0.15);
         if (m.pop > 0) { ctx.globalAlpha = Math.min(1, m.pop * 2); drawPiece(m.popOps || '', m.c + fw / 2 - (1 - m.pop) * 0.6, m.r + fh / 2 - (1 - m.pop) * 0.6); ctx.globalAlpha = 1; }
@@ -3083,17 +3140,19 @@ function drawWorld(t) {
       } });
     }
   }
-  for (const w of F.workers) objs.push({ d: w.c + w.r, f: () => drawWorker(w, t) });
+  const atWork = onShift();
+  for (const k of F.commute || []) objs.push({ d: k.x + k.y, f: () => drawCommuter(k, t) });
+  for (const w of F.workers) if (atWork && !w.hidden) objs.push({ d: w.c + w.r, f: () => drawWorker(w, t) });
   objs.push(...neighbourObjs(t));
   for (const k of F.clerks || []) objs.push({ d: k.x + k.y + (k.mode === 'sit' ? 0.3 : 0), f: () => drawClerk(k, t) });
   for (const k of F.trucks || []) objs.push({ d: k.c + k.r + 0.8, f: () => drawTruck(k, t) });
-  for (const w of Object.values(F.itw || {})) objs.push({ d: w.c + w.r + 0.01, f: () => {
+  for (const w of Object.values(F.itw || {})) if (atWork && !w.hidden) objs.push({ d: w.c + w.r + 0.01, f: () => {
     const p = iso(w.c, w.r, 0), moving = w.path.length > 0, step = moving ? Math.floor(w.walkT * 6) % 2 : 0;
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
     sprite(moving ? (step ? 'walk1' : 'walk0') : (Math.sin(t * 7) > 0 ? 'work' : 'walk0'), p[0], p[1] - step, 2, w.dir < 0, IT_PAL);
     if (!moving && w.check) { const [sx, sy] = [p[0] + 10, p[1] - 44]; rrect(sx - 11, sy - 11, 22, 20, 5, '#fff', '#2f7fb0', 1.5); phaseIcon(w.check === 'mach' ? 1 : 2, sx, sy - 1, 0.7, '#2f7fb0'); }
   } });
-  for (const w of Object.values(F.haul || {})) objs.push({ d: w.c + w.r + 0.01, f: () => {
+  for (const w of Object.values(F.haul || {})) if (atWork && !w.hidden) objs.push({ d: w.c + w.r + 0.01, f: () => {
     const p = iso(w.c, w.r, 0), step = w.path.length ? Math.floor(w.walkT * 6) % 2 : 0;
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
     sprite(step ? 'walk1' : 'walk0', p[0], p[1] - step, 2, w.dir < 0, MAG_PAL);
@@ -3217,7 +3276,8 @@ function drawAnnexFloor() { // the warehouse wing on the right (grey concrete, t
   const A = F.annexBox, O = F.officeBox; if (!A) return;
   for (const k of F.annex) {
     const [c, r] = k.split(',').map(Number), off = O && c >= O.c0 && c < O.c1 && r >= O.r0 && r < O.r1, h = hash(c, r);
-    poly(qT(c, r, c + 1, r + 1, 0), off ? ['#5f7898', '#5a7290'][h % 2] : ['#9a9890', '#95938b', '#a09e96'][h % 3], 'rgba(40,40,40,0.35)');
+    if (off) { for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) poly(qT(c + i / 2, r + j / 2, c + i / 2 + 0.5, r + j / 2 + 0.5, 0), (i + j) % 2 ? '#5a6e86' : '#64788f', 'rgba(30,40,55,0.35)'); }
+    else poly(qT(c, r, c + 1, r + 1, 0), ['#9a9890', '#95938b', '#a09e96'][h % 3], 'rgba(40,40,40,0.35)');
     if (!inAnnex(c, r + 1)) poly([iso(c, r + 1, 0), iso(c + 1, r + 1, 0), iso(c + 1, r + 1, -9), iso(c, r + 1, -9)], '#6d6b64', EDGE);
     if (!inAnnex(c + 1, r)) poly([iso(c + 1, r, 0), iso(c + 1, r + 1, 0), iso(c + 1, r + 1, -9), iso(c + 1, r, -9)], '#56544e', EDGE);
   }
@@ -3245,6 +3305,7 @@ function annexWalls() { // warehouse: back wall and a low rail toward the work f
     for (let c = O.c0; c < O.c1; c++) if (c !== odoor) glass([iso(c, O.r0, 0), iso(c + 1, O.r0, 0), iso(c + 1, O.r0, 24), iso(c, O.r0, 24)], c + O.r0 + 0.1); // glass toward the floor, with a door
     for (let r = O.r0; r < O.r1; r++) out.push({ d: O.c0 + r + 0.2, f: () => { wallFn((u, z) => iso(O.c0, r + u, z), true, r * 17 + 3); poly([iso(O.c0 - 0.12, r, WALL_H), iso(O.c0, r, WALL_H), iso(O.c0, r + 1, WALL_H), iso(O.c0 - 0.12, r + 1, WALL_H)], '#3e2718', EDGE); } }); // the factory's own side wall runs on
     out.push({ d: O.c1 + O.r1 + 2, f: () => sign((O.c0 + O.c1) / 2, O.r0, 40, 'UFFICIO', '#ffe8b0') });
+    for (const o of officeDecor(O, state.t)) out.push(o.d === O.c0 + O.r0 + 0.05 ? { d: O.c0 + O.r1 + 0.3, f: o.f } : o);
   }
   return out;
 }
@@ -3264,17 +3325,46 @@ function drawShelf(o, t) { // a metal shelving unit; its bar bundles show how fu
   box(c - 0.4, r - 0.34, c + 0.4, r + 0.34, 46, 47.5, '#8a949c'); line(iso(c - 0.4, r + 0.34, 47), iso(c + 0.4, r + 0.34, 47), '#e07a2e', 2);
   if (cs && o.i === 0 && fill <= 0 && Math.sin(t * 5) > 0) { const p = iso(c, r, 60); textW('VUOTO', p[0], p[1], 8, '#ff8a7a'); }
 }
-function drawOffice(col, row, t) { // a glass-walled corner with a desk, a binder shelf and a screen of orders
-  const c = col + 0.5, r = row + 0.5;
-  poly([iso(c - 0.48, r - 0.48, 0.6), iso(c + 0.48, r - 0.48, 0.6), iso(c + 0.48, r + 0.48, 0.6), iso(c - 0.48, r + 0.48, 0.6)], '#8a5a3a');
-  box(c - 0.46, r - 0.46, c + 0.4, r - 0.36, 0, 34, '#6b4527'); // binder shelf on the back wall
-  for (let i = 0; i < 6; i++) box(c - 0.42 + i * 0.13, r - 0.44, c - 0.33 + i * 0.13, r - 0.38, 20, 31, ['#c0392b', '#2f7fb0', '#f2c230', '#27ae60', '#e67e22', '#8e44ad'][i]);
-  box(c - 0.3, r - 0.18, c + 0.34, r + 0.14, 0, 18, '#a0703e'); box(c - 0.32, r - 0.2, c + 0.36, r + 0.16, 18, 21, '#c49a6a');
-  box(c - 0.1, r - 0.12, c + 0.2, r - 0.06, 21, 36, '#1b2229');
-  poly(qL(c - 0.08, c + 0.18, r - 0.06, 23, 34), '#13283a', '#7ef0a0', 1);
-  for (let i = 0; i < 3; i++) { const a = iso(c - 0.05, r - 0.06, 31 - i * 3), b = iso(c + 0.05 + 0.04 * ((i + Math.floor(t * 2)) % 3), r - 0.06, 31 - i * 3); line(a, b, '#7ef0a0', 1); }
-  box(c - 0.24, r - 0.04, c - 0.1, r + 0.06, 21, 22, '#f4f1e6'); // papers
-  box(c - 0.1, r + 0.26, c + 0.14, r + 0.44, 8, 12, '#2c3540'); box(c - 0.1, r + 0.4, c + 0.14, r + 0.46, 12, 24, '#2c3540');
+function drawOffice(col, row, t) { // a modern open-plan workstation: white bench desk on steel legs, two monitors, a mesh chair, a low screen, a plant
+  const c = col + 0.5, r = row + 0.5, h = hash(col * 7 + 3, row * 5 + 1), wood = ['#d8c4a0', '#e8e4dc', '#c8a878'][h % 3];
+  box(c - 0.44, r - 0.46, c + 0.44, r - 0.4, 0, 22, '#7d8a96'); poly(qT(c - 0.44, r - 0.46, c + 0.44, r - 0.4, 22), '#5bc7ff'); // acoustic screen with an accent top
+  for (const [dc, dr] of [[-0.4, -0.36], [0.36, -0.36], [-0.4, 0.06], [0.36, 0.06]]) box(c + dc, r + dr, c + dc + 0.04, r + dr + 0.04, 0, 17, '#9aa4ad'); // steel legs
+  box(c - 0.42, r - 0.38, c + 0.42, r + 0.12, 17, 19, wood); // desk top
+  for (const [m0, m1] of [[-0.3, -0.04], [0.02, 0.28]]) { // two monitors on stands
+    box(c + (m0 + m1) / 2 - 0.02, r - 0.3, c + (m0 + m1) / 2 + 0.02, r - 0.26, 19, 24, '#3a3f45');
+    box(c + m0, r - 0.32, c + m1, r - 0.28, 24, 36, '#1b2229');
+    const q = qL(c + m0 + 0.02, c + m1 - 0.02, r - 0.28, 25, 35); poly(q, '#13283a');
+    const k = (h + Math.floor(t * 0.5) + (m0 > 0 ? 3 : 0)) % 3; // what is on screen: a chart, a spreadsheet, a drawing
+    if (k === 0) for (let i = 0; i < 4; i++) { const a = iso(c + m0 + 0.05 + i * 0.05, r - 0.28, 26), hh = 2 + ((h >> i) % 6); ctx.fillStyle = ['#5bc7ff', '#7ef0a0', '#f2c230', '#ff8a7a'][i]; ctx.fillRect(a[0] - 1, a[1] - hh, 3, hh); }
+    else if (k === 1) for (let i = 0; i < 4; i++) line(iso(c + m0 + 0.04, r - 0.28, 34 - i * 2.2), iso(c + m1 - 0.04, r - 0.28, 34 - i * 2.2), i ? '#cfd6dd' : '#7ef0a0', 1);
+    else { const a = iso(c + (m0 + m1) / 2, r - 0.28, 30); ctx.strokeStyle = '#5bc7ff'; ctx.lineWidth = 1; ctx.strokeRect(a[0] - 5, a[1] - 3, 10, 6); line([a[0] - 5, a[1] - 3], [a[0] + 5, a[1] + 3], '#5bc7ff', 1); }
+  }
+  box(c - 0.18, r - 0.14, c + 0.1, r - 0.06, 19, 20, '#e8e8e8'); // keyboard
+  box(c + 0.16, r - 0.12, c + 0.22, r - 0.04, 19, 23, ['#d8433a', '#f4f1e6', '#2f7fb0'][h % 3]); // a mug
+  if (h % 2) { box(c - 0.38, r - 0.2, c - 0.3, r - 0.12, 19, 23, '#b07a3e'); const p = iso(c - 0.34, r - 0.16, 28); ctx.beginPath(); ctx.ellipse(p[0], p[1], 5, 4, 0, 0, Math.PI * 2); ctx.fillStyle = '#4caf6a'; ctx.fill(); } // a desk plant
+  else box(c - 0.38, r - 0.04, c - 0.18, r + 0.08, 19, 20.5, '#f4f1e6'); // papers
+  // mesh office chair: five-star base, seat, back
+  const ch = [c - 0.04, r + 0.36], bp = iso(ch[0], ch[1], 1);
+  for (let i = 0; i < 5; i++) { const a = i * 1.2566 + 0.3; line(bp, [bp[0] + Math.cos(a) * 7, bp[1] + Math.sin(a) * 3.5], '#2b2b2b', 1.5); }
+  line(bp, [bp[0], bp[1] - 9], '#5d6366', 2);
+  box(ch[0] - 0.12, ch[1] - 0.1, ch[0] + 0.12, ch[1] + 0.1, 9, 11, '#2c3540');
+  box(ch[0] - 0.11, ch[1] + 0.08, ch[0] + 0.11, ch[1] + 0.12, 11, 24, '#3a4654');
+}
+function officeDecor(O, t) { // around the desks: carpet tiles, plants, a water cooler, a printer, a whiteboard and a clock on the wall, a meeting corner
+  const out = [], put = (d, f) => out.push({ d, f });
+  const plant = (c, r, big) => { box(c - 0.12, r - 0.12, c + 0.12, r + 0.12, 0, 9, '#e8e4dc'); for (let i = 0; i < 6; i++) { const a = i * 1.05, p = iso(c + Math.cos(a) * 0.06, r + Math.sin(a) * 0.06, 9 + (big ? 14 : 8)); ctx.beginPath(); ctx.ellipse(p[0], p[1] + 4, big ? 7 : 5, big ? 9 : 6, a, 0, Math.PI * 2); ctx.fillStyle = ['#3b8040', '#4caf6a', '#2f6b34'][i % 3]; ctx.fill(); } };
+  put(O.c0 + O.r0 + 0.6, () => plant(O.c0 + 0.22, O.r0 + 0.3, true)); // a big plant by the wall
+  put(O.c1 + O.r0 - 0.3, () => plant(O.c1 - 0.2, O.r0 + 0.25, false));
+  if (O.c1 - O.c0 >= 2) put(O.c0 + 1.2 + O.r0 + 0.4, () => { const c = O.c0 + 1.25, r = O.r0 + 0.3; box(c - 0.1, r - 0.1, c + 0.1, r + 0.1, 0, 18, '#e8e8e8'); const p = iso(c, r, 26); ctx.beginPath(); ctx.ellipse(p[0], p[1], 5, 6, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(120,190,240,0.85)'; ctx.fill(); ctx.strokeStyle = '#2f7fb0'; ctx.stroke(); }); // water cooler
+  if (O.c1 - O.c0 >= 3) put(O.c0 + 2.3 + O.r0 + 0.4, () => { const c = O.c0 + 2.3, r = O.r0 + 0.3; box(c - 0.2, r - 0.14, c + 0.2, r + 0.14, 0, 16, '#d6dade'); box(c - 0.18, r - 0.12, c + 0.18, r + 0.04, 16, 19, '#5d6366'); poly(qL(c - 0.15, c + 0.15, r + 0.14, 6, 9), '#f4f1e6'); }); // printer
+  put(O.c0 + O.r0 + 0.05, () => { // whiteboard and clock on the side wall
+    const r0 = O.r0 + 0.25, r1 = Math.min(O.r1 - 0.25, r0 + 1.2), q = qR(O.c0 + 0.02, r0, r1, 18, 34);
+    poly(q, '#f8f8f6', '#9aa4ad', 1.5);
+    for (let i = 0; i < 6; i++) { const u = (i % 3 + 0.5) / 3.2, z = 22 + Math.floor(i / 3) * 6, rr = r0 + (r1 - r0) * u; box(O.c0 + 0.02, rr - 0.06, O.c0 + 0.03, rr + 0.06, z, z + 4, ['#f2c230', '#ff8a7a', '#7ef0a0', '#5bc7ff', '#f2c230', '#c49bff'][i]); }
+    const cp = iso(O.c0 + 0.02, Math.min(O.r1 - 0.2, r1 + 0.35), 30); ctx.beginPath(); ctx.ellipse(cp[0], cp[1], 4, 5, 0, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#2b2b2b'; ctx.lineWidth = 1; ctx.stroke();
+    const a = t * 0.2; line(cp, [cp[0] + Math.cos(a) * 2.5, cp[1] + Math.sin(a) * 3], '#2b2b2b', 1);
+  });
+  return out;
 }
 const CLERK_PALS = [{ Y: '#6b4527', y: '#4a2f1d', B: '#e8eef4', b: '#9fb0c4', O: '#2f7fb0' }, { Y: '#e8c070', y: '#b89040', B: '#c0392b', b: '#8a2a20', O: '#ffffff' }, { Y: '#2b2b2b', y: '#1b1b1b', B: '#7ed08a', b: '#4a8a5a', O: '#ffffff' }];
 function drawStockChip() { // under the clock: what is on the shelves, tap to open the office

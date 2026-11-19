@@ -50,6 +50,9 @@ After play: Salva lo testo io in game ma devi crearmi una partita dove ho già t
 After play: Secondo me i macchinari essendo tutto uno diverso dall'altro dovrebbero avere forme e ingombri diversi vedendo ora al livello massimo sono praticamente tutte uguali poi tra l'altro c'è un bug visivo ovvero quando apri vari menu delle macchine ti fa vedere quella del primo livello e non quella del livello attuale
 After play: Ok ora aggiungi più livelli anche perché al 10 c'è un massimo di token e lo skill tree non si può completare quindi vedi tu il massimo di livello da raggiungere e inoltre deve essere più difficile avanzare di livello ho notato che si avanza troppo velocemente
 After play: Devi mettere un limite di personale e macchinari in base alla fabbrica in cui si é dentro così quando accedi a fabbriche diverse anche gli operatori sono divisi e non li hai tutti insieme, magari per la questione limitare macchinari metti per ogni stabile un massimo di corrente utilizzabile e i macchinari anche in base al livello hanno un consumo
+After play: pur non avendo raggiunto il livello mi chiede di comprare il tornio nel negozio fixalo
+After play: ok l`omino che da consigli sulla sinistra non si puo togliere la casella di testo metti che se cllicco sul personaggio la casella puo scomparire e ricomparire
+After play: modifica gli uffici falli più estetici prendi spunto da uffici reali esistenti e poi ad inizio e fine turno fai in modo che gli operatori entrino a lavorare e se ne vadano quando finiscono
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 
