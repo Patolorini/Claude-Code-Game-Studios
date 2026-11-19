@@ -681,14 +681,22 @@ function drawGround() { // the plot around the factory: grass, a road along the 
     const n = Math.round(along === 'r' ? rb - ra : cb - ca);
     for (let i = 0; i < n; i += 1) { if (along === 'r') { const m = (ca + cb) / 2; poly(qT(m - 0.03, ra + i + 0.2, m + 0.03, ra + i + 0.6, 0.4), '#e8e2c8'); } else { const m = (ra + rb) / 2; poly(qT(ca + i + 0.2, m - 0.03, ca + i + 0.6, m + 0.03, 0.4), '#e8e2c8'); } }
   };
-  const fr = bb.r1 + 0.8, rx = A ? A.c1 + 0.15 : bb.c1 + 0.15;
+  const fr = bb.r1 + 0.8, rx = A ? A.c1 + 2.6 : bb.c1 + 0.15;
   road(rx, r0, rx + 1.7, r1, 'r'); // the lorries come along here
   road(c0, fr, c1, fr + 1.7, 'c');
   poly(qT(rx - 0.15, fr - 0.15, rx + 1.85, fr + 1.85, 0.35), '#4a4744'); // the crossing
-  if (A) poly(qT(A.c0, A.r1, A.c1, A.r1 + 0.6, 0.3), '#8a8478'); // a loading apron by the warehouse
+  if (A) { // the unloading yard: lorries back in from the road, unload by the warehouse, drive out
+    const Y = yardOf(F);
+    poly(qT(Y.c0, Y.r0 - 0.15, Y.c1 + 0.2, Y.r1 + 0.15, 0.32), '#a8a49a');
+    poly(qT(Y.c0, Y.r0, Y.c1 + 0.2, Y.r1, 0.36), '#55524e');
+    for (const v of [Y.r0 + 0.08, Y.r1 - 0.08]) poly(qT(Y.c0 + 0.1, v - 0.03, Y.c1 - 0.2, v + 0.03, 0.4), '#e8e2c8'); // bay lines
+    for (let i = 0; i < 4; i++) { const r = Y.r0 + 0.5 + i * 0.6; poly([iso(Y.c0 + 0.12, r - 0.18, 0.42), iso(Y.c0 + 0.3, r, 0.42), iso(Y.c0 + 0.12, r + 0.18, 0.42)], '#f2c230'); } // stop chevrons by the wall
+    box(Y.c0 + 0.02, Y.r0 + 0.2, Y.c0 + 0.14, Y.r1 - 0.2, 0, 6, '#2b2b2b'); // rubber buffers on the dock
+    const p = iso(Y.c1 - 0.3, Y.r0 + 0.05, 0); line(p, [p[0], p[1] - 26], '#5d6366', 1.5); rrect(p[0] - 16, p[1] - 36, 32, 11, 2, '#2f7fb0', '#fff', 1); textW('SCARICO', p[0], p[1] - 30, 6, '#fff');
+  }
 }
 function neighbourhood(t) { // the buildings around your plot, so the factory stands in a town and not on an empty lawn
-  const bb = bboxOf(shellKeys(F)), A = F.annexBox, rx = (A ? A.c1 : bb.c1) + 2.3, fr = bb.r1 + 2.9, s = F.stage, out = [];
+  const bb = bboxOf(shellKeys(F)), A = F.annexBox, rx = (A ? A.c1 : bb.c1) + 4.8, fr = bb.r1 + 2.9, s = F.stage, out = [];
   const put = (o, f) => out.push({ d: o.c + o.r + o.w + o.h, f });
   // across the lorry road: other firms
   put({ c: rx, r: -7, w: 4, h: 3 }, () => drawShedBig(rx, -7, 4, 3, t, s));
@@ -2334,13 +2342,48 @@ function drawTruckLot(o, t) { // asphalt with painted bays and a couple of lorri
   for (let i = 1; i < w; i++) line(iso(c + i, r + 0.1, 0.4), iso(c + i, r + h * 0.45, 0.4), '#e8e2c8', 1);
   for (let i = 0; i < 2; i++) { const tc = c + 0.5 + i * 1.6 + (k % 2) * 0.3, tr = r + 0.3; box(tc, tr, tc + 0.4, tr + 0.5, 1, 14, ['#d8433a', '#3d8fd6'][i]); box(tc + 0.42, tr, tc + 1.3, tr + 0.5, 1, 16, '#e8e2d4'); poly(qR(tc + 0.4, tr + 0.05, tr + 0.45, 8, 13), '#a9d8ee'); }
 }
-function drawRail(t) { // a railway with sleepers, and a goods train passing through
-  for (let c = 19; c < TOWN.c + 2; c += 0.35) poly(qT(c, RAIL_R - 0.35, c + 0.12, RAIL_R + 0.35, 0.3), '#6b4a2a');
-  for (const d of [-0.2, 0.2]) line(iso(19, RAIL_R + d, 0.8), iso(TOWN.c + 2, RAIL_R + d, 0.8), '#8a8f96', 1.5);
+const RAIL_W = 19.6, RAIL_E = () => TOWN.c + OUT - 7; // the goods terminus, and the tunnel mouth at the edge of the map
+function drawRail(t) { // sleepers and rails from the buffer stop to the tunnel
+  const E = RAIL_E() + 1.5;
+  for (let c = RAIL_W - 0.4; c < E; c += 0.35) poly(qT(c, RAIL_R - 0.35, c + 0.12, RAIL_R + 0.35, 0.3), '#6b4a2a');
+  poly(qT(RAIL_W - 0.5, RAIL_R - 0.5, E, RAIL_R + 0.5, 0.1), 'rgba(120,110,96,0.35)'); // ballast
+  for (const d of [-0.2, 0.2]) line(iso(RAIL_W - 0.4, RAIL_R + d, 0.8), iso(E, RAIL_R + d, 0.8), '#8a8f96', 1.5);
+  box(RAIL_W - 0.6, RAIL_R - 0.4, RAIL_W - 0.35, RAIL_R + 0.4, 0, 9, '#d8433a'); poly(qL(RAIL_W - 0.6, RAIL_W - 0.35, RAIL_R + 0.4, 3, 6), '#fff'); // buffer stop
 }
-function drawTrain(t) {
-  const head = 18 + ((t * 2.2) % 40);
-  for (let i = 0; i < 5; i++) { const c = head - i * 1.3; if (c < 19 || c > TOWN.c + 1) continue; box(c - 0.55, RAIL_R - 0.28, c + 0.55, RAIL_R + 0.28, 2, i === 0 ? 22 : 16, i === 0 ? '#3a4a3a' : ['#8a3a2e', '#5a6a7a', '#7a5a2a'][i % 3]); if (i === 0) box(c - 0.1, RAIL_R - 0.1, c + 0.1, RAIL_R + 0.1, 22, 30, '#2b2b2b'); }
+function trainAt(t) { // a goods train: it waits at the terminus, runs east into the tunnel, stays out of sight, comes back out and returns
+  const L = 5, gap = 1.3, x0 = RAIL_W + 0.4, x1 = RAIL_E() + 1.2, run = (x1 - x0) / 2.2, wait = 8, hide = 9, P = wait + run + hide + run;
+  const u = ((t % P) + P) % P;
+  if (u < wait) return { x: x0, dir: 1, gap, L };
+  if (u < wait + run) return { x: x0 + (x1 - x0) * ease((u - wait) / run), dir: 1, gap, L };
+  if (u < wait + run + hide) return null;
+  return { x: x1 - (x1 - x0) * ease((u - wait - run - hide) / run), dir: -1, gap, L };
+}
+const ease = x => x < 0.12 ? (x / 0.12) * (x / 0.12) * 0.06 : x > 0.88 ? 1 - ((1 - x) / 0.12) * ((1 - x) / 0.12) * 0.06 : 0.06 + (x - 0.12) / 0.76 * 0.88;
+function drawTrain(t) { // the cars that are not inside the tunnel; the engine leads whichever way it goes
+  const T = trainAt(t); if (!T) return;
+  const E = RAIL_E();
+  for (let i = 0; i < T.L; i++) {
+    const c = T.x + i * T.gap, eng = T.dir > 0 ? i === T.L - 1 : i === 0;
+    const a = c - 0.55, b = Math.min(c + 0.55, E); if (b <= a + 0.05) continue;
+    box(a, RAIL_R - 0.28, b, RAIL_R + 0.28, 2, eng ? 22 : 16, eng ? '#3a4a3a' : ['#8a3a2e', '#5a6a7a', '#7a5a2a'][i % 3]);
+    if (eng && c + 0.1 < E) box(c - 0.1, RAIL_R - 0.1, c + 0.1, RAIL_R + 0.1, 22, 30, '#2b2b2b');
+  }
+}
+function drawTunnelHill(t) { // a wooded hill at the edge of the map; the rails go in through a stone portal
+  const E = RAIL_E(), cc = E + 3.2, rr = RAIL_R;
+  for (let k = 0; k < 7; k++) { // stacked rings, a little smaller and higher each time
+    const R = 4.4 - k * 0.58, z = k * 12, p = iso(cc + k * 0.15, rr, z);
+    ctx.beginPath(); ctx.ellipse(p[0], p[1] + 6, R * 32 * 1.15, R * 16 * 1.15, 0, 0, Math.PI); ctx.fillStyle = 'rgba(20,40,14,0.35)'; ctx.fill(); // the slope in shade
+    ctx.beginPath(); ctx.ellipse(p[0], p[1], R * 32 * 1.15, R * 16 * 1.15, 0, 0, Math.PI * 2);
+    ctx.fillStyle = ['#4a7a34', '#4f8238', '#558a3c', '#5a9040', '#609744', '#669e48', '#6ca44c'][k]; ctx.fill();
+    if (k === 0) { ctx.strokeStyle = 'rgba(30,50,20,0.5)'; ctx.lineWidth = 1.5; ctx.stroke(); }
+  }
+  for (let i = 0; i < 9; i++) { const h = hash(i * 7 + 3, 11), a = (h % 360) * Math.PI / 180, d = 1.2 + (h % 23) / 10; drawTreeFlat(cc + Math.cos(a) * d * 0.9 + 0.6, rr + Math.sin(a) * d * 0.9); }
+  // the portal on the hill's west side: a stone arch round a dark hole
+  const m = iso(E, rr, 0);
+  ctx.fillStyle = '#8a8478'; ctx.beginPath(); ctx.ellipse(m[0] - 2, m[1] - 10, 20, 22, -0.45, Math.PI, 0); ctx.lineTo(m[0] + 18, m[1] + 2); ctx.lineTo(m[0] - 22, m[1] - 8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#141414'; ctx.beginPath(); ctx.ellipse(m[0] - 2, m[1] - 9, 14, 16, -0.45, Math.PI, 0); ctx.lineTo(m[0] + 12, m[1] + 1); ctx.lineTo(m[0] - 16, m[1] - 6); ctx.closePath(); ctx.fill();
+  for (let i = 0; i < 6; i++) { const a = Math.PI + i * Math.PI / 5; ctx.fillStyle = 'rgba(40,36,30,0.6)'; ctx.fillRect(m[0] - 2 + Math.cos(a - 0.45) * 18 - 1, m[1] - 10 + Math.sin(a - 0.45) * 19, 2, 2); }
 }
 // The countryside round the town: fields, farms, woods and hamlets, so the land goes on to the horizon.
 const OUT = 18;
@@ -2352,7 +2395,7 @@ function countryLayout() {
   const crops = ['#d8c070', '#cdb460', '#7ab84a', '#8cc45a', '#9a7a52', '#8a6a44', '#e8c84a', '#a890c8'];
   for (let gc = -OUT; gc < TOWN.c + OUT; gc += 6) for (let gr = -OUT; gr < TOWN.r + OUT; gr += 5) {
     const h = hash(gc + 100, gr + 100), c = gc + (h % 2), r = gr + ((h >> 2) % 2), w = 4 + (h >> 4) % 3, hh = 3 + (h >> 6) % 2;
-    if (inTown(c, r, w, hh) || blocks({ c, r, w, h: hh }, RESERVED())) continue;
+    if (inTown(c, r, w, hh) || blocks({ c, r, w, h: hh }, RESERVED()) || blocks({ c, r, w, h: hh }, [{ c: TOWN.c - 2, r: RAIL_R - 1, w: OUT + 4, h: 2 }, { c: RAIL_E() - 2, r: RAIL_R - 5, w: 10, h: 10 }])) continue;
     const roll = (h >> 3) % 10;
     if (roll < 6) fields.push({ c, r, w, h: hh, col: crops[h % crops.length], rows: (h >> 5) % 2 });
     else if (roll < 8) for (let k = 0; k < 9; k++) { const hk = hash(gc * 3 + k, gr * 5 + k); woods.push([c + (hk % 50) / 10, r + ((hk >> 3) % 40) / 10]); }
@@ -2505,7 +2548,7 @@ function drawTown(t) {
   for (const hs of L.houses) objs.push({ d: hs.c + hs.r + hs.w + hs.h, f: () => drawHouse(hs.c, hs.r, hs.w, hs.h, hs.wall, hs.roof, t, hs.alongR, hs.floors) });
   const DRAW = { shed: o => drawShedBig(o.c, o.r, o.w, o.h, t, o.k), brick: o => drawBrickFactory(o, t), silos: o => drawSilos(o, t), containers: o => drawContainers(o, t), lot: o => drawTruckLot(o, t), workshop: o => drawWorkshop(o, t), tower: o => drawWaterTower(o, t) };
   for (const sh of L.sheds) objs.push({ d: sh.c + sh.r + sh.w + sh.h - (sh.kind === 'lot' ? 3 : 0), f: () => (DRAW[sh.kind || 'shed'])(sh) });
-  drawRail(t); objs.push({ d: 30 + RAIL_R, f: () => drawTrain(t) });
+  drawRail(t); objs.push({ d: 30 + RAIL_R, f: () => drawTrain(t) }); objs.push({ d: RAIL_E() + RAIL_R + 9, f: () => drawTunnelHill(t) });
   for (const [c, r] of L.trees) objs.push({ d: c + r, f: () => drawTree(c, r) });
   const tier = TIER();
   TIERS.forEach((T, i) => { const st = T.site, d = st.c + st.r + st.w + st.h;
@@ -2518,12 +2561,31 @@ function drawTown(t) {
     const gp = growthProgress(g);
     if (tier >= g.min || gp >= 1) objs.push({ d, f: () => drawGrowth(g, t) });
     else if (tier === g.min - 1) objs.push({ d, f: () => drawWorksite(g, t, gp) }); }
+  for (const car of townCars(L, t)) objs.push(car);
   objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
-  const main = L.streets[0].pts;
-  for (let i = 0; i < 3; i++) { // little cars along the main street
-    const [c, r] = main[Math.floor(((t * 0.05 + i / 3) % 1) * (main.length - 1))], p = iso(c, r, 0);
-    ctx.fillStyle = ['#d8433a', '#3d8fd6', '#f2c230'][i]; ctx.fillRect(p[0] - 7, p[1] - 6, 14, 6); ctx.fillStyle = '#a9d8ee'; ctx.fillRect(p[0] - 3, p[1] - 9, 7, 3); ctx.fillStyle = '#2b2b2b'; ctx.fillRect(p[0] - 6, p[1], 3, 2); ctx.fillRect(p[0] + 3, p[1], 3, 2);
-  }
+}
+function townCars(L, t) { // little cars driving the streets: drawn in depth order, steering round the fountain in the piazza
+  const out = [], cols = ['#d8433a', '#3d8fd6', '#f2c230', '#e8e2d4', '#4caf6a', '#8a5cd0'];
+  const around = (c, r) => { const dx = c - PIAZZA.c, dy = r - PIAZZA.r, d = Math.hypot(dx, dy), R = 2.0; return d < R && d > 0.01 ? [PIAZZA.c + dx / d * R, PIAZZA.r + dy / d * R] : d <= 0.01 ? [PIAZZA.c + R, PIAZZA.r] : [c, r]; };
+  [[0, 3, 0.05], [1, 2, 0.04], [2, 1, 0.06]].forEach(([si, n, sp]) => {
+    const pts = L.streets[si] && L.streets[si].pts; if (!pts || pts.length < 3) return;
+    for (let i = 0; i < n; i++) {
+      const back = i % 2 === 1, u = ((t * sp + i / n + si * 0.17) % 1), f = (back ? 1 - u : u) * (pts.length - 2), k = Math.floor(f), w = f - k;
+      const a = around(pts[k][0], pts[k][1]), b = around(pts[k + 1][0], pts[k + 1][1]);
+      const c = a[0] + (b[0] - a[0]) * w, r = a[1] + (b[1] - a[1]) * w, side = back ? -0.18 : 0.18;
+      const dc = (b[0] - a[0]) * (back ? -1 : 1), dr = (b[1] - a[1]) * (back ? -1 : 1), along = Math.abs(dc) > Math.abs(dr);
+      const cc = c + (along ? 0 : side), rr = r + (along ? side : 0), col = cols[(si * 3 + i) % cols.length];
+      out.push({ d: cc + rr + 0.3, f: () => drawCarIso(cc, rr, along, col) });
+    }
+  });
+  return out;
+}
+function drawCarIso(c, r, along, col) { // a small car: body, cabin with windows, wheels
+  const hl = 0.32, hw = 0.17, [x0, x1, y0, y1] = along ? [c - hl, c + hl, r - hw, r + hw] : [c - hw, c + hw, r - hl, r + hl];
+  box(x0, y0, x1, y1, 1.5, 6, col);
+  const [a0, a1, b0, b1] = along ? [c - hl * 0.5, c + hl * 0.4, r - hw * 0.85, r + hw * 0.85] : [c - hw * 0.85, c + hw * 0.85, r - hl * 0.5, r + hl * 0.4];
+  box(a0, b0, a1, b1, 6, 10, '#a9d8ee');
+  poly(qT(a0, b0, a1, b1, 10), col);
 }
 // ---- The story: five sites, the company moves up, and the town grows with it -------------------
 const TIERS = [
@@ -2757,7 +2819,7 @@ function drawWorld(t) {
   for (const w of F.workers) objs.push({ d: w.c + w.r, f: () => drawWorker(w, t) });
   for (const k of F.clerks || []) objs.push({ d: k.x + k.y + (k.mode === 'sit' ? 0.3 : 0), f: () => drawClerk(k, t) });
   objs.push(...neighbourhood(t));
-  for (const k of F.trucks || []) objs.push({ d: F.annexBox.c1 + 1 + k.r + 0.6, f: () => drawTruck(k, t) });
+  for (const k of F.trucks || []) objs.push({ d: k.c + k.r + 0.8, f: () => drawTruck(k, t) });
   for (const w of Object.values(F.itw || {})) objs.push({ d: w.c + w.r + 0.01, f: () => {
     const p = iso(w.c, w.r, 0), moving = w.path.length > 0, step = moving ? Math.floor(w.walkT * 6) % 2 : 0;
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
@@ -2841,32 +2903,39 @@ function updateStock(b) { // an order that is due sends a truck; the bars go on 
   b.trucks.push({ n: come.reduce((a, o) => a + o.n, 0), ph: 'in', r: -10, t: 0 });
   if (b === F) toast('Il camion delle barre sta arrivando', '#bfe3ff');
 }
-function updateTrucks(b, dt) { // drive in along the warehouse, unload, drive away
+const yardOf = b => { const A = b.annexBox, mid = Math.max(1.5, A.r1 / 2); return { c0: A.c1, c1: A.c1 + 2.6, r0: mid - 1.4, r1: mid + 1.4, mid, lane: A.c1 + 3.45, park: A.c1 + 1.85 }; };
+function updateTrucks(b, dt) { // along the road, back into the unloading yard, unload, drive out and away
   if (!b.trucks || !b.trucks.length || !b.annexBox) return;
-  const park = Math.max(1.6, b.annexBox.r1 / 2 + 0.6), out = b.annexBox.r1 + 12;
+  const Y = yardOf(b), out = b.annexBox.r1 + 14, sp = 3.2;
   for (const k of b.trucks) {
+    if (k.c == null) { k.c = Y.lane; k.r = -12; k.face = 'r'; }
     k.t += dt;
-    if (k.ph === 'in') { k.r = Math.min(park, k.r + dt * 3.2 * Math.min(1, (park - k.r) / 2 + 0.25)); if (park - k.r < 0.02) { k.ph = 'unload'; k.t = 0; } }
-    else if (k.ph === 'unload') { if (k.t > tune.unloadTime) { const wh = whOf(b); wh.bars = Math.min(whCap(b), wh.bars + k.n); wh.told = false; k.ph = 'out'; k.t = 0; if (b === F) { toast(`Consegna scaricata: +${k.n} barre in magazzino`, '#7ef0a0'); sfx.ding(); } autoOrder(b); } }
-    else k.r += dt * 3.2 * Math.min(1, k.t * 0.8 + 0.2);
+    if (k.ph === 'in') { k.r = Math.min(Y.mid, k.r + dt * sp * Math.min(1, (Y.mid - k.r) / 2 + 0.25)); if (Y.mid - k.r < 0.02) { k.ph = 'back'; k.face = 'c'; k.t = 0; } }
+    else if (k.ph === 'back') { k.c = Math.max(Y.park, k.c - dt * 1.4); if (k.c - Y.park < 0.02) { k.ph = 'unload'; k.t = 0; } }
+    else if (k.ph === 'unload') { if (k.t > tune.unloadTime) { const wh = whOf(b); wh.bars = Math.min(whCap(b), wh.bars + k.n); wh.told = false; k.ph = 'leave'; k.t = 0; if (b === F) { toast(`Consegna scaricata: +${k.n} barre in magazzino`, '#7ef0a0'); sfx.ding(); } autoOrder(b); } }
+    else if (k.ph === 'leave') { k.c = Math.min(Y.lane, k.c + dt * 2); if (Y.lane - k.c < 0.02) { k.ph = 'out'; k.face = 'r'; k.t = 0; } }
+    else k.r += dt * sp * Math.min(1, k.t * 0.8 + 0.2);
   }
   b.trucks = b.trucks.filter(k => k.r < out);
 }
-function drawTruck(k, t) { // a small lorry with a load of bar bundles; while it unloads a worker carries them in
-  const A = F.annexBox, c = A.c1 + 0.95, r = k.r, cols = ['#d8433a', '#2f7fb0', '#e8b45a', '#4caf6a'];
-  for (const [dr, dc] of [[-1.2, -0.3], [-1.2, 0.3], [0.25, -0.3], [0.25, 0.3]]) box(c + dc - 0.06, r + dr - 0.1, c + dc + 0.06, r + dr + 0.1, 0, 6, '#1b1b1b');
-  box(c - 0.4, r - 1.65, c + 0.4, r - 0.05, 5, 9, '#3a4148'); // chassis
-  const left = k.ph === 'unload' ? Math.max(0, 1 - k.t / tune.unloadTime) : k.ph === 'out' ? 0 : 1;
-  box(c - 0.38, r - 1.6, c + 0.38, r - 0.1, 9, 12, '#7a5228'); // flatbed
-  for (let i = 0; i < 4; i++) if (i / 4 < left) box(c - 0.3, r - 1.5 + i * 0.35, c + 0.3, r - 1.22 + i * 0.35, 12, 22, '#a7b0b8', 'rgba(40,46,52,0.6)');
-  box(c - 0.4, r - 0.02, c + 0.4, r + 0.5, 5, 30, cols[(k.n + 1) % 4]); // cab
-  poly(qL(c - 0.32, c + 0.32, r + 0.5, 18, 27), '#9ad0f0', '#2a4a6a', 1);
-  poly(qT(c - 0.4, r - 0.02, c + 0.4, r + 0.5, 30), '#e8e2d4', EDGE);
-  if (k.ph === 'unload') { // a warehouse worker walking bundles from the lorry to the shelves
-    const u = (Math.sin(k.t * 2.4) + 1) / 2, wc = A.c1 + 0.3 - u * 0.9, p = iso(wc, r - 0.8, 0), carry = Math.cos(k.t * 2.4) < 0;
+function drawTruck(k, t) { // a small lorry; local u runs to the cab, v across. Facing r on the road, facing c (cab to the road) in the yard
+  const cols = ['#d8433a', '#2f7fb0', '#e8b45a', '#4caf6a'], P = (u, v) => k.face === 'r' ? [k.c + v, k.r + u] : [k.c + u, k.r + v];
+  const B = (u0, u1, v0, v1, z0, z1, col, st) => { const a = P(u0, v0), b = P(u1, v1); box(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1]), z0, z1, col, st); };
+  for (const [u, v] of [[-1.2, -0.3], [-1.2, 0.3], [0.25, -0.3], [0.25, 0.3]]) B(u - 0.1, u + 0.1, v - 0.06, v + 0.06, 0, 6, '#1b1b1b');
+  B(-1.65, -0.05, -0.4, 0.4, 5, 9, '#3a4148'); // chassis
+  const left = k.ph === 'unload' ? Math.max(0, 1 - k.t / tune.unloadTime) : k.ph === 'leave' || k.ph === 'out' ? 0 : 1;
+  B(-1.6, -0.1, -0.38, 0.38, 9, 12, '#7a5228'); // flatbed
+  for (let i = 0; i < 4; i++) if (i / 4 < left) B(-1.5 + i * 0.35, -1.22 + i * 0.35, -0.3, 0.3, 12, 22, '#a7b0b8', 'rgba(40,46,52,0.6)');
+  B(-0.02, 0.5, -0.4, 0.4, 5, 30, cols[(k.n + 1) % 4]); // cab
+  const f0 = P(0.5, -0.32), f1 = P(0.5, 0.32);
+  poly(k.face === 'r' ? qL(Math.min(f0[0], f1[0]), Math.max(f0[0], f1[0]), f0[1], 18, 27) : qR(f0[0], Math.min(f0[1], f1[1]), Math.max(f0[1], f1[1]), 18, 27), '#9ad0f0', '#2a4a6a', 1);
+  const a = P(-0.02, -0.4), b = P(0.5, 0.4); poly(qT(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1]), 30), '#e8e2d4', EDGE);
+  if (k.ph === 'back' && Math.sin(t * 12) > 0) { const q = P(-1.66, 0); const p = iso(q[0], q[1], 10); ctx.fillStyle = '#ffb35b'; ctx.fillRect(p[0] - 2, p[1] - 2, 4, 4); } // reversing light
+  if (k.ph === 'unload') { // a warehouse worker walks bundles from the back of the lorry onto the shelves
+    const A = F.annexBox, u = (Math.sin(k.t * 2.4) + 1) / 2, wc = A.c1 + 0.3 - u * 1.0, wr = k.r + 0.5, p = iso(wc, wr, 0), carry = Math.cos(k.t * 2.4) < 0;
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
     sprite(Math.floor(k.t * 6) % 2 ? 'walk1' : 'walk0', p[0], p[1], 2, !carry, MAG_PAL);
-    if (carry) box(wc - 0.18, r - 0.86, wc + 0.18, r - 0.74, 26, 30, '#a7b0b8');
+    if (carry) box(wc - 0.18, wr - 0.06, wc + 0.18, wr + 0.06, 26, 30, '#a7b0b8');
   }
 }
 function warnEmpty(b) {
