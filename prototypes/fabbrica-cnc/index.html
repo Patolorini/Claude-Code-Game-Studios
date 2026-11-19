@@ -1,0 +1,1656 @@
+<!doctype html>
+<!-- PROTOTYPE - NOT FOR PRODUCTION -->
+<!-- Question: montare, cablare e configurare ogni macchina con i minigiochi, e poi scoprire quale ordine di macchine produce il pezzo migliore, regge come loop rilassante? -->
+<!-- Date: 2026-11-19 -->
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Fabbrica CNC</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #141b22; overflow: hidden; }
+  body { font-variant-numeric: tabular-nums; -webkit-user-select: none; user-select: none; }
+  canvas { display: block; margin: 0 auto; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script src="config.js"></script>
+<script>
+'use strict';
+// Fabbrica CNC: an isometric factory where CNC machines are bought, built through three
+// minigames (assembly, network, configuration) and lined up on belts; the order of the
+// machines on a line decides which part it makes.
+
+// ---- Built to be checked ----------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const tune = new Proxy({}, { get: (_, k) => CONFIG[k].value }); // live: tune.speed is CONFIG.speed.value
+const STEP = 1 / 60;            // simulation step in seconds; motion is per second, never per frame
+const W = 1280, H = 720;        // logical size
+const PIXEL = false;            // the canvas stays smooth; the workers are drawn as pixel sprites
+const FONT = '"Trebuchet MS", Verdana, sans-serif';
+const TITLE = 'Fabbrica CNC';
+const CONTROLS = [
+  'Tocca o clicca: compra, piazza e costruisci',
+  'Trascina: sposta la visuale  ·  Rotella o pizzico: zoom',
+  'Frecce: sposta  ·  + / -: zoom  ·  B negozio  ·  R ricette  ·  T attrezzi',
+  'Spazio: ferma l\'ago  ·  P: pausa  ·  M: audio',
+];
+const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
+const CHEAP = params.get('render') === 'cheap';
+let seed;
+function rng() { // mulberry32; every gameplay random call reads this, never Math.random
+  seed = (seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const events = []; // window.game.events: anything the game wants a run to see
+
+// ---- Screen ---------------------------------------------------------------------------
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let VIEW_R = 1;
+function fit() { // fills the window at any size and pixel ratio
+  const k = Math.min(innerWidth / W, innerHeight / H);
+  const s = PIXEL ? Math.max(1, Math.floor(k)) : k;
+  const r = PIXEL ? 1 : s * (devicePixelRatio || 1);
+  VIEW_R = r;
+  canvas.width = Math.round(W * r); canvas.height = Math.round(H * r);
+  canvas.style.width = Math.round(W * s) + 'px'; canvas.style.height = Math.round(H * s) + 'px';
+  canvas.style.marginTop = Math.max(0, Math.floor((innerHeight - H * s) / 2)) + 'px';
+  canvas.style.imageRendering = PIXEL ? 'pixelated' : 'auto';
+  ctx.setTransform(r, 0, 0, r, 0, 0); ctx.imageSmoothingEnabled = !PIXEL;
+}
+addEventListener('resize', fit); fit();
+function clear(c) { ctx.fillStyle = c; ctx.fillRect(0, 0, W, H); }
+function text(s, x, y, size, c, align = 'center', weight = 'bold') {
+  ctx.fillStyle = c; ctx.font = `${weight} ${size}px ${FONT}`; ctx.textAlign = align;
+  ctx.textBaseline = 'middle'; ctx.fillText(s, x, y);
+}
+function textO(s, x, y, size, c, align = 'center', outline = 'rgba(10,14,20,0.85)') { // outlined text
+  ctx.font = `bold ${size}px ${FONT}`; ctx.textAlign = align; ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(3, size / 5); ctx.strokeStyle = outline; ctx.lineJoin = 'round';
+  ctx.strokeText(s, x, y); ctx.fillStyle = c; ctx.fillText(s, x, y);
+}
+function rrect(x, y, w, h, r, fill, stroke, lw = 2) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+}
+function wrapText(s, x, y, maxW, size, c, lineH, align = 'left') {
+  ctx.font = `bold ${size}px ${FONT}`;
+  const words = s.split(' '); let line = '', yy = y;
+  for (const w of words) {
+    const t = line ? line + ' ' + w : w;
+    if (ctx.measureText(t).width > maxW && line) { text(line, x, yy, size, c, align); line = w; yy += lineH; }
+    else line = t;
+  }
+  if (line) text(line, x, yy, size, c, align);
+  return yy;
+}
+function fmt(n) { n = Math.round(n); return n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + 'k' : String(n); }
+
+// ---- Input ------------------------------------------------------------------------------
+const down = new Set(), hit = new Set();
+const pressed = code => hit.has(code);
+addEventListener('keydown', e => {
+  startAudio();
+  if (!e.repeat) { down.add(e.code); hit.add(e.code); }
+  if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+});
+addEventListener('keyup', e => down.delete(e.code));
+addEventListener('blur', () => down.clear());
+
+// Pointer: taps and drags go to a queue the fixed step reads; panning and pinching move the camera.
+const taps = [];               // logical {x, y} taps for the next step
+const ptrs = new Map();        // active pointers
+const ptr = { x: W / 2, y: H / 2, down: false, inside: false }; // last pointer, for drags and hover
+let pinch = null;
+function logical(e) {
+  const rc = canvas.getBoundingClientRect();
+  return { x: (e.clientX - rc.left) * W / rc.width, y: (e.clientY - rc.top) * H / rc.height };
+}
+function capturesDrag() { return scene !== 'play' || !!state.mg || !!state.panel; }
+canvas.addEventListener('pointerdown', e => {
+  startAudio();
+  const p = logical(e);
+  ptrs.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y, moved: false });
+  ptr.x = p.x; ptr.y = p.y; ptr.down = true; ptr.inside = true;
+  if (ptrs.size === 2) {
+    const [a, b] = [...ptrs.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: cam.zoom };
+  }
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* old browsers */ }
+});
+canvas.addEventListener('pointermove', e => {
+  const p = logical(e); ptr.x = p.x; ptr.y = p.y; ptr.inside = true;
+  const q = ptrs.get(e.pointerId); if (!q) return;
+  const dx = p.x - q.x, dy = p.y - q.y; q.x = p.x; q.y = p.y;
+  if (Math.hypot(p.x - q.sx, p.y - q.sy) > 10) q.moved = true;
+  if (pinch && ptrs.size >= 2) {
+    const [a, b] = [...ptrs.values()];
+    setZoom(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, pinch.d));
+    q.moved = true; return;
+  }
+  if (q.moved && !capturesDrag()) { cam.x -= dx / cam.zoom; cam.y -= dy / cam.zoom; clampCam(); }
+});
+function endPtr(e) {
+  const q = ptrs.get(e.pointerId); if (!q) return;
+  ptrs.delete(e.pointerId);
+  if (!q.moved && !pinch) {
+    // one physical tap can arrive as two events on some browsers: drop the twin
+    const last = taps.lastTime || 0, dup = e.timeStamp - last < 60 && Math.hypot(q.x - (taps.lx || -99), q.y - (taps.ly || -99)) < 4;
+    if (!dup) { taps.push({ x: q.x, y: q.y }); taps.lastTime = e.timeStamp; taps.lx = q.x; taps.ly = q.y; }
+  }
+  if (ptrs.size < 2) pinch = null;
+  if (ptrs.size === 0) ptr.down = false;
+}
+canvas.addEventListener('pointerup', endPtr);
+canvas.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); pinch = null; ptr.down = ptrs.size > 0; });
+canvas.addEventListener('pointerleave', () => { ptr.inside = false; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (scene === 'play' && !state.mg && !state.panel) setZoom(cam.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+}, { passive: false });
+
+// ---- Audio: started on first input, mute on M --------------------------------------------
+let audio = null, muted = false;
+function startAudio() {
+  if (!audio) {
+    try {
+      const ac = window.GAME_AUDIO || new (window.AudioContext || window.webkitAudioContext)();
+      const out = ac.createGain(); out.gain.value = muted ? 0 : tune.volume;
+      out.connect(ac.destination); audio = { ac, out };
+    } catch (_) { return; }
+  }
+  if (audio.ac.state === 'suspended') audio.ac.resume();
+}
+function setMuted(m) { muted = m; if (audio) audio.out.gain.value = m ? 0 : tune.volume; }
+addEventListener('tune', () => setMuted(muted));
+function tone(freq, dur, type = 'square', vol = 0.3, delay = 0) {
+  if (!audio || muted) return;
+  const t = audio.ac.currentTime + delay, o = audio.ac.createOscillator(), g = audio.ac.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g).connect(audio.out); o.start(t); o.stop(t + dur);
+}
+const sfx = {
+  clack() { tone(140, 0.08, 'square', 0.25); tone(90, 0.12, 'triangle', 0.3, 0.03); },
+  bolt() { tone(520, 0.05, 'square', 0.12); },
+  boltDone() { tone(660, 0.06, 'square', 0.15); tone(880, 0.08, 'square', 0.12, 0.05); },
+  wrong() { tone(160, 0.18, 'sawtooth', 0.16); },
+  cable() { tone(300 + rng() * 60, 0.04, 'triangle', 0.1); },
+  crimp() { tone(240, 0.06, 'square', 0.18); },
+  lock() { tone(740, 0.08, 'triangle', 0.2); },
+  ding() { [660, 880, 1100].forEach((f, i) => tone(f, 0.18, 'triangle', 0.18, i * 0.08)); },
+  level() { [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.22, 'triangle', 0.2, i * 0.1)); },
+  coin() { tone(1320, 0.06, 'triangle', 0.06); tone(1760, 0.07, 'triangle', 0.05, 0.04); },
+  click() { tone(420, 0.04, 'triangle', 0.12); },
+};
+
+// ---- Data -------------------------------------------------------------------------------
+const ORDER = ['T', 'L', 'F', 'D', 'X'];
+const MACH = {
+  T: { name: 'Troncatrice CNC', short: 'Tronc.', color: '#e8b52a', desc: 'Taglia le barre a misura' },
+  L: { name: 'Tornio CNC', short: 'Tornio', color: '#3d8fd6', desc: 'Tornisce pezzi cilindrici' },
+  F: { name: 'Fresa CNC', short: 'Fresa', color: '#4caf6a', desc: 'Fresa piani e scanalature' },
+  D: { name: 'Foratrice CNC', short: 'Forat.', color: '#e07a2e', desc: 'Fora e filetta' },
+  X: { name: 'Centro di lavoro 5 assi', short: '5 assi', color: '#8a5cd0', desc: 'Forme complesse su 5 assi' },
+};
+const mcfg = (k, t) => tune[k + t];
+const RECIPES = [
+  { seq: 'T', name: 'Barra tagliata' }, { seq: 'TD', name: 'Distanziale forato' },
+  { seq: 'TL', name: 'Perno tornito' }, { seq: 'TF', name: 'Piastra fresata' },
+  { seq: 'TFL', name: 'Mozzo' }, { seq: 'TLF', name: 'Albero scanalato' },
+  { seq: 'TLD', name: 'Boccola' }, { seq: 'TFD', name: 'Flangia forata' },
+  { seq: 'TFLD', name: 'Ingranaggio' }, { seq: 'TLFD', name: 'Albero motore' },
+  { seq: 'TX', name: 'Staffa complessa' }, { seq: 'TFX', name: 'Supporto lavorato' },
+  { seq: 'TLX', name: 'Girante turbina' }, { seq: 'TFDX', name: 'Blocco motore' },
+  { seq: 'TLFDX', name: 'Pala aeronautica' },
+];
+const recipeOf = seq => RECIPES.find(r => r.seq === seq);
+const recipeVal = seq => recipeOf(seq) ? tune['val_' + seq] : tune.val_scrap;
+const PHASES = ['Montaggio', 'Rete', 'Configurazione'];
+const TOOLS = [
+  { key: 'W', name: 'Chiave dinamometrica', phase: 0, req: 'toolReqW', eff: l => `${boltTurnsAt(l)} giri per bullone` },
+  { key: 'C', name: 'Crimpatrice', phase: 1, req: 'toolReqC', eff: l => `${crimpTapsAt(l)} tocchi di crimpatura` },
+  { key: 'Te', name: 'Tester digitale', phase: 2, req: 'toolReqT', eff: l => `zona verde ${Math.round(zoneAt(l) * 100)}%${l > 1 ? ', ago più lento' : ''}` },
+];
+const boltTurnsAt = l => Math.max(1, tune.boltTurns - (l - 1));
+const crimpTapsAt = l => Math.max(1, tune.crimpTaps - (l - 1));
+const zoneAt = l => tune.zoneBase + tune.zonePerLvl * (l - 1);
+const needleAt = l => tune.needleSpeed * Math.max(0.2, 1 - tune.needleSlowPerLvl * (l - 1));
+const toolCost = l => tune['toolCost' + (l + 1)]; // cost to go from l to l+1
+const toolReq = (t, l) => tune[t.req] + (l - 1) * tune.toolReqStep;
+const EXPANSIONS = [
+  { id: 'line2', name: 'Linea 2', desc: 'Il capannone si allarga: nuova linea e nuovo operaio', cost: () => tune.line2Cost, lvl: () => tune.line2Lvl, done: () => state.linesOpen >= 2, can: () => true, apply() { state.linesOpen = 2; } },
+  { id: 'long', name: 'Linee lunghe', desc: 'Ogni linea passa da 4 a 5 posti macchina', cost: () => tune.longCost, lvl: () => tune.longLvl, done: () => state.slotsPerLine >= 5, can: () => true, apply() { state.slotsPerLine = 5; } },
+  { id: 'line3', name: 'Linea 3', desc: 'Terza campata del capannone: nuova linea', cost: () => tune.line3Cost, lvl: () => tune.line3Lvl, done: () => state.linesOpen >= 3, can: () => state.linesOpen >= 2, apply() { state.linesOpen = 3; } },
+];
+const COLS = 8, MAXROWS = 7, CRATE_COL = 6, RACK = { c: 7, r: 0 };
+const lineRow = i => 1 + 2 * i;
+const openRows = () => 1 + 2 * state.linesOpen;
+
+const GOALS = [
+  { text: 'Compra la Troncatrice CNC nel Negozio e piazzala', done: () => allMachines().length >= 1 },
+  { text: 'Costruiscila: montaggio, rete e configurazione', done: () => allMachines().some(m => m.phase >= 3) },
+  { text: 'Vendi i tuoi primi 5 pezzi', done: () => state.sold >= 5, prog: () => [state.sold, 5] },
+  { text: 'Metti un Tornio DOPO la Troncatrice: Perno tornito', done: () => state.found.includes('TL') },
+  { text: 'Raggiungi il livello 3 e costruisci la Fresa', done: () => allMachines().some(m => m.type === 'F' && m.phase >= 3) },
+  { text: 'Scopri una ricetta con 3 macchine', done: () => state.found.some(s => s.length >= 3) },
+  { text: 'Potenzia un attrezzo', done: () => state.tools.W + state.tools.C + state.tools.Te > 3 },
+  { text: 'Amplia il capannone: apri la Linea 2', done: () => state.linesOpen >= 2 },
+  { text: 'Scopri 6 ricette', done: () => state.found.length >= 6, prog: () => [state.found.length, 6] },
+  { text: 'Costruisci la Foratrice CNC', done: () => allMachines().some(m => m.type === 'D' && m.phase >= 3) },
+  { text: 'Produci l\'Albero motore (4 macchine)', done: () => state.found.includes('TLFD') },
+  { text: 'Costruisci il Centro di lavoro 5 assi', done: () => allMachines().some(m => m.type === 'X' && m.phase >= 3) },
+  { text: 'Apri la Linea 3', done: () => state.linesOpen >= 3 },
+  { text: 'Produci la Pala aeronautica (5 macchine)', done: () => state.found.includes('TLFDX') },
+  { text: 'Raggiungi il livello massimo', done: () => state.level >= tune.maxLevel, prog: () => [state.level, tune.maxLevel] },
+  { text: 'Scopri tutte le 15 ricette', done: () => state.found.length >= RECIPES.length, prog: () => [state.found.length, RECIPES.length] },
+];
+
+// ---- State ------------------------------------------------------------------------------
+let scene, state;
+const cam = { x: 0, y: 0, zoom: 1.75 };
+let ui = { buttons: [], named: {} };
+let confirmNew = 0;
+const SAVE_KEY = 'fabbricaCNC_v1';
+
+function newLines() { return [0, 1, 2].map(() => ({ slots: [null, null, null, null, null], pieces: [], spawnT: 0 })); }
+function reset() {
+  seed = Number(params.get('seed')) || CONFIG.seed;
+  state = {
+    t: 0, score: 0, gained: '',
+    coins: tune.startCoins, xp: 0, level: 1, sold: 0, earned: 0,
+    tools: { W: 1, C: 1, Te: 1 }, linesOpen: 1, slotsPerLine: 4,
+    lines: newLines(), found: [], goal: 0, nextId: 1,
+    panel: null, shopTab: 0, sel: null, mg: null, placing: null, hover: null,
+    floats: [], toasts: [], banner: null, incomeLog: [], workers: [], saveT: 0, welcome: 4.5,
+  };
+  for (let i = 0; i < tune.workers; i++) addWorker(i === 0);
+  centerCam();
+}
+function addWorker(first) {
+  const c = first ? 3.5 : 1.5 + rng() * 5, r = 2.5;
+  state.workers.push({ c, r, path: [], dir: 1, walkT: 0, idleT: 1 + rng() * 2, task: null, wave: first ? 4.5 : 0 });
+}
+function allMachines() { const a = []; state.lines.forEach(L => L.slots.forEach(m => { if (m) a.push(m); })); return a; }
+function owned(t) { return allMachines().filter(m => m.type === t).length; }
+function costOf(t) { return Math.round(mcfg('cost', t) * (1 + tune.copyMult * owned(t))); }
+function levelXp(L) { return L <= 1 ? 0 : Math.round(tune.xpBase * Math.pow(L - 1, tune.xpExp)); }
+
+function serialize() {
+  return JSON.stringify({
+    v: 1, coins: state.coins, xp: state.xp, level: state.level, sold: state.sold, earned: state.earned,
+    tools: state.tools, linesOpen: state.linesOpen, slotsPerLine: state.slotsPerLine, found: state.found,
+    goal: state.goal, nextId: state.nextId, workers: state.workers.length,
+    lines: state.lines.map(L => L.slots.map(m => m ? { id: m.id, type: m.type, phase: m.phase, pct: m.pct } : null)),
+  });
+}
+function save() { try { localStorage.setItem(SAVE_KEY, serialize()); } catch (_) { /* storage blocked: play on */ } }
+function hasSave() { try { return !!localStorage.getItem(SAVE_KEY); } catch (_) { return false; } }
+function load() {
+  let d; try { d = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (_) { return false; }
+  if (!d || d.v !== 1) return false;
+  reset();
+  Object.assign(state, { coins: d.coins, xp: d.xp, level: d.level, sold: d.sold, earned: d.earned || 0, tools: d.tools, linesOpen: d.linesOpen, slotsPerLine: d.slotsPerLine, found: d.found, goal: d.goal, nextId: d.nextId, welcome: 0 });
+  d.lines.forEach((sl, li) => sl.forEach((m, si) => {
+    if (m) state.lines[li].slots[si] = makeMachine(m.type, li, si, m.id, m.phase, m.pct);
+  }));
+  state.workers = [];
+  for (let i = 0; i < (d.workers || tune.workers); i++) addWorker(false);
+  centerCam();
+  return true;
+}
+function wipeSave() { try { localStorage.removeItem(SAVE_KEY); } catch (_) { /* nothing to wipe */ } }
+
+function makeMachine(type, line, slot, id, phase = 0, pct = []) {
+  const m = { id: id || state.nextId++, type, line, slot, phase, pct: pct.slice(), busy: null, work: 0 };
+  m.quality = phase >= 3 ? avg(m.pct) / 100 : 0;
+  return m;
+}
+const avg = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0;
+
+// ---- Camera -----------------------------------------------------------------------------
+const TW = 64, TH = 32;
+function iso(c, r, z = 0) { return [(c - r) * TW / 2, (c + r) * TH / 2 - z]; }
+function toScreen(wx, wy) { return [(wx - cam.x) * cam.zoom + W / 2, (wy - cam.y) * cam.zoom + H / 2]; }
+function toWorld(sx, sy) { return [(sx - W / 2) / cam.zoom + cam.x, (sy - H / 2) / cam.zoom + cam.y]; }
+function toCell(sx, sy) {
+  const [wx, wy] = toWorld(sx, sy);
+  return [(wx / (TW / 2) + wy / (TH / 2)) / 2, (wy / (TH / 2) - wx / (TW / 2)) / 2];
+}
+function setZoom(z) { cam.zoom = Math.max(tune.zoomMin, Math.min(tune.zoomMax, z)); clampCam(); }
+function clampCam() { cam.x = Math.max(-260, Math.min(320, cam.x)); cam.y = Math.max(-60, Math.min(300, cam.y)); }
+function centerCam() {
+  const rows = openRows();
+  const [x, y] = iso(COLS / 2, rows / 2, 0);
+  cam.x = x; cam.y = y - 30; cam.zoom = tune.zoomStart - (state.linesOpen - 1) * 0.3; clampCam();
+}
+
+// ---- Drawing primitives (world space) ---------------------------------------------------
+function poly(pts, fill, stroke, lw = 1) {
+  ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); }
+}
+function shade(hex, k) {
+  const n = parseInt(hex.slice(1), 16), rr = n >> 16, gg = (n >> 8) & 255, bb = n & 255;
+  const f = v => Math.max(0, Math.min(255, Math.round(k < 1 ? v * k : v + (255 - v) * (k - 1))));
+  return `rgb(${f(rr)},${f(gg)},${f(bb)})`;
+}
+const EDGE = 'rgba(20,26,34,0.45)';
+function box(c0, r0, c1, r1, z0, z1, col, stroke = EDGE) {
+  poly([iso(c0, r1, z0), iso(c1, r1, z0), iso(c1, r1, z1), iso(c0, r1, z1)], shade(col, 0.8), stroke);
+  poly([iso(c1, r0, z0), iso(c1, r1, z0), iso(c1, r1, z1), iso(c1, r0, z1)], shade(col, 0.64), stroke);
+  poly([iso(c0, r0, z1), iso(c1, r0, z1), iso(c1, r1, z1), iso(c0, r1, z1)], col, stroke);
+}
+const qL = (c0, c1, r, za, zb) => [iso(c0, r, za), iso(c1, r, za), iso(c1, r, zb), iso(c0, r, zb)]; // on a front-left face
+const qR = (c, r0, r1, za, zb) => [iso(c, r0, za), iso(c, r1, za), iso(c, r1, zb), iso(c, r0, zb)]; // on a front-right face
+const qT = (c0, r0, c1, r1, z) => [iso(c0, r0, z), iso(c1, r0, z), iso(c1, r1, z), iso(c0, r1, z)];
+function line(a, b, col, lw = 1) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke(); }
+const GLASS = 'rgba(120,190,230,0.82)', GLASS_EDGE = '#26394a', DARK = '#2b3138';
+
+// Pixel sprites: one character per pixel; '.' is empty.
+const PAL = { Y: '#f2c230', y: '#c9961c', S: '#f0c08a', s: '#c98f5e', E: '#2a1e1a', B: '#2f63b8', b: '#1f4485', O: '#f08a2a', G: '#3a3a40', W: '#ffffff' };
+const SPR = {
+  walk0: ['....yYYy....', '...yYYYYy...', '..yYYYYYYy..', '..yyyyyyyy..', '...SSSSSS...', '...SESSES...', '...SSSSSS...', '....ssss....', '..BBOBBOBB..', '.SBBOBBOBBS.', '.SBBBBBBBBS.', '..bBBBBBBb..', '...BBBBBB...', '...BB..BB...', '...BB..BB...', '..GGG..GGG..'],
+  walk1: ['....yYYy....', '...yYYYYy...', '..yYYYYYYy..', '..yyyyyyyy..', '...SSSSSS...', '...SESSES...', '...SSSSSS...', '....ssss....', '..BBOBBOBB..', '.SBBOBBOBBS.', '.SBBBBBBBBS.', '..bBBBBBBb..', '...BBBBBB...', '...BB.BB....', '..BB...BB...', '.GGG...GGG..'],
+  wave: ['....yYYy....', '...yYYYYy...', '..yYYYYYYy..', '..yyyyyyyy.S', '...SSSSSS..S', '...SESSES..S', '...SSSSSS.S.', '....ssss..S.', '..BBOBBOBBB.', '.SBBOBBOBB..', '.SBBBBBBBB..', '..bBBBBBBb..', '...BBBBBB...', '...BB..BB...', '...BB..BB...', '..GGG..GGG..'],
+  work: ['....yYYy....', '...yYYYYy...', '..yYYYYYYy..', '..yyyyyyyy..', '...SSSSSS...', '...SESSES...', '...SSSSSS...', '....ssss.GG.', '..BBOBBOBBGG', '.SBBOBBOBBS.', '.SBBBBBBBB..', '..bBBBBBBb..', '...BBBBBB...', '...BB..BB...', '...BB..BB...', '..GGG..GGG..'],
+};
+function sprite(name, x, y, px, flip) { // x, y: bottom centre
+  const rows = SPR[name], w = rows[0].length, h = rows.length;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const ch = rows[j][flip ? w - 1 - i : i]; if (ch === '.') continue;
+    ctx.fillStyle = PAL[ch]; ctx.fillRect(Math.round(x - w * px / 2 + i * px), Math.round(y - h * px + j * px), px, px);
+  }
+}
+
+// ---- Machines ----------------------------------------------------------------------------
+// status: 'work' (green), 'wait' (yellow), 'off' (grey: being built)
+function stackLight(c, r, z, status, t) {
+  line(iso(c, r, z), iso(c, r, z + 6), '#555c63', 2);
+  const cols = [['#d8433a', '#5a2a28'], ['#f2c230', '#5a4c22'], ['#4fdc7a', '#244a30']];
+  const lit = status === 'work' ? 2 : status === 'wait' ? 1 : -1;
+  for (let i = 0; i < 3; i++) {
+    const on = i === lit && (status !== 'wait' || Math.sin(t * 3) > -0.6);
+    box(c - 0.04, r - 0.04, c + 0.04, r + 0.04, z + 6 + i * 4, z + 10 + i * 4, on ? cols[i][0] : cols[i][1], 'rgba(0,0,0,0.5)');
+  }
+}
+function screenQ(pts, col, t, busy) {
+  poly(pts, '#1b2229', '#0c1014');
+  const [a, b, c2, d] = pts; // a:bottom-left b:bottom-right c2:top-right d:top-left
+  const lerp = (p, q, u) => [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u];
+  for (let i = 1; i <= 3; i++) {
+    const u = i / 4, w = busy ? 0.3 + 0.6 * ((Math.sin(t * 4 + i) + 1) / 2) : 0.5;
+    line(lerp(lerp(a, d, u), lerp(b, c2, u), 0.12), lerp(lerp(a, d, u), lerp(b, c2, u), 0.12 + 0.76 * w), col, 1.2);
+  }
+}
+function drawMachine(type, col, row, o = {}) {
+  const c = col + 0.5, r = row + 0.5, t = o.t || 0, busy = !!o.busy, st = o.status || 'wait';
+  box(c - 0.44, r - 0.36, c + 0.44, r + 0.36, 0, 4, '#5b6168');
+  let top = 30, light = [c + 0.3, r - 0.22];
+  if (type === 'T') {
+    box(c - 0.38, r - 0.28, c + 0.38, r + 0.28, 4, 22, '#dfe4e8');
+    poly(qL(c - 0.38, c + 0.38, r + 0.28, 5, 9), '#e8b52a');
+    poly(qL(c - 0.3, c + 0.04, r + 0.28, 11, 19), GLASS, GLASS_EDGE);
+    screenQ(qR(c + 0.38, r - 0.12, r + 0.14, 11, 19), '#5be38f', t, busy);
+    box(c - 0.08, r - 0.12, c + 0.1, r + 0.12, 22, 36, '#e8b52a');
+    // saw blade: toothed disc turning while it cuts
+    const ctr = iso(c + 0.22, r + 0.02, 27), ang = busy ? t * 18 : 0.3, n = 14;
+    ctx.beginPath();
+    for (let i = 0; i < n * 2; i++) {
+      const a = ang + i * Math.PI / n, rad = i % 2 ? 7 : 10;
+      ctx.lineTo(ctr[0] + Math.cos(a) * rad, ctr[1] + Math.sin(a) * rad * 0.55);
+    }
+    ctx.closePath(); ctx.fillStyle = '#c9d1d8'; ctx.fill(); ctx.strokeStyle = '#59636c'; ctx.lineWidth = 1; ctx.stroke();
+    poly([[ctr[0] - 3, ctr[1] - 1.5], [ctr[0] + 3, ctr[1] - 1.5], [ctr[0] + 3, ctr[1] + 1.5], [ctr[0] - 3, ctr[1] + 1.5]], '#3b434a');
+    box(c - 0.38, r + 0.18, c - 0.3, r + 0.26, 22, 25, '#d8433a');
+    top = 22; light = [c - 0.3, r - 0.2];
+    if (busy && Math.sin(t * 30) > 0) { ctx.fillStyle = '#ffd36a'; ctx.fillRect(ctr[0] + 8, ctr[1] + 2, 2, 2); ctx.fillRect(ctr[0] + 11, ctr[1] - 1, 2, 2); }
+  } else if (type === 'L') {
+    box(c - 0.42, r - 0.26, c + 0.42, r + 0.26, 4, 24, '#d9dee3');
+    poly(qL(c - 0.42, c + 0.42, r + 0.26, 4, 8), '#3d8fd6');
+    box(c - 0.42, r - 0.26, c - 0.14, r + 0.26, 24, 38, '#c4ccd3');
+    poly(qL(c - 0.4, c - 0.16, r + 0.26, 27, 35), '#3d8fd6');
+    poly(qL(c - 0.1, c + 0.28, r + 0.26, 9, 21), GLASS, GLASS_EDGE);
+    // chuck inside the door, spinning stripes while it turns
+    const k = iso(c - 0.04, r + 0.26, 15);
+    rrect(k[0] - 2, k[1] - 5, 7, 10, 2, '#4a525a');
+    if (busy) for (let i = 0; i < 3; i++) { const yy = k[1] - 4 + ((t * 40 + i * 3.3) % 10); ctx.fillStyle = '#9aa4ad'; ctx.fillRect(k[0] - 1, yy, 5, 1); }
+    box(c + 0.3, r + 0.26, c + 0.42, r + 0.34, 12, 30, DARK);
+    screenQ(qL(c + 0.31, c + 0.41, r + 0.34, 19, 28), '#5bc7ff', t, busy);
+    top = 38; light = [c - 0.36, r - 0.2];
+  } else if (type === 'F') {
+    box(c - 0.36, r - 0.32, c + 0.36, r + 0.32, 4, 44, '#e4e8eb');
+    poly(qL(c - 0.36, c + 0.36, r + 0.32, 4, 9), '#4caf6a');
+    poly(qR(c + 0.36, r - 0.32, r + 0.32, 4, 9), shade('#4caf6a', 0.8));
+    poly(qL(c - 0.3, c + 0.16, r + 0.32, 11, 38), GLASS, GLASS_EDGE);
+    const sp = iso(c - 0.07, r + 0.32, 0), drop = busy ? 4 + Math.sin(t * 6) * 4 : 0;
+    ctx.fillStyle = '#4a525a'; ctx.fillRect(sp[0] - 3, sp[1] - 37, 6, 10 + drop);
+    ctx.fillStyle = '#c9d1d8'; ctx.fillRect(sp[0] - 1, sp[1] - 27 + drop, 2, 5);
+    ctx.fillStyle = '#7d878f'; ctx.fillRect(sp[0] - 8, sp[1] - 16, 16, 3);
+    box(c - 0.16, r - 0.26, c + 0.1, r + 0.02, 44, 58, '#9aa4ad');
+    box(c - 0.1, r - 0.2, c + 0.05, r - 0.05, 58, 65, '#4caf6a');
+    screenQ(qR(c + 0.36, r - 0.12, r + 0.22, 18, 34), '#5be38f', t, busy);
+    top = 44;
+  } else if (type === 'D') {
+    box(c - 0.32, r - 0.3, c + 0.32, r + 0.3, 4, 11, '#7d878f');
+    box(c - 0.22, r - 0.08, c + 0.26, r + 0.26, 11, 17, '#b8c0c7');
+    box(c - 0.1, r - 0.3, c + 0.04, r - 0.16, 11, 62, '#e07a2e');
+    box(c - 0.15, r - 0.22, c + 0.14, r + 0.06, 42, 56, '#e7eaee');
+    box(c - 0.11, r - 0.26, c + 0.06, r - 0.1, 56, 66, '#e07a2e');
+    poly(qL(c - 0.15, c + 0.14, r + 0.06, 44, 48), '#e07a2e');
+    const len = 8 + (busy ? (Math.sin(t * 7) + 1) * 4 : 0), bt = iso(c, r - 0.04, 42);
+    ctx.fillStyle = '#4a525a'; ctx.fillRect(bt[0] - 2, bt[1], 4, 4);
+    ctx.fillStyle = '#d6dde3'; ctx.fillRect(bt[0] - 1, bt[1] + 4, 2, len);
+    box(c + 0.14, r - 0.1, c + 0.3, r + 0.04, 30, 40, DARK);
+    screenQ(qR(c + 0.3, r - 0.08, r + 0.03, 32, 38), '#ffb35b', t, busy);
+    top = 66; light = [c + 0.24, r - 0.24];
+  } else if (type === 'X') {
+    box(c - 0.45, r - 0.38, c + 0.45, r + 0.38, 4, 46, '#e9ecef');
+    poly(qL(c - 0.45, c + 0.45, r + 0.38, 4, 12), '#3c3f6e');
+    poly(qR(c + 0.45, r - 0.38, r + 0.38, 4, 12), '#2e3157');
+    poly(qL(c - 0.45, c + 0.45, r + 0.38, 12, 15), '#8a5cd0');
+    poly(qR(c + 0.45, r - 0.38, r + 0.38, 12, 15), '#6d47a8');
+    poly(qL(c - 0.34, c + 0.16, r + 0.38, 17, 41), GLASS, GLASS_EDGE);
+    // trunnion table tilting inside the window
+    const tb = iso(c - 0.09, r + 0.38, 22), tilt = busy ? Math.sin(t * 2) * 4 : 0;
+    poly([[tb[0] - 10, tb[1] + tilt], [tb[0] + 10, tb[1] - tilt], [tb[0] + 10, tb[1] - tilt + 3], [tb[0] - 10, tb[1] + tilt + 3]], '#4a4f7a');
+    ctx.fillStyle = '#4a525a'; ctx.fillRect(tb[0] - 2, tb[1] - 17, 4, 10 + (busy ? Math.sin(t * 5) * 2 : 0));
+    box(c - 0.3, r - 0.28, c + 0.22, r + 0.18, 46, 53, '#cfd5db');
+    for (let i = 0; i < 4; i++) line(iso(c - 0.22 + i * 0.1, r - 0.2, 53), iso(c - 0.22 + i * 0.1, r + 0.1, 53), '#8a939b', 1);
+    box(c + 0.3, r + 0.38, c + 0.42, r + 0.46, 18, 40, DARK);
+    screenQ(qL(c + 0.31, c + 0.41, r + 0.46, 27, 38), '#c49bff', t, busy);
+    top = 53; light = [c + 0.34, r - 0.3];
+  }
+  stackLight(light[0], light[1], top, st, t);
+  return top;
+}
+function machineTop(type) { return { T: 36, L: 38, F: 65, D: 66, X: 56 }[type]; }
+
+// Scaffolding and a bubble with the next phase's icon, for a machine still being built.
+function drawScaffold(col, row, h) {
+  const c = col + 0.5, r = row + 0.5, wood = '#c08a3e';
+  for (const [dc, dr] of [[-0.46, -0.38], [0.46, -0.38], [-0.46, 0.38], [0.46, 0.38]]) line(iso(c + dc, r + dr, 0), iso(c + dc, r + dr, h + 6), wood, 2);
+  for (const z of [h * 0.4, h + 6]) {
+    line(iso(c - 0.46, r + 0.38, z), iso(c + 0.46, r + 0.38, z), wood, 2);
+    line(iso(c + 0.46, r - 0.38, z), iso(c + 0.46, r + 0.38, z), wood, 2);
+  }
+  line(iso(c - 0.46, r + 0.38, 0), iso(c + 0.46, r + 0.38, h * 0.4), shade('#c08a3e', 0.8), 1.5);
+}
+function phaseIcon(ph, x, y, s, col = '#2b3138') {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  if (ph === 0) { // hex bolt head
+    ctx.beginPath(); for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + i * Math.PI / 3; ctx.lineTo(Math.cos(a) * 9, Math.sin(a) * 9); }
+    ctx.closePath(); ctx.fillStyle = '#9aa4ad'; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = col; ctx.fillRect(-4, -1, 8, 2); ctx.fillRect(-1, -4, 2, 8);
+  } else if (ph === 1) { // network plug with cable
+    rrect(-7, -6, 14, 10, 2, '#3d8fd6', col, 2);
+    ctx.fillStyle = '#f2c230'; for (let i = 0; i < 4; i++) ctx.fillRect(-5 + i * 3, -4, 2, 3);
+    ctx.strokeStyle = '#3d8fd6'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 4); ctx.quadraticCurveTo(0, 10, 7, 9); ctx.stroke();
+  } else { // gauge
+    ctx.beginPath(); ctx.arc(0, 3, 9, Math.PI, 0); ctx.closePath(); ctx.fillStyle = '#f4f1e8'; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 3, 7, -0.9, -0.3); ctx.strokeStyle = '#4caf6a'; ctx.lineWidth = 3; ctx.stroke();
+    line([0, 3], [5, -3], '#d8433a', 2);
+  }
+  ctx.restore();
+}
+
+function drawPiece(ops, c, r) {
+  const last = ops[ops.length - 1], z = 6;
+  if (!last) { box(c - 0.2, r - 0.05, c + 0.2, r + 0.05, z, z + 4, '#9aa3ab'); return; }
+  const O = '#f0923a';
+  if (last === 'T') box(c - 0.1, r - 0.06, c + 0.1, r + 0.06, z, z + 5, O);
+  else if (last === 'L') { box(c - 0.14, r - 0.05, c + 0.14, r + 0.05, z, z + 5, O); line(iso(c - 0.05, r + 0.05, z), iso(c - 0.05, r + 0.05, z + 5), '#fff3d6', 1); line(iso(c + 0.05, r + 0.05, z), iso(c + 0.05, r + 0.05, z + 5), '#fff3d6', 1); }
+  else if (last === 'F') { box(c - 0.13, r - 0.1, c + 0.13, r + 0.1, z, z + 3, O); line(iso(c - 0.1, r, z + 3), iso(c + 0.1, r, z + 3), '#b8601e', 1.5); }
+  else if (last === 'D') { box(c - 0.13, r - 0.1, c + 0.13, r + 0.1, z, z + 3, O); const p = iso(c, r, z + 3); poly([[p[0] - 3, p[1]], [p[0], p[1] - 1.6], [p[0] + 3, p[1]], [p[0], p[1] + 1.6]], '#3a2a1e'); }
+  else { box(c - 0.12, r - 0.1, c + 0.12, r + 0.1, z, z + 3, '#f2c14e'); box(c - 0.06, r - 0.05, c + 0.06, r + 0.05, z + 3, z + 8, '#f2c14e'); }
+}
+
+// ---- Factory: floor, walls, belts, fixtures -----------------------------------------------
+function drawGround() {
+  const g = ctx.createLinearGradient(0, -400, 0, 500); g.addColorStop(0, '#22303d'); g.addColorStop(1, '#3a4652');
+  ctx.fillStyle = g; ctx.fillRect(-2000, -2000, 4000, 4000);
+  poly([iso(-2, -1), iso(COLS + 2, -1), iso(COLS + 2, MAXROWS + 2), iso(-2, MAXROWS + 2)], '#4d5a45');
+  // grass tufts drawn as small pixel blocks
+  for (let i = 0; i < 60; i++) {
+    const c = -1.8 + ((i * 7.31) % (COLS + 3.6)), r = -0.8 + ((i * 3.97) % (MAXROWS + 2.6));
+    if (c > -0.2 && c < COLS + 0.2 && r > -0.2 && r < MAXROWS + 0.2) continue;
+    const p = iso(c, r); ctx.fillStyle = '#5f7052'; ctx.fillRect(Math.round(p[0]), Math.round(p[1]), 4, 2); ctx.fillRect(Math.round(p[0]) + 1, Math.round(p[1]) - 2, 2, 2);
+  }
+  // the lot reserved for expansions
+  poly([iso(0, 0), iso(COLS, 0), iso(COLS, MAXROWS), iso(0, MAXROWS)], '#5d6366');
+  ctx.setLineDash([6, 5]); poly([iso(0.1, 0.1), iso(COLS - 0.1, 0.1), iso(COLS - 0.1, MAXROWS - 0.1), iso(0.1, MAXROWS - 0.1)], null, '#e8e2c8', 1.5); ctx.setLineDash([]);
+}
+function drawFloor(t) {
+  const R = openRows();
+  // slab edges
+  poly([iso(0, R, 0), iso(COLS, R, 0), iso(COLS, R, -7), iso(0, R, -7)], '#6b7780', EDGE);
+  poly([iso(COLS, 0, 0), iso(COLS, R, 0), iso(COLS, R, -7), iso(COLS, 0, -7)], '#56616a', EDGE);
+  for (let r = 0; r < R; r++) for (let c = 0; c < COLS; c++) {
+    poly(qT(c, r, c + 1, r + 1, 0), (c + r) % 2 ? '#93a6b3' : '#8a9eab', 'rgba(60,75,88,0.35)');
+  }
+  // walkway arrows painted on the floor
+  for (let i = 0; i < state.linesOpen; i++) {
+    const rr = lineRow(i) + 1.5;
+    if (rr >= R) continue;
+    for (let c = 1; c < COLS - 1; c += 2) poly([iso(c + 0.3, rr - 0.08), iso(c + 0.6, rr - 0.08), iso(c + 0.7, rr), iso(c + 0.6, rr + 0.08), iso(c + 0.3, rr + 0.08), iso(c + 0.4, rr)], 'rgba(242,194,48,0.35)');
+  }
+}
+function brickWall(pts, len, along, base, hgt, dark) {
+  poly(pts, dark ? '#8f4232' : '#a84f3a', EDGE);
+  ctx.strokeStyle = dark ? 'rgba(60,20,14,0.45)' : 'rgba(70,24,16,0.45)'; ctx.lineWidth = 1;
+  for (let z = 7, k = 0; z < hgt; z += 7, k++) {
+    const a = along(0, z), b = along(len, z); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    for (let u = (k % 2) * 0.17; u < len; u += 0.34) { const p = along(u, z - 7), q = along(u, z); ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); }
+  }
+}
+function drawWalls() {
+  const R = openRows(), Hh = 74;
+  // back-right wall (r = 0) and back-left wall (c = 0)
+  brickWall([iso(0, 0, 0), iso(COLS, 0, 0), iso(COLS, 0, Hh), iso(0, 0, Hh)], COLS, (u, z) => iso(u, 0, z), 0, Hh, false);
+  brickWall([iso(0, 0, 0), iso(0, R, 0), iso(0, R, Hh), iso(0, 0, Hh)], R, (u, z) => iso(0, u, z), 0, Hh, true);
+  for (let c = 0.6; c < COLS - 0.5; c += 2) { poly(qL(c, c + 0.9, 0, 44, 64), '#a9d8ee', '#4a2a22', 2); line(iso(c + 0.45, 0, 44), iso(c + 0.45, 0, 64), '#4a2a22', 1.5); }
+  for (let r = 0.6; r < R - 0.5; r += 2) { poly(qR(0, r, r + 0.9, 44, 64), '#8fc2da', '#4a2a22', 2); line(iso(0, r + 0.45, 44), iso(0, r + 0.45, 64), '#4a2a22', 1.5); }
+  poly([iso(-0.15, -0.15, Hh), iso(COLS, -0.15, Hh), iso(COLS, 0, Hh), iso(0, 0, Hh), iso(0, R, Hh), iso(-0.15, R, Hh)], '#6e3326', EDGE);
+  // hazard stripe at the foot of the walls
+  for (let c = 0; c < COLS; c += 0.25) poly(qL(c, c + 0.25, 0, 0, 4), (c * 4) % 2 ? '#2b2b2b' : '#f2c230');
+  for (let r = 0; r < R; r += 0.25) poly(qR(0, r, r + 0.25, 0, 4), (r * 4) % 2 ? '#262626' : '#d9ad2a');
+  // company sign
+  poly(qL(2.6, 5.4, 0, 30, 40), '#2c3540', '#f2c230', 1.5);
+}
+function drawBelt(li, t) {
+  const r = lineRow(li) + 0.5, c0 = 0.55, c1 = CRATE_COL + 0.4;
+  for (let c = c0; c < c1 - 0.01; c += 0.25) {
+    const k = Math.round((c - c0) * 4) % 2;
+    poly(qT(c, r - 0.25, Math.min(c + 0.25, c1), r - 0.19, 0), k ? '#262626' : '#f2c230');
+    poly(qT(c, r + 0.19, Math.min(c + 0.25, c1), r + 0.25, 0), k ? '#262626' : '#f2c230');
+  }
+  box(c0, r - 0.15, c1, r + 0.15, 0, 6, '#3b4046');
+  const ph = (t * tune.beltSpeed) % 0.25;
+  for (let c = c0 + ph; c < c1; c += 0.25) line(iso(c, r - 0.14, 6), iso(c, r + 0.14, 6), '#5a6168', 1);
+}
+function drawFeeder(li) {
+  const c = 0.5, r = lineRow(li) + 0.5;
+  box(c - 0.38, r - 0.32, c + 0.38, r + 0.32, 0, 3, '#4a525a');
+  for (const [dc, dr] of [[-0.34, -0.28], [0.3, -0.28], [-0.34, 0.24], [0.3, 0.24]]) box(c + dc, r + dr, c + dc + 0.05, r + dr + 0.05, 3, 26, '#3d8fd6');
+  for (let k = 0; k < 3; k++) for (let j = 0; j < 4; j++) box(c - 0.3, r - 0.22 + j * 0.12, c + 0.3, r - 0.15 + j * 0.12, 6 + k * 6, 10 + k * 6, '#a7b0b8', 'rgba(40,46,52,0.5)');
+}
+function drawCrate(li, t, bump) {
+  const c = CRATE_COL + 0.5, r = lineRow(li) + 0.5;
+  box(c - 0.36, r - 0.34, c + 0.36, r + 0.34, 0, 4, '#8a6a3e');
+  const h = 20 + bump * 3;
+  box(c - 0.32, r - 0.3, c + 0.32, r + 0.3, 4, h, '#b07a3e');
+  for (let k = 1; k < 3; k++) { line(iso(c - 0.32, r + 0.3, 4 + k * (h - 4) / 3), iso(c + 0.32, r + 0.3, 4 + k * (h - 4) / 3), '#7a5228', 1); line(iso(c + 0.32, r - 0.3, 4 + k * (h - 4) / 3), iso(c + 0.32, r + 0.3, 4 + k * (h - 4) / 3), '#6a4622', 1); }
+  line(iso(c - 0.32, r + 0.3, 4), iso(c + 0.32, r + 0.3, h), '#7a5228', 1.5);
+  poly(qT(c - 0.26, r - 0.24, c + 0.26, r + 0.24, h), '#5a3c1c');
+  for (let i = 0; i < 3; i++) box(c - 0.18 + i * 0.1, r - 0.1 + i * 0.05, c - 0.08 + i * 0.1, r - 0.02 + i * 0.05, h - 3, h + 1, '#f0923a');
+}
+function drawRack(t) {
+  const c = RACK.c + 0.5, r = RACK.r + 0.5;
+  box(c - 0.3, r - 0.3, c + 0.3, r + 0.3, 0, 60, '#262c33');
+  poly(qL(c - 0.26, c + 0.26, r + 0.3, 6, 56), '#1a1f24', '#3a434c');
+  for (let k = 0; k < 8; k++) {
+    for (let j = 0; j < 4; j++) {
+      const on = ((k * 3 + j + Math.floor(t * 4)) % 5) !== 0;
+      const p = iso(c - 0.2 + j * 0.1, r + 0.3, 10 + k * 5.5);
+      ctx.fillStyle = on ? (j === 3 ? '#5bc7ff' : '#4fdc7a') : '#244a30'; ctx.fillRect(p[0], p[1] - 1, 2, 2);
+    }
+  }
+  const p = iso(c, r + 0.3, 66); textW('RETE', p[0], p[1], 7, '#5bc7ff');
+}
+function textW(s, x, y, size, c) { ctx.font = `bold ${size}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = c; ctx.fillText(s, x, y); }
+function cablePath(m) {
+  const row = lineRow(m.line), off = m.slot * 0.035;
+  const rr = row + 0.86 + off * 0.5;
+  return [[RACK.c + 0.55 - off, RACK.r + 0.8], [RACK.c + 0.55 - off, rr], [m.slot + 1.5, rr], [m.slot + 1.5, row + 0.86]];
+}
+function drawCables() {
+  for (const m of allMachines()) {
+    if (m.phase < 2) continue;
+    const pts = cablePath(m).map(([c, r]) => iso(c, r, 0.6));
+    ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const p of pts.slice(1)) ctx.lineTo(p[0], p[1]);
+    ctx.strokeStyle = '#1d3e78'; ctx.lineWidth = 3.2; ctx.stroke(); ctx.strokeStyle = '#3d8fd6'; ctx.lineWidth = 1.8; ctx.stroke();
+  }
+}
+function drawSlots(t) {
+  for (let li = 0; li < state.linesOpen; li++) for (let s = 0; s < state.slotsPerLine; s++) {
+    const m = state.lines[li].slots[s], c = s + 1, r = lineRow(li);
+    const free = !m || (state.placing && state.placing.m === m);
+    if (!free && !state.placing) continue;
+    const pts = qT(c + 0.08, r + 0.08, c + 0.92, r + 0.92, 0.5);
+    if (state.placing) {
+      const target = !m || state.placing.m;
+      if (target) poly(pts, `rgba(80,220,120,${0.22 + 0.14 * Math.sin(t * 5)})`, '#5be38f', 2);
+    } else { ctx.setLineDash([4, 4]); poly(pts, null, 'rgba(255,255,255,0.45)', 1.2); ctx.setLineDash([]); }
+  }
+}
+function drawLockedSign(li) {
+  const c = 3.5, r = lineRow(li) + 0.5, p = iso(c, r, 0);
+  line(p, [p[0], p[1] - 18], '#7a5228', 3);
+  rrect(p[0] - 42, p[1] - 38, 84, 22, 4, '#f2c230', '#2b2b2b', 2);
+  const ex = EXPANSIONS.find(e => (li === 1 && e.id === 'line2') || (li === 2 && e.id === 'line3'));
+  textW(`Linea ${li + 1} · Liv. ${ex.lvl()}`, p[0], p[1] - 27, 10, '#2b2b2b');
+}
+
+// ---- Workers ----------------------------------------------------------------------------
+function walkable(c, r) {
+  if (c < 0 || c >= COLS || r < 0 || r >= openRows()) return false;
+  if (c === RACK.c && r === RACK.r) return false;
+  return (r % 2 === 0 && r > 0) || (c === COLS - 1 && r > 0);
+}
+function bfs(from, to) {
+  const key = (c, r) => c + r * 16, prev = new Map([[key(from[0], from[1]), null]]), q = [from];
+  while (q.length) {
+    const [c, r] = q.shift();
+    if (c === to[0] && r === to[1]) break;
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nc = c + dc, nr = r + dr, k = key(nc, nr);
+      if (!walkable(nc, nr) || prev.has(k)) continue;
+      prev.set(k, [c, r]); q.push([nc, nr]);
+    }
+  }
+  if (!prev.has(key(to[0], to[1]))) return [];
+  const path = []; let cur = to;
+  while (cur && !(cur[0] === from[0] && cur[1] === from[1])) { path.unshift([cur[0] + 0.5, cur[1] + 0.5]); cur = prev.get(key(cur[0], cur[1])); }
+  return path;
+}
+function walkCells() { const a = []; for (let r = 0; r < openRows(); r++) for (let c = 0; c < COLS; c++) if (walkable(c, r)) a.push([c, r]); return a; }
+function updateWorkers(dt) {
+  const building = allMachines().filter(m => m.phase < 3);
+  for (const w of state.workers) if (w.task && (w.task.phase >= 3 || !allMachines().includes(w.task))) { w.task = null; w.path = []; }
+  for (const m of building) {
+    if (state.workers.some(w => w.task === m)) continue;
+    const free = state.workers.find(w => !w.task && w.wave <= 0);
+    if (!free) break;
+    free.task = m; free.path = bfs([Math.floor(free.c), Math.floor(free.r)], [m.slot + 1, lineRow(m.line) + 1]);
+  }
+  for (const w of state.workers) {
+    if (w.wave > 0) { w.wave -= dt; continue; }
+    if (w.path.length) {
+      const [tc, tr] = w.path[0], dx = tc - w.c, dy = tr - w.r, d = Math.hypot(dx, dy), sp = tune.workerSpeed * dt;
+      if (d <= sp) { w.c = tc; w.r = tr; w.path.shift(); } else { w.c += dx / d * sp; w.r += dy / d * sp; }
+      const sx = dx - dy; if (Math.abs(sx) > 0.01) w.dir = sx > 0 ? 1 : -1;
+      w.walkT += dt;
+    } else if (!w.task) {
+      w.idleT -= dt;
+      if (w.idleT <= 0) {
+        const cells = walkCells(); const tgt = cells[Math.floor(rng() * cells.length)];
+        if (tgt) w.path = bfs([Math.floor(w.c), Math.floor(w.r)], tgt);
+        w.idleT = 2 + rng() * 4;
+      }
+    }
+  }
+}
+function drawWorker(w, t) {
+  const p = iso(w.c, w.r, 0);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
+  let spr = 'walk0', bob = 0;
+  if (w.wave > 0) spr = Math.sin(t * 10) > 0 ? 'wave' : 'walk0';
+  else if (w.path.length) { spr = Math.floor(w.walkT * 6) % 2 ? 'walk1' : 'walk0'; bob = Math.floor(w.walkT * 6) % 2; }
+  else if (w.task) { spr = Math.sin(t * 9) > 0 ? 'work' : 'walk0'; }
+  sprite(spr, p[0], p[1] - bob, 2, w.dir < 0);
+  if (w.task && !w.path.length && Math.sin(t * 9) > 0.7) { ctx.fillStyle = '#ffd36a'; ctx.fillRect(p[0] + 12 * w.dir, p[1] - 22, 2, 2); ctx.fillRect(p[0] + 15 * w.dir, p[1] - 26, 2, 2); }
+}
+
+// ---- Production -------------------------------------------------------------------------
+function lineMachines(L) { const a = []; for (let s = 0; s < state.slotsPerLine; s++) if (L.slots[s]) a.push(L.slots[s]); return a; }
+function lineSeq(L) { return lineMachines(L).map(m => m.type).join(''); }
+function lineQuality(ms) { return avg(ms.map(m => tune.qualityBase + m.quality)); }
+function clearLine(L) { L.pieces = []; L.spawnT = 0.4; L.slots.forEach(m => { if (m) m.busy = null; }); }
+function updateLine(L, li, dt) {
+  const ms = lineMachines(L);
+  if (!ms.length) { L.pieces = []; return; }
+  L.spawnT -= dt;
+  if (L.spawnT <= 0 && !L.pieces.some(p => p.x < tune.pieceGap)) { L.pieces.push({ x: 0, next: 0, ops: '', proc: 0 }); L.spawnT = tune.spawnGap; }
+  L.pieces.sort((a, b) => b.x - a.x);
+  for (let i = 0; i < L.pieces.length; i++) {
+    const p = L.pieces[i];
+    if (p.proc > 0) {
+      p.proc -= dt;
+      if (p.proc <= 0) { const m = ms[p.next]; p.ops += m.type; p.next++; m.busy = null; }
+      continue;
+    }
+    const target = p.next < ms.length ? ms[p.next].slot + 1 : CRATE_COL;
+    let nx = Math.min(target, p.x + tune.beltSpeed * dt);
+    if (i > 0) nx = Math.min(nx, L.pieces[i - 1].x - tune.pieceGap);
+    p.x = Math.max(p.x, nx);
+    if (p.x >= target - 1e-6) {
+      if (p.next < ms.length) {
+        const m = ms[p.next];
+        if (m.phase >= 3 && !m.busy) { m.busy = p; p.proc = mcfg('time', m.type); p.x = target; }
+      } else { sell(p, L, li, ms); p.dead = true; }
+    }
+  }
+  L.pieces = L.pieces.filter(p => !p.dead);
+}
+function sell(p, L, li, ms) {
+  const rec = recipeOf(p.ops), v = Math.round(recipeVal(p.ops) * lineQuality(ms));
+  state.coins += v; state.earned += v; state.sold++;
+  state.incomeLog.push([state.t, v]);
+  L.bump = 1;
+  const [x, y] = iso(CRATE_COL + 0.5, lineRow(li) + 0.5, 72);
+  state.floats.push({ wx: x, wy: y, txt: '+' + fmt(v), col: rec ? '#7ef0a0' : '#c9c9c9', life: 1.4, coin: true });
+  addXp(tune.xpPerSale);
+  if (state.t - (state.lastCoinSfx || -9) > 0.18) { sfx.coin(); state.lastCoinSfx = state.t; }
+  if (rec && !state.found.includes(rec.seq)) {
+    state.found.push(rec.seq);
+    addXp(tune.xpRecipe);
+    showBanner('Nuova ricetta: ' + rec.name + '!', `${seqNames(rec.seq)}  ·  ${recipeVal(rec.seq)} monete al pezzo`, '#f0923a');
+    sfx.ding(); events.push({ type: 'recipe', seq: rec.seq }); save();
+  }
+}
+const seqNames = seq => seq.split('').map(ch => MACH[ch].short).join(' > ');
+
+// ---- Progress ---------------------------------------------------------------------------
+function addXp(n) {
+  state.xp += n;
+  while (state.level < tune.maxLevel && state.xp >= levelXp(state.level + 1)) {
+    state.level++;
+    const un = unlocksAt(state.level);
+    showBanner(`Livello ${state.level}!`, un.length ? 'Sbloccato: ' + un.join(', ') : 'La fabbrica cresce', '#f2c230');
+    sfx.level(); events.push({ type: 'level', level: state.level }); save();
+  }
+}
+function unlocksAt(L) {
+  const a = [];
+  ORDER.forEach(t => { if (mcfg('unlock', t) === L) a.push(MACH[t].name); });
+  EXPANSIONS.forEach(e => { if (e.lvl() === L) a.push(e.name); });
+  TOOLS.forEach(tl => { for (let l = 1; l < tune.toolMax; l++) if (toolReq(tl, l) === L) a.push(`${tl.name} liv. ${l + 1}`); });
+  return a;
+}
+function checkGoals() {
+  while (state.goal < GOALS.length && GOALS[state.goal].done()) {
+    const n = state.goal, coins = Math.round(tune.goalCoins * (1 + Math.floor(n / 3))), xp = tune.goalXp;
+    state.coins += coins; state.goal++;
+    toast(`Obiettivo completato! +${coins} monete, +${xp} XP`, '#7ef0a0');
+    addXp(xp); sfx.ding(); events.push({ type: 'goal', n }); save();
+  }
+}
+function showBanner(title, sub, col) { state.banner = { title, sub, col, life: 3.2 }; }
+function toast(msg, col = '#fff') { state.toasts.push({ msg, col, life: 3 }); if (state.toasts.length > 3) state.toasts.shift(); }
+function incomePerMin() {
+  const cut = state.t - 30; state.incomeLog = state.incomeLog.filter(e => e[0] >= cut);
+  const span = Math.max(10, Math.min(30, state.t));
+  return state.incomeLog.reduce((s, e) => s + e[1], 0) * 60 / span;
+}
+
+// ---- Actions ----------------------------------------------------------------------------
+function buy(type) {
+  const cost = costOf(type);
+  if (state.level < mcfg('unlock', type)) return toast(`Si sblocca al livello ${mcfg('unlock', type)}`, '#ffb35b');
+  if (state.coins < cost) return toast('Monete insufficienti', '#ffb35b');
+  if (!freeSlots().length) return toast('Nessun posto libero: amplia il capannone o vendi una macchina', '#ffb35b');
+  state.panel = null; state.placing = { type, cost }; sfx.click();
+}
+function freeSlots() { const a = []; for (let li = 0; li < state.linesOpen; li++) for (let s = 0; s < state.slotsPerLine; s++) if (!state.lines[li].slots[s]) a.push([li, s]); return a; }
+function placeAt(li, s) {
+  const P = state.placing, L = state.lines[li];
+  if (P.m) { // moving or swapping an existing machine
+    const from = state.lines[P.m.line], fs = P.m.slot, other = L.slots[s];
+    if (other === P.m) { state.placing = null; return; }
+    from.slots[fs] = other; if (other) { other.line = P.m.line; other.slot = fs; }
+    L.slots[s] = P.m; P.m.line = li; P.m.slot = s;
+    clearLine(from); clearLine(L); state.placing = null; sfx.clack(); save();
+    toast(other ? 'Macchine scambiate: la ricetta della linea cambia' : 'Macchina spostata', '#bfe3ff');
+    return;
+  }
+  if (L.slots[s]) return toast('Posto occupato', '#ffb35b');
+  if (state.coins < P.cost) { state.placing = null; return toast('Monete insufficienti', '#ffb35b'); }
+  state.coins -= P.cost;
+  const m = makeMachine(P.type, li, s); L.slots[s] = m; clearLine(L);
+  state.placing = null; sfx.clack(); events.push({ type: 'place', m: m.type });
+  const [x, y] = iso(s + 1.5, lineRow(li) + 0.5, 20);
+  state.floats.push({ wx: x, wy: y, txt: '-' + fmt(P.cost), col: '#ffb35b', life: 1.2 });
+  save(); startBuild(m);
+}
+function upgradeTool(tl) {
+  const l = state.tools[tl.key];
+  if (l >= tune.toolMax) return;
+  if (state.level < toolReq(tl, l)) return toast(`Serve il livello ${toolReq(tl, l)}`, '#ffb35b');
+  if (state.coins < toolCost(l)) return toast('Monete insufficienti', '#ffb35b');
+  state.coins -= toolCost(l); state.tools[tl.key]++; sfx.ding();
+  toast(`${tl.name} ora al livello ${l + 1}!`, '#7ef0a0'); save();
+}
+function buyExpansion(e) {
+  if (e.done() || !e.can()) return;
+  if (state.level < e.lvl()) return toast(`Serve il livello ${e.lvl()}`, '#ffb35b');
+  if (state.coins < e.cost()) return toast('Monete insufficienti', '#ffb35b');
+  state.coins -= e.cost(); e.apply();
+  if (e.id !== 'long') addWorker(false);
+  state.panel = null; centerCam(); sfx.level();
+  showBanner('Capannone ampliato!', e.desc, '#5bc7ff'); events.push({ type: 'expand', id: e.id }); save();
+}
+function sellMachine(m) {
+  const refund = Math.round(mcfg('cost', m.type) * tune.sellRefund);
+  state.lines[m.line].slots[m.slot] = null; clearLine(state.lines[m.line]);
+  state.coins += refund; state.panel = null; state.sel = null; sfx.click();
+  toast(`${MACH[m.type].name} venduta: +${refund} monete`); save();
+}
+
+// ---- Minigames --------------------------------------------------------------------------
+// Each phase: an intro card, the minigame, a result card. The percentage comes from the time
+// taken (plus penalties) against the phase's best time; there is never a failure.
+const MG = { x: 190, y: 92, w: 900, h: 560 };
+function startBuild(m, recal = false) {
+  state.panel = null; state.sel = null;
+  state.mg = { m, phase: recal ? 2 : m.phase, step: 'intro', recal };
+}
+function mgPct(mg) {
+  const e = mg.elapsed + mg.pen, lim = mg.par * tune.limitMult;
+  if (e <= mg.par) return 100;
+  return Math.max(tune.pctFloor, Math.round(100 - (100 - tune.pctFloor) * (e - mg.par) / (lim - mg.par)));
+}
+function beginPhase() {
+  const mg = state.mg, t = mg.m.type;
+  mg.step = 'play'; mg.elapsed = 0; mg.pen = 0; mg.flash = 0;
+  if (mg.phase === 0) {
+    const n = mcfg('bolts', t), spots = [];
+    const cols = n <= 4 ? 2 : n <= 6 ? 3 : 4;
+    for (let j = 0; j < 2; j++) for (let i = 0; i < cols; i++) spots.push([MG.x + 230 + i * (440 / Math.max(1, cols - 1)) + (rng() - 0.5) * 50, MG.y + 210 + j * 160 + (rng() - 0.5) * 40]);
+    for (let i = spots.length - 1; i > 0; i--) { const k = Math.floor(rng() * (i + 1)); [spots[i], spots[k]] = [spots[k], spots[i]]; }
+    mg.bolts = spots.slice(0, n).map(([x, y]) => ({ x, y, turns: 0, ang: rng() * 6 }));
+    mg.need = boltTurnsAt(state.tools.W); mg.next = 0;
+    mg.par = n * tune.parBolt;
+  } else if (mg.phase === 1) {
+    const gc = 10, gr = 5;
+    let ok = false, grid, sr, er, len = 0;
+    for (let tries = 0; tries < 40 && !ok; tries++) {
+      grid = Array.from({ length: gr }, () => Array(gc).fill(0));
+      sr = Math.floor(rng() * gr); er = Math.floor(rng() * gr);
+      const nObs = tune.netObstacles + ORDER.indexOf(t);
+      for (let k = 0; k < nObs; k++) { const c = 1 + Math.floor(rng() * (gc - 2)), r = Math.floor(rng() * gr); grid[r][c] = 1 + Math.floor(rng() * 3); }
+      len = gridPath(grid, [0, sr], [gc - 1, er]); ok = len > 0;
+    }
+    if (!ok) { grid = Array.from({ length: gr }, () => Array(gc).fill(0)); len = gc - 1 + Math.abs(er - sr); }
+    mg.grid = grid; mg.gc = gc; mg.gr = gr; mg.start = [0, sr]; mg.end = [gc - 1, er];
+    mg.path = [[0, sr]]; mg.crimpLeft = crimpTapsAt(state.tools.C); mg.crimpNeed = mg.crimpLeft; mg.linked = false;
+    mg.par = len * tune.parCell + tune.parCrimp;
+  } else {
+    const n = mcfg('dials', t), z = zoneAt(state.tools.Te);
+    mg.dials = Array.from({ length: n }, () => ({ z0: 0.1 + rng() * (0.8 - z), z, locked: false, at: 0 }));
+    mg.cur = 0; mg.ph = rng() * 6; mg.speed = needleAt(state.tools.Te);
+    mg.par = n * tune.parDial;
+  }
+  sfx.click();
+}
+function gridPath(grid, a, b) { // shortest free path length, 0 when none
+  const gr = grid.length, gc = grid[0].length, dist = new Map([[a[0] + ',' + a[1], 0]]), q = [a];
+  while (q.length) {
+    const [c, r] = q.shift(), d = dist.get(c + ',' + r);
+    if (c === b[0] && r === b[1]) return d;
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nc = c + dc, nr = r + dr, k = nc + ',' + nr;
+      if (nc < 0 || nr < 0 || nc >= gc || nr >= gr || grid[nr][nc] || dist.has(k)) continue;
+      dist.set(k, d + 1); q.push([nc, nr]);
+    }
+  }
+  return 0;
+}
+const NETCELL = 64, netOrigin = () => [MG.x + (MG.w - 10 * NETCELL) / 2, MG.y + 180];
+function netExtend(c, r) { // one cell: back along the cable, or forward to a free neighbour
+  const mg = state.mg; if (mg.linked) return false;
+  const path = mg.path, head = path[path.length - 1];
+  const idx = path.findIndex(p => p[0] === c && p[1] === r);
+  if (idx >= 0) { if (idx < path.length - 1) { path.length = idx + 1; sfx.cable(); return true; } return false; }
+  if (Math.abs(head[0] - c) + Math.abs(head[1] - r) !== 1) return false;
+  if (c < 0 || r < 0 || c >= mg.gc || r >= mg.gr) return false;
+  if (mg.grid[r][c]) { // bumping an obstacle costs a little, once per obstacle touched
+    const k = c + ',' + r;
+    if (mg.lastBad !== k) { mg.lastBad = k; mg.pen += tune.mgPenalty * 0.25; mg.flash = 0.25; sfx.wrong(); }
+    return false;
+  }
+  mg.lastBad = null; path.push([c, r]); sfx.cable();
+  if (c === mg.end[0] && r === mg.end[1]) mg.linked = true;
+  return true;
+}
+function netDragTo(c, r) { // a fast drag may skip cells: walk the head toward the finger a cell at a time
+  const mg = state.mg;
+  const idx = mg.path.findIndex(p => p[0] === c && p[1] === r);
+  if (idx >= 0) { netExtend(c, r); return; }
+  for (let i = 0; i < 12 && !mg.linked; i++) {
+    const head = mg.path[mg.path.length - 1], dc = c - head[0], dr = r - head[1];
+    if (!dc && !dr) return;
+    const sc = Math.sign(dc), sr = Math.sign(dr);
+    const first = Math.abs(dc) >= Math.abs(dr) ? [head[0] + sc, head[1]] : [head[0], head[1] + sr];
+    const second = Math.abs(dc) >= Math.abs(dr) ? (sr ? [head[0], head[1] + sr] : null) : (sc ? [head[0] + sc, head[1]] : null);
+    if (netExtend(first[0], first[1])) continue;
+    if (second && !mg.path.some(p => p[0] === second[0] && p[1] === second[1]) && netExtend(second[0], second[1])) continue;
+    return;
+  }
+}
+function finishPhase() {
+  const mg = state.mg, m = mg.m, pct = mgPct(mg);
+  mg.step = 'result'; mg.pct = pct;
+  const prev = m.pct[mg.phase];
+  if (mg.recal) { mg.better = prev === undefined || pct > prev; if (mg.better) m.pct[mg.phase] = pct; }
+  else { m.pct[mg.phase] = pct; m.phase = mg.phase + 1; }
+  if (m.phase >= 3) m.quality = avg(m.pct) / 100;
+  addXp(Math.round(pct * tune.xpPerPct));
+  sfx.ding(); events.push({ type: 'phase', phase: mg.phase, pct }); save();
+}
+function afterResult() {
+  const mg = state.mg, m = mg.m;
+  if (!mg.recal && m.phase < 3) { state.mg = { m, phase: m.phase, step: 'intro', recal: false }; return; }
+  state.mg = null;
+  if (!mg.recal) {
+    showBanner(`${MACH[m.type].name} in rete!`, `Qualità ${Math.round(m.quality * 100)}%  ·  rende x${(tune.qualityBase + m.quality).toFixed(2)}`, '#5be38f');
+    clearLine(state.lines[m.line]);
+  } else toast(mg.better ? 'Configurazione migliorata!' : 'Tenuta la configurazione migliore', '#bfe3ff');
+}
+function updateMinigame(dt) {
+  const mg = state.mg;
+  mg.flash = Math.max(0, (mg.flash || 0) - dt);
+  if (mg.step === 'intro' && (pressed('Enter') || pressed('Space'))) { beginPhase(); return; }
+  if (mg.step === 'result' && (pressed('Enter') || pressed('Space'))) { afterResult(); return; }
+  if (mg.step !== 'play') return;
+  mg.elapsed += dt;
+  if (mg.phase === 0) {
+    for (const b of mg.bolts) b.spin = Math.max(0, (b.spin || 0) - dt * 4);
+  } else if (mg.phase === 1) {
+    const head = mg.path[mg.path.length - 1];
+    if (pressed('ArrowRight')) netExtend(head[0] + 1, head[1]);
+    else if (pressed('ArrowLeft')) netExtend(head[0] - 1, head[1]);
+    else if (pressed('ArrowUp')) netExtend(head[0], head[1] - 1);
+    else if (pressed('ArrowDown')) netExtend(head[0], head[1] + 1);
+    if (ptr.down && !mg.linked) {
+      const [ox, oy] = netOrigin(), c = Math.floor((ptr.x - ox) / NETCELL), r = Math.floor((ptr.y - oy) / NETCELL);
+      if (c >= 0 && r >= 0 && c < mg.gc && r < mg.gr) netDragTo(c, r);
+    }
+    if (mg.linked && pressed('Space')) crimp();
+  } else {
+    const d = mg.dials[mg.cur];
+    mg.ph += mg.speed * dt; d.at = 0.5 - 0.5 * Math.cos(mg.ph);
+    if (pressed('Space')) stopNeedle();
+  }
+}
+function tapBolt(i) {
+  const mg = state.mg, b = mg.bolts[i];
+  if (b.turns >= mg.need) return;
+  if (i !== mg.next) { mg.pen += tune.mgPenalty; mg.flash = 0.3; mg.wrong = i; sfx.wrong(); return; }
+  b.turns++; b.spin = 1; b.ang += Math.PI / 3;
+  if (b.turns >= mg.need) { mg.next++; sfx.boltDone(); if (mg.next >= mg.bolts.length) finishPhase(); }
+  else sfx.bolt();
+}
+function crimp() {
+  const mg = state.mg; if (!mg.linked) return;
+  mg.crimpLeft--; sfx.crimp(); mg.crimpAnim = 1;
+  if (mg.crimpLeft <= 0) finishPhase();
+}
+function stopNeedle() {
+  const mg = state.mg, d = mg.dials[mg.cur];
+  if (d.at >= d.z0 && d.at <= d.z0 + d.z) {
+    d.locked = true; sfx.lock(); mg.cur++;
+    if (mg.cur >= mg.dials.length) finishPhase(); else mg.ph = rng() * 6;
+  } else { mg.pen += tune.mgPenalty; mg.flash = 0.3; sfx.wrong(); }
+}
+
+// ---- UI widgets (screen space) ------------------------------------------------------------
+function btn(x, y, w, h, fn, name) { ui.buttons.push({ x, y, w, h, fn }); if (name) ui.named[name] = { x, y, w, h }; }
+function button(label, x, y, w, h, fn, o = {}) {
+  const en = o.enabled !== false, col = o.color || '#f2c230';
+  rrect(x, y + 4, w, h, 10, 'rgba(0,0,0,0.35)');
+  rrect(x, y, w, h, 10, en ? col : '#59626b', en ? shade(col, 0.6) : '#3a4148', 2);
+  rrect(x + 4, y + 3, w - 8, h * 0.35, 7, en ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.08)');
+  text(label, x + w / 2, y + h / 2 + 1, o.size || 20, en ? (o.textColor || '#2b2410') : '#b5bcc3');
+  btn(x, y, w, h, () => { sfx.click(); fn(); }, o.name);
+}
+function panelFrame(title, w, h, onClose) {
+  ctx.fillStyle = 'rgba(8,12,18,0.6)'; ctx.fillRect(0, 0, W, H);
+  btn(0, 0, W, H, () => {}); // blocks taps below the panel
+  const x = (W - w) / 2, y = (H - h) / 2;
+  rrect(x, y + 6, w, h, 18, 'rgba(0,0,0,0.4)');
+  rrect(x, y, w, h, 18, '#2c3540', '#f2c230', 3);
+  rrect(x + 3, y + 3, w - 6, 54, 15, '#38434f');
+  for (let i = 0; i < w - 40; i += 24) { ctx.fillStyle = (i / 24) % 2 ? '#2b2b2b' : '#f2c230'; ctx.fillRect(x + 20 + i, y + 57, 24, 5); }
+  text(title, x + w / 2, y + 31, 28, '#fff');
+  if (onClose) {
+    const cx = x + w - 52, cy = y + 10;
+    rrect(cx, cy, 40, 40, 10, '#d8433a', '#7a2620', 2);
+    line([cx + 12, cy + 12], [cx + 28, cy + 28], '#fff', 4); line([cx + 28, cy + 12], [cx + 12, cy + 28], '#fff', 4);
+    btn(cx - 6, cy - 6, 52, 52, () => { sfx.click(); onClose(); }, 'close');
+  }
+  return { x, y, w, h };
+}
+function coinIcon(x, y, s = 1) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  ctx.beginPath(); ctx.ellipse(0, 1.5, 11, 10, 0, 0, Math.PI * 2); ctx.fillStyle = '#b8860b'; ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 0, 11, 10, 0, 0, Math.PI * 2); ctx.fillStyle = '#f7c948'; ctx.fill(); ctx.strokeStyle = '#a5760a'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(0, 0, 7, 6.3, 0, 0, Math.PI * 2); ctx.strokeStyle = '#d9a520'; ctx.stroke();
+  ctx.fillStyle = '#a5760a'; ctx.fillRect(-1.5, -4, 3, 8); ctx.fillRect(-3.5, -4, 7, 2);
+  ctx.restore();
+}
+function gearIcon(x, y, s, col) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.beginPath();
+  for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8, rad = i % 2 ? 9 : 12; ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad); }
+  ctx.closePath(); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = shade(col, 0.6); ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fillStyle = '#2c3540'; ctx.fill(); ctx.restore();
+}
+function toolIcon(key, x, y, s) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.lineJoin = 'round';
+  if (key === 'W') { // wrench
+    ctx.rotate(-0.7); rrect(-3, -4, 6, 26, 3, '#b8c0c7', '#4a525a', 1.5);
+    ctx.beginPath(); ctx.moveTo(-9, -16); ctx.lineTo(-9, -6); ctx.lineTo(9, -6); ctx.lineTo(9, -16); ctx.lineTo(4, -16); ctx.lineTo(4, -10); ctx.lineTo(-4, -10); ctx.lineTo(-4, -16); ctx.closePath();
+    ctx.fillStyle = '#d0d6dc'; ctx.fill(); ctx.strokeStyle = '#4a525a'; ctx.stroke();
+    rrect(-3, 8, 6, 12, 2, '#d8433a');
+  } else if (key === 'C') { // crimper pliers
+    ctx.fillStyle = '#d8433a'; ctx.strokeStyle = '#6a1e18'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(-10, 20); ctx.lineTo(-5, 21); ctx.lineTo(1, 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#3d8fd6'; ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(10, 20); ctx.lineTo(5, 21); ctx.lineTo(-1, 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+    rrect(-7, -16, 14, 16, 3, '#9aa4ad', '#3a4148', 1.5); ctx.fillStyle = '#3a4148'; ctx.fillRect(-4, -12, 8, 3);
+  } else { // tester
+    rrect(-11, -16, 22, 32, 4, '#f2c230', '#6a5410', 1.5);
+    rrect(-7, -12, 14, 9, 2, '#1b2229'); ctx.fillStyle = '#5be38f'; ctx.fillRect(-5, -9, 7, 3);
+    ctx.beginPath(); ctx.arc(0, 6, 5, 0, Math.PI * 2); ctx.fillStyle = '#2c3540'; ctx.fill(); line([0, 6], [3, 3], '#f2c230', 1.5);
+  }
+  ctx.restore();
+}
+function machineIcon(type, x, y, s, o = {}) { // a mini machine in its world look
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.translate(0, -16);
+  drawMachine(type, 0, 0, { status: o.status || 'wait', t: o.t || 0, busy: o.busy });
+  ctx.restore();
+}
+function badge(type, x, y, w = 58) {
+  rrect(x, y, w, 26, 8, MACH[type].color, shade(MACH[type].color, 0.55), 2);
+  text(MACH[type].short, x + w / 2, y + 14, 14, '#14181c');
+}
+
+// ---- HUD and panels -----------------------------------------------------------------------
+function drawHUD(t) {
+  // money
+  rrect(14, 12, 236, 66, 14, 'rgba(28,36,44,0.88)', '#f2c230', 2);
+  coinIcon(44, 38, 1.4);
+  text(fmt(state.coins), 66, 36, 28, '#ffe08a', 'left');
+  text(`+${fmt(incomePerMin())} al minuto`, 66, 62, 15, '#9ce8b4', 'left');
+  // level and XP
+  rrect(262, 12, 270, 66, 14, 'rgba(28,36,44,0.88)', '#5bc7ff', 2);
+  gearIcon(300, 45, 1.9, '#5bc7ff'); text(String(state.level), 300, 45, 17, '#fff');
+  const cur = levelXp(state.level), nxt = levelXp(state.level + 1), maxed = state.level >= tune.maxLevel;
+  text(maxed ? 'Livello massimo' : `Livello ${state.level}`, 334, 30, 17, '#fff', 'left');
+  rrect(334, 46, 182, 16, 8, '#1b2229');
+  const fr = maxed ? 1 : Math.max(0, Math.min(1, (state.xp - cur) / Math.max(1, nxt - cur)));
+  if (fr > 0) rrect(334, 46, Math.max(16, 182 * fr), 16, 8, '#5bc7ff');
+  text(maxed ? `${fmt(state.xp)} XP` : `${fmt(state.xp - cur)} / ${fmt(nxt - cur)} XP`, 425, 55, 13, '#fff');
+  // goal
+  rrect(544, 12, 722, 66, 14, 'rgba(28,36,44,0.88)', '#7ef0a0', 2);
+  const g = GOALS[state.goal];
+  text('OBIETTIVO', 562, 30, 13, '#7ef0a0', 'left');
+  if (g) {
+    text(g.text, 562, 54, 18, '#fff', 'left');
+    if (g.prog) { const [a, b] = g.prog(); text(`${Math.min(a, b)}/${b}`, 1250, 30, 15, '#7ef0a0', 'right'); }
+  } else text('Fabbrica al massimo: continua a ottimizzare qualità e ricette!', 562, 54, 18, '#fff', 'left');
+  // bottom buttons
+  const B = [['Attrezzi', 'tools', 'T'], ['Ricette', 'recipes', 'R'], ['Negozio', 'shop', 'B']];
+  B.forEach(([lab, id, key], i) => {
+    const x = 900 + i * 124, y = 616;
+    rrect(x, y + 4, 112, 92, 14, 'rgba(0,0,0,0.35)');
+    rrect(x, y, 112, 92, 14, id === 'shop' ? '#f2c230' : '#e6e1d3', '#2b2b2b', 2);
+    if (id === 'shop') { machineIcon('T', x + 56, y + 46, 0.62); }
+    else if (id === 'recipes') { rrect(x + 36, y + 14, 40, 44, 4, '#b0543c', '#5a2a1e', 2); rrect(x + 41, y + 18, 32, 36, 2, '#f4f1e8'); for (let k = 0; k < 4; k++) ctx.fillRect(x + 45, y + 24 + k * 7, 24, 2); }
+    else toolIcon('W', x + 56, y + 36, 1.1);
+    text(lab, x + 56, y + 76, 17, '#2b2410');
+    btn(x, y, 112, 92, () => { sfx.click(); state.panel = id; state.placing = null; if (id === 'shop') state.shopTab = 0; }, id);
+  });
+  // zoom and pause
+  const sm = [['+', () => setZoom(cam.zoom * 1.2)], ['-', () => setZoom(cam.zoom / 1.2)], ['II', () => { scene = 'pause'; confirmNew = 0; }]];
+  sm.forEach(([lab, fn], i) => { const x = 14 + i * 64, y = 650; rrect(x, y, 54, 54, 12, 'rgba(28,36,44,0.88)', '#e6e1d3', 2); text(lab, x + 27, y + 28, 24, '#fff'); btn(x, y, 54, 54, fn, 'hud' + i); });
+}
+function openPanel(id) { state.panel = state.panel === id ? null : id; state.placing = null; }
+function drawShop(t) {
+  const P = panelFrame('Negozio', 1060, 580, () => { state.panel = null; });
+  ['Macchine CNC', 'Capannone'].forEach((lab, i) => {
+    const x = P.x + 30 + i * 200, y = P.y + 74, on = state.shopTab === i;
+    rrect(x, y, 186, 40, 10, on ? '#f2c230' : '#3f4a56', '#1b2229', 2);
+    text(lab, x + 93, y + 21, 18, on ? '#2b2410' : '#cfd6dd'); btn(x, y, 186, 40, () => { state.shopTab = i; sfx.click(); }, 'tab' + i);
+  });
+  text(`Monete: ${fmt(state.coins)}`, P.x + P.w - 30, P.y + 94, 20, '#ffe08a', 'right');
+  if (state.shopTab === 0) {
+    ORDER.forEach((tp, i) => {
+      const x = P.x + 26 + i * 204, y = P.y + 132, w = 192, h = 420, lvl = mcfg('unlock', tp), locked = state.level < lvl, cost = costOf(tp);
+      rrect(x, y, w, h, 14, locked ? '#252c33' : '#3a4552', MACH[tp].color, 2);
+      ctx.save(); if (locked) ctx.globalAlpha = 0.35;
+      ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + 10, y + 12, w - 20, 130);
+      machineIcon(tp, x + w / 2, y + 112, 1.45, { t, busy: !locked, status: locked ? 'off' : 'work' });
+      ctx.restore();
+      wrapText(MACH[tp].name, x + w / 2, y + 164, w - 20, 17, '#fff', 20, 'center');
+      text(MACH[tp].desc, x + w / 2, y + 214, 13, '#b9c4ce');
+      text(`Lavora un pezzo in ${mcfg('time', tp).toFixed(1)} s`, x + w / 2, y + 240, 13, '#b9c4ce');
+      text(`${mcfg('bolts', tp)} bulloni · ${mcfg('dials', tp)} parametri`, x + w / 2, y + 262, 13, '#b9c4ce');
+      if (owned(tp)) text(`Ne possiedi ${owned(tp)}`, x + w / 2, y + 290, 14, '#7ef0a0');
+      if (locked) {
+        rrect(x + 30, y + 330, w - 60, 56, 10, '#1b2229', '#59626b', 2);
+        text(`Livello ${lvl}`, x + w / 2, y + 358, 18, '#ffb35b');
+      } else {
+        coinIcon(x + 34, y + 318, 0.9); text(fmt(cost), x + 52, y + 318, 20, state.coins >= cost ? '#ffe08a' : '#ff8a7a', 'left');
+        button('Compra', x + 20, y + 342, w - 40, 54, () => buy(tp), { enabled: state.coins >= cost, name: 'buy' + tp });
+      }
+    });
+  } else {
+    EXPANSIONS.forEach((e, i) => {
+      const x = P.x + 40 + i * 330, y = P.y + 140, w = 310, h = 400, done = e.done(), locked = state.level < e.lvl() || !e.can();
+      rrect(x, y, w, h, 14, '#3a4552', done ? '#7ef0a0' : '#5bc7ff', 2);
+      // little building icon: a factory bay drawn in iso
+      ctx.save(); ctx.translate(x + w / 2, y + 120); ctx.scale(1.1, 1.1);
+      const bays = e.id === 'long' ? 1 : (e.id === 'line2' ? 2 : 3);
+      for (let k = 0; k < bays; k++) { box(-1 + k * 0.7 - 0.7, -0.7, -1 + k * 0.7, 0.7, 0, 34, k === bays - 1 && !done ? '#c96a4a' : '#a84f3a'); poly(qT(-1 + k * 0.7 - 0.7, -0.7, -1 + k * 0.7, 0.7, 34), '#6e7e8c'); }
+      if (e.id === 'long') { box(0.1, -0.15, 1.6, 0.15, 0, 6, '#3b4046'); box(1.2, -0.3, 1.6, 0.3, 6, 20, '#e8b52a'); }
+      ctx.restore();
+      text(e.name, x + w / 2, y + 200, 22, '#fff');
+      wrapText(e.desc, x + w / 2, y + 236, w - 40, 15, '#b9c4ce', 20, 'center');
+      if (done) text('Completato', x + w / 2, y + 330, 22, '#7ef0a0');
+      else if (locked) { rrect(x + 50, y + 300, w - 100, 56, 10, '#1b2229', '#59626b', 2); text(e.can() ? `Livello ${e.lvl()}` : 'Prima la Linea 2', x + w / 2, y + 328, 18, '#ffb35b'); }
+      else { coinIcon(x + 100, y + 296, 0.9); text(fmt(e.cost()), x + 118, y + 296, 20, state.coins >= e.cost() ? '#ffe08a' : '#ff8a7a', 'left'); button('Amplia', x + 50, y + 320, w - 100, 54, () => buyExpansion(e), { enabled: state.coins >= e.cost(), color: '#5bc7ff', name: 'exp' + e.id }); }
+    });
+  }
+}
+function drawRecipes(t) {
+  const P = panelFrame(`Ricettario  ·  ${state.found.length}/${RECIPES.length}`, 1060, 600, () => { state.panel = null; });
+  text('L\'ordine delle macchine sulla linea decide il pezzo. Prova combinazioni diverse!', P.x + P.w / 2, P.y + 88, 16, '#cfd6dd');
+  RECIPES.forEach((rc, i) => {
+    const col = i % 2, row = Math.floor(i / 2), x = P.x + 26 + col * 510, y = P.y + 110 + row * 58;
+    const known = state.found.includes(rc.seq);
+    rrect(x, y, 494, 50, 10, known ? '#3a4552' : '#252c33', known ? '#f0923a' : '#3a4148', 2);
+    if (known) {
+      rc.seq.split('').forEach((ch, k) => badge(ch, x + 10 + k * 62, y + 12));
+      text(rc.name, x + 330, y + 26, 16, '#fff');
+      coinIcon(x + 432, y + 25, 0.7); text(fmt(tune['val_' + rc.seq]), x + 446, y + 26, 16, '#ffe08a', 'left');
+    } else {
+      for (let k = 0; k < rc.seq.length; k++) { rrect(x + 10 + k * 62, y + 12, 58, 26, 8, '#1b2229', '#3a4148', 2); text('?', x + 39 + k * 62, y + 26, 16, '#59626b'); }
+      text(`??? · ${rc.seq.length} macchin${rc.seq.length > 1 ? 'e' : 'a'}`, x + 400, y + 26, 15, '#7d8790');
+    }
+  });
+}
+function drawTools(t) {
+  const P = panelFrame('Attrezzi', 900, 520, () => { state.panel = null; });
+  text('Attrezzi migliori = minigiochi più veloci = percentuali più alte', P.x + P.w / 2, P.y + 90, 16, '#cfd6dd');
+  TOOLS.forEach((tl, i) => {
+    const x = P.x + 30, y = P.y + 120 + i * 128, l = state.tools[tl.key], max = l >= tune.toolMax;
+    rrect(x, y, P.w - 60, 114, 14, '#3a4552', '#f2c230', 2);
+    rrect(x + 14, y + 14, 86, 86, 12, '#252c33'); toolIcon(tl.key, x + 57, y + 57, 1.7);
+    text(tl.name, x + 120, y + 30, 21, '#fff', 'left');
+    text(`Minigioco: ${PHASES[tl.phase]}`, x + 120, y + 56, 15, '#b9c4ce', 'left');
+    for (let k = 0; k < tune.toolMax; k++) rrect(x + 120 + k * 34, y + 76, 28, 14, 5, k < l ? '#f2c230' : '#1b2229', '#59626b', 1);
+    text(`Ora: ${tl.eff(l)}`, x + 270, y + 84, 14, '#7ef0a0', 'left');
+    if (max) text('Al massimo', x + P.w - 160, y + 57, 20, '#7ef0a0');
+    else {
+      const req = toolReq(tl, l), ok = state.level >= req, cost = toolCost(l);
+      text(`Liv. ${l + 1}: ${tl.eff(l + 1)}`, x + P.w - 160, y + 26, 13, '#cfd6dd');
+      if (!ok) { rrect(x + P.w - 250, y + 44, 180, 50, 10, '#1b2229', '#59626b', 2); text(`Serve livello ${req}`, x + P.w - 160, y + 69, 17, '#ffb35b'); }
+      else button(`${fmt(cost)} monete`, x + P.w - 250, y + 44, 180, 50, () => upgradeTool(tl), { enabled: state.coins >= cost, size: 18, name: 'tool' + tl.key });
+    }
+  });
+}
+function drawMachinePanel(t) {
+  const m = state.sel; if (!m) { state.panel = null; return; }
+  const P = panelFrame(MACH[m.type].name, 620, 440, () => { state.panel = null; state.sel = null; });
+  rrect(P.x + 24, P.y + 80, 200, 200, 14, '#252c33');
+  machineIcon(m.type, P.x + 124, P.y + 220, 1.9, { t, busy: !!m.busy, status: m.busy ? 'work' : 'wait' });
+  text(`Qualità ${Math.round(m.quality * 100)}%`, P.x + 250, P.y + 100, 24, '#7ef0a0', 'left');
+  text(`Rende x${(tune.qualityBase + m.quality).toFixed(2)} il valore del pezzo`, P.x + 250, P.y + 132, 15, '#cfd6dd', 'left');
+  PHASES.forEach((ph, i) => {
+    const y = P.y + 166 + i * 36; phaseIcon(i, P.x + 264, y, 1);
+    text(ph, P.x + 284, y, 16, '#fff', 'left'); text(`${m.pct[i] ?? 0}%`, P.x + 580, y, 16, '#ffe08a', 'right');
+  });
+  text(`Linea ${m.line + 1}, posto ${m.slot + 1}  ·  ${MACH[m.type].desc}`, P.x + 310, P.y + 300, 15, '#b9c4ce');
+  button('Sposta', P.x + 24, P.y + 340, 180, 64, () => { state.panel = null; state.placing = { m }; toast('Tocca un posto: libero per spostare, occupato per scambiare', '#bfe3ff'); }, { color: '#5bc7ff', name: 'move' });
+  button('Ricalibra', P.x + 220, P.y + 340, 180, 64, () => startBuild(m, true), { color: '#7ef0a0', name: 'recal' });
+  button(`Vendi +${fmt(mcfg('cost', m.type) * tune.sellRefund)}`, P.x + 416, P.y + 340, 180, 64, () => sellMachine(m), { color: '#ff8a7a', size: 18, name: 'sell' });
+}
+
+function drawMinigame(t) {
+  const mg = state.mg, m = mg.m;
+  ctx.fillStyle = 'rgba(8,12,18,0.7)'; ctx.fillRect(0, 0, W, H);
+  btn(0, 0, W, H, () => {});
+  const { x, y, w, h } = MG;
+  rrect(x, y + 6, w, h, 18, 'rgba(0,0,0,0.4)');
+  rrect(x, y, w, h, 18, '#2c3540', '#f2c230', 3);
+  rrect(x + 3, y + 3, w - 6, 54, 15, '#38434f');
+  const title = mg.recal ? `Ricalibra · ${MACH[m.type].name}` : `Fase ${mg.phase + 1}/3 · ${PHASES[mg.phase]} · ${MACH[m.type].name}`;
+  text(title, x + w / 2, y + 31, 24, '#fff');
+  for (let i = 0; i < 3; i++) { const on = i <= mg.phase; rrect(x + 24 + i * 34, y + 18, 26, 26, 6, on ? '#f2c230' : '#1b2229'); phaseIcon(i, x + 37 + i * 34, y + 31, 0.8, on ? '#2b2b2b' : '#59626b'); }
+  const tl = TOOLS[mg.phase], tlv = state.tools[tl.key];
+  if (mg.step === 'intro') {
+    rrect(x + 40, y + 90, 180, 180, 16, '#252c33'); toolIcon(tl.key, x + 130, y + 180, 3.2);
+    text(`${tl.name} · liv. ${tlv}`, x + 250, y + 110, 20, '#f2c230', 'left');
+    const how = [
+      `Tocca i bulloni nell'ordine dei numeri (1, 2, 3...). Ogni bullone richiede ${boltTurnsAt(tlv)} giri di chiave. Un bullone sbagliato costa ${tune.mgPenalty.toFixed(0)} s.`,
+      `Trascina il cavo dal rack (a sinistra) alla macchina (a destra), girando intorno a pilastri, pallet e macchie d'olio. Poi crimpa il connettore con ${crimpTapsAt(tlv)} tocchi. Anche le frecce funzionano.`,
+      `Ferma l'ago nella zona verde di ogni parametro: tocca lo schermo o premi Spazio. Fuori dalla zona costa ${tune.mgPenalty.toFixed(0)} s.`,
+    ][mg.phase];
+    wrapText(how, x + 250, y + 150, w - 300, 18, '#e6e1d3', 26);
+    const parGuess = mg.phase === 0 ? mcfg('bolts', m.type) * tune.parBolt : mg.phase === 2 ? mcfg('dials', m.type) * tune.parDial : null;
+    text(parGuess ? `Tempo ottimo: ${parGuess.toFixed(1)} s = 100%. Più ci metti, più scende la percentuale.` : 'Più sei veloce, più alta è la percentuale.', x + 250, y + 290, 16, '#7ef0a0', 'left');
+    text('La qualità finale (media delle tre fasi) moltiplica quanto rende la macchina.', x + 250, y + 318, 15, '#b9c4ce', 'left');
+    machineIcon(m.type, x + w / 2, y + 470, 1.4, { status: 'off', t });
+    button('Inizia', x + w - 260, y + h - 100, 220, 70, beginPhase, { name: 'start', size: 26 });
+    if (!mg.recal) button('Più tardi', x + 40, y + h - 90, 160, 54, () => { state.mg = null; toast('Tocca la macchina per riprendere la costruzione', '#bfe3ff'); }, { color: '#9aa4ad', size: 18, name: 'later' });
+    else button('Annulla', x + 40, y + h - 90, 160, 54, () => { state.mg = null; }, { color: '#9aa4ad', size: 18, name: 'later' });
+    return;
+  }
+  if (mg.step === 'result') {
+    const pct = mg.pct, col = pct >= 90 ? '#7ef0a0' : pct >= 70 ? '#f2c230' : '#ffb35b';
+    text(pct >= 90 ? 'Perfetto!' : pct >= 70 ? 'Ottimo lavoro' : 'Fatto, con calma', x + w / 2, y + 130, 30, '#fff');
+    textO(`${pct}%`, x + w / 2, y + 230, 110, col);
+    text(`Tempo ${(mg.elapsed).toFixed(1)} s${mg.pen ? ` + ${mg.pen.toFixed(1)} s di errori` : ''} · ottimo ${mg.par.toFixed(1)} s`, x + w / 2, y + 320, 18, '#cfd6dd');
+    if (mg.recal) text(mg.better ? 'Nuovo record: la qualità sale!' : `Resta il risultato migliore: ${m.pct[2]}%`, x + w / 2, y + 360, 18, '#bfe3ff');
+    else if (m.phase >= 3) text(`Qualità finale ${Math.round(m.quality * 100)}%  ·  la macchina rende x${(tune.qualityBase + m.quality).toFixed(2)}`, x + w / 2, y + 360, 20, '#7ef0a0');
+    else text(`Prossima fase: ${PHASES[m.phase]}`, x + w / 2, y + 360, 18, '#bfe3ff');
+    button(m.phase >= 3 || mg.recal ? 'Accendi la macchina' : 'Avanti', x + w / 2 - 150, y + h - 110, 300, 70, afterResult, { name: 'next', size: 24, color: '#7ef0a0' });
+    return;
+  }
+  // live timer bar: green to the best time, then sliding down to the floor
+  const pct = mgPct(mg), e = mg.elapsed + mg.pen, lim = mg.par * tune.limitMult;
+  rrect(x + 160, y + 78, w - 320, 22, 11, '#1b2229');
+  const fr = Math.min(1, e / lim), parFr = mg.par / lim;
+  rrect(x + 160, y + 78, Math.max(22, (w - 320) * fr), 22, 11, e <= mg.par ? '#4fdc7a' : '#f2c230');
+  ctx.fillStyle = '#fff'; ctx.fillRect(x + 160 + (w - 320) * parFr - 1, y + 74, 3, 30);
+  text(`${pct}%`, x + w - 110, y + 90, 26, pct >= 90 ? '#7ef0a0' : '#f2c230');
+  text(`${e.toFixed(1)} s`, x + 100, y + 90, 20, '#fff');
+  if (mg.flash > 0) { ctx.fillStyle = `rgba(216,67,58,${mg.flash})`; ctx.fillRect(x + 3, y + 60, w - 6, h - 63); }
+  if (mg.phase === 0) drawAssembly(mg, t); else if (mg.phase === 1) drawNetwork(mg, t); else drawConfig(mg, t);
+}
+function drawAssembly(mg, t) {
+  const { x, y, w, h } = MG;
+  // machine side panel, riveted steel
+  rrect(x + 120, y + 130, w - 240, h - 160, 14, '#aeb7bf', '#5d666e', 3);
+  rrect(x + 132, y + 142, w - 264, h - 184, 10, '#c3cbd2');
+  for (let i = 0; i < 14; i++) { ctx.fillStyle = '#8a939b'; ctx.fillRect(x + 140 + i * 45, y + 136, 4, 4); ctx.fillRect(x + 140 + i * 45, y + h - 36, 4, 4); }
+  poly([[x + 132, y + h - 70], [x + w - 132, y + h - 70], [x + w - 132, y + h - 54], [x + 132, y + h - 54]], MACH[mg.m.type].color);
+  text(`Bulloni: ${mg.next}/${mg.bolts.length}  ·  ${mg.need} giri ciascuno`, x + w / 2, y + 116, 16, '#e6e1d3');
+  mg.bolts.forEach((b, i) => {
+    const done = b.turns >= mg.need, isNext = i === mg.next;
+    if (isNext) { ctx.beginPath(); ctx.arc(b.x, b.y, 44 + Math.sin(t * 6) * 3, 0, Math.PI * 2); ctx.fillStyle = 'rgba(242,194,48,0.28)'; ctx.fill(); }
+    ctx.beginPath(); ctx.arc(b.x, b.y + 4, 34, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fill();
+    // washer and hex head turning as it tightens
+    ctx.beginPath(); ctx.arc(b.x, b.y, 32, 0, Math.PI * 2); ctx.fillStyle = '#8f989f'; ctx.fill(); ctx.strokeStyle = '#5d666e'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = b.ang + k * Math.PI / 3; ctx.lineTo(b.x + Math.cos(a) * 25, b.y + Math.sin(a) * 25); }
+    ctx.closePath(); ctx.fillStyle = done ? '#7fc796' : '#dfe4e8'; ctx.fill(); ctx.strokeStyle = '#4a525a'; ctx.lineWidth = 2.5; ctx.stroke();
+    if (!done) { for (let k = 0; k < mg.need; k++) { ctx.beginPath(); ctx.arc(b.x, b.y, 38, -Math.PI / 2 + k * 2 * Math.PI / mg.need + 0.1, -Math.PI / 2 + (k + 1) * 2 * Math.PI / mg.need - 0.1); ctx.strokeStyle = k < b.turns ? '#f2c230' : 'rgba(40,46,52,0.5)'; ctx.lineWidth = 5; ctx.stroke(); } }
+    text(done ? 'OK' : String(i + 1), b.x, b.y + 1, done ? 18 : 26, done ? '#1d4a2a' : '#2b3138');
+    if (b.spin > 0) { ctx.save(); ctx.translate(b.x + 30, b.y - 30); ctx.rotate(-0.3 - b.spin * 0.6); toolIcon('W', 0, 0, 1.6); ctx.restore(); }
+    btn(b.x - 40, b.y - 40, 80, 80, () => tapBolt(i), 'bolt' + i);
+  });
+}
+function drawNetwork(mg, t) {
+  const [ox, oy] = netOrigin(), S = NETCELL;
+  text(mg.linked ? 'Collegato! Crimpa il connettore' : 'Trascina il cavo fino alla macchina', MG.x + MG.w / 2, MG.y + 130, 20, mg.linked ? '#7ef0a0' : '#e6e1d3');
+  for (let r = 0; r < mg.gr; r++) for (let c = 0; c < mg.gc; c++) {
+    const px = ox + c * S, py = oy + r * S, v = mg.grid[r][c];
+    ctx.fillStyle = (c + r) % 2 ? '#8a9eab' : '#93a6b3'; ctx.fillRect(px, py, S, S);
+    ctx.strokeStyle = 'rgba(40,52,62,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(px, py, S, S);
+    if (v === 1) { // concrete pillar
+      rrect(px + 12, py + 6, S - 24, S - 10, 4, '#b7b0a2', '#5d574c', 2);
+      for (let k = 0; k < 3; k++) { ctx.fillStyle = k % 2 ? '#2b2b2b' : '#f2c230'; ctx.fillRect(px + 12, py + S - 18 + k * 4, S - 24, 4); }
+    } else if (v === 2) { // pallet with boxes
+      rrect(px + 6, py + S - 18, S - 12, 12, 2, '#a7773c', '#5a3c1c', 2);
+      rrect(px + 12, py + 10, 22, 22, 2, '#c99a5a', '#6a4622', 2); rrect(px + 30, py + 18, 22, 20, 2, '#b8874a', '#6a4622', 2);
+    } else if (v === 3) { // oil puddle
+      ctx.beginPath(); ctx.ellipse(px + S / 2, py + S / 2, 24, 14, 0.3, 0, Math.PI * 2); ctx.fillStyle = '#23262b'; ctx.fill();
+      ctx.beginPath(); ctx.ellipse(px + S / 2 - 6, py + S / 2 - 4, 8, 3, 0.3, 0, Math.PI * 2); ctx.fillStyle = 'rgba(160,120,220,0.5)'; ctx.fill();
+    }
+  }
+  // rack and machine ports
+  const [sc, sr] = mg.start, [ec, er] = mg.end;
+  rrect(ox - 56, oy + sr * S + 2, 50, S - 4, 6, '#262c33', '#5bc7ff', 2);
+  for (let k = 0; k < 4; k++) { ctx.fillStyle = (k + Math.floor(t * 4)) % 3 ? '#4fdc7a' : '#244a30'; ctx.fillRect(ox - 48 + k * 10, oy + sr * S + 14, 6, 4); }
+  text('RACK', ox - 31, oy + sr * S + S - 16, 13, '#5bc7ff');
+  machineIcon(mg.m.type, ox + mg.gc * S + 40, oy + er * S + S - 6, 0.8, { status: mg.linked ? 'wait' : 'off', t });
+  rrect(ox + mg.gc * S - 14, oy + er * S + S / 2 - 10, 20, 20, 4, '#3d8fd6', '#1d3e78', 2);
+  // the cable
+  ctx.beginPath(); mg.path.forEach(([c, r], i) => { const px = ox + c * S + S / 2, py = oy + r * S + S / 2; if (i) ctx.lineTo(px, py); else ctx.moveTo(ox - 6, py); ctx.lineTo(px, py); });
+  if (mg.linked) ctx.lineTo(ox + mg.gc * S - 4, oy + er * S + S / 2);
+  ctx.strokeStyle = '#1d3e78'; ctx.lineWidth = 14; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.strokeStyle = '#3d8fd6'; ctx.lineWidth = 8; ctx.stroke(); ctx.lineCap = 'butt';
+  const hd = mg.path[mg.path.length - 1];
+  if (!mg.linked) {
+    const hx = ox + hd[0] * S + S / 2, hy = oy + hd[1] * S + S / 2;
+    rrect(hx - 12, hy - 9, 24, 18, 4, '#5bc7ff', '#1d3e78', 2); ctx.fillStyle = '#f2c230'; for (let k = 0; k < 4; k++) ctx.fillRect(hx - 8 + k * 4, hy - 6, 2, 4);
+    // the target pulses
+    ctx.strokeStyle = `rgba(242,194,48,${0.5 + 0.5 * Math.sin(t * 6)})`; ctx.lineWidth = 3; ctx.strokeRect(ox + ec * S + 3, oy + er * S + 3, S - 6, S - 6);
+  } else {
+    const cx = ox + mg.gc * S - 4, cy = oy + er * S + S / 2;
+    ctx.save(); ctx.translate(cx, cy - 44); ctx.rotate(Math.sin((mg.crimpAnim || 0) * 6) * 0.2); toolIcon('C', 0, 0, 2.2); ctx.restore();
+    mg.crimpAnim = Math.max(0, (mg.crimpAnim || 0) - 0.05);
+    for (let k = 0; k < mg.crimpNeed; k++) rrect(cx - mg.crimpNeed * 12 + k * 24, cy + 46, 18, 12, 4, k < mg.crimpNeed - mg.crimpLeft ? '#f2c230' : '#1b2229', '#59626b', 1);
+    button('Crimpa!', MG.x + MG.w / 2 - 110, MG.y + MG.h - 84, 220, 64, crimp, { name: 'crimp', size: 24 });
+  }
+}
+function drawConfig(mg, t) {
+  const n = mg.dials.length, names = ['Giri mandrino', 'Avanzamento', 'Profondità', 'Utensile'];
+  const gw = Math.min(220, (MG.w - 80) / n);
+  text('Tocca lo schermo o premi Spazio quando l\'ago è nel verde', MG.x + MG.w / 2, MG.y + 140, 20, '#e6e1d3');
+  btn(MG.x, MG.y + 60, MG.w, MG.h - 60, stopNeedle, 'dial');
+  mg.dials.forEach((d, i) => {
+    const cx = MG.x + MG.w / 2 + (i - (n - 1) / 2) * (gw + 16), cy = MG.y + 360, R = gw / 2 - 12, act = i === mg.cur;
+    rrect(cx - gw / 2, cy - R - 40, gw, R + 130, 14, act ? '#3a4552' : '#252c33', act ? '#f2c230' : '#3a4148', 2);
+    ctx.beginPath(); ctx.arc(cx, cy, R, Math.PI, 0); ctx.lineTo(cx + R, cy + 6); ctx.lineTo(cx - R, cy + 6); ctx.closePath(); ctx.fillStyle = '#f4f1e8'; ctx.fill(); ctx.strokeStyle = '#2b3138'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, R - 12, Math.PI + d.z0 * Math.PI, Math.PI + (d.z0 + d.z) * Math.PI); ctx.strokeStyle = '#4caf6a'; ctx.lineWidth = 16; ctx.stroke();
+    for (let k = 0; k <= 10; k++) { const a = Math.PI + k * Math.PI / 10; line([cx + Math.cos(a) * (R - 4), cy + Math.sin(a) * (R - 4)], [cx + Math.cos(a) * (R - (k % 5 ? 10 : 16)), cy + Math.sin(a) * (R - (k % 5 ? 10 : 16))], '#2b3138', 2); }
+    const at = d.locked ? d.z0 + d.z / 2 : (act ? d.at : 0), a = Math.PI + at * Math.PI;
+    line([cx, cy], [cx + Math.cos(a) * (R - 8), cy + Math.sin(a) * (R - 8)], d.locked ? '#2f8a4a' : '#d8433a', 4);
+    rrect(cx - 7, cy - 7, 14, 14, 4, '#2b3138');
+    text(names[i % 4], cx, cy + 34, 16, '#fff');
+    text(d.locked ? 'OK' : act ? 'Ora!' : '...', cx, cy + 62, 18, d.locked ? '#7ef0a0' : act ? '#f2c230' : '#59626b');
+  });
+  toolIcon('Te', MG.x + 70, MG.y + 480, 2.2);
+}
+
+function drawTutorial(t) {
+  let target = null, label = '';
+  const g = state.goal, bounce = Math.sin(t * 5) * 8;
+  if (state.mg || state.goal > 4) return;
+  const wantType = g === 0 ? 'T' : g === 3 ? 'L' : g === 4 && state.level >= tune.unlockF ? 'F' : null;
+  if (state.placing && !state.placing.m) {
+    let li = 0, s = 0;
+    if (wantType === 'L') { const tIdx = state.lines[0].slots.findIndex(m => m && m.type === 'T'); s = tIdx >= 0 && !state.lines[0].slots[tIdx + 1] ? tIdx + 1 : freeSlots()[0]?.[1] ?? 0; }
+    else s = (freeSlots()[0] || [0, 0])[1], li = (freeSlots()[0] || [0, 0])[0];
+    const p = iso(s + 1.5, lineRow(li) + 0.5, 0), [sx, sy] = toScreen(p[0], p[1]);
+    target = { x: sx, y: sy - 20 }; label = wantType === 'L' ? 'Mettilo subito dopo la Troncatrice' : 'Piazzala qui';
+  } else if (wantType && state.panel === 'shop' && ui.named['buy' + wantType]) {
+    const b = ui.named['buy' + wantType]; target = { x: b.x + b.w - 22, y: b.y - 2 }; label = '';
+  } else if (wantType && !state.panel && state.coins >= costOf(wantType) && state.level >= mcfg('unlock', wantType) && ui.named.shop) {
+    const b = ui.named.shop; target = { x: b.x + b.w / 2, y: b.y - 10 }; label = `Compra ${wantType === 'T' ? 'la Troncatrice' : wantType === 'L' ? 'il Tornio' : 'la Fresa'}`;
+  }
+  if (!target) return;
+  const ax = target.x, ay = target.y - 20 + bounce;
+  poly([[ax, ay + 18], [ax - 18, ay - 4], [ax - 7, ay - 4], [ax - 7, ay - 30], [ax + 7, ay - 30], [ax + 7, ay - 4], [ax + 18, ay - 4]], '#f2c230', '#2b2b2b', 3);
+  if (label) { ctx.font = `bold 18px ${FONT}`; const tw = ctx.measureText(label).width; const bx = Math.max(10, Math.min(W - tw - 34, ax - tw / 2 - 12)); rrect(bx, ay - 74, tw + 24, 34, 10, '#2b2b2b', '#f2c230', 2); text(label, bx + tw / 2 + 12, ay - 56, 18, '#fff'); }
+}
+
+// ---- World tap ----------------------------------------------------------------------------
+function machineAt(sx, sy) {
+  const ms = allMachines().sort((a, b) => (b.slot + lineRow(b.line)) - (a.slot + lineRow(a.line)));
+  for (const m of ms) {
+    const c = m.slot + 1.5, r = lineRow(m.line) + 0.5, h = machineTop(m.type);
+    const [x0] = iso(c - 0.45, r + 0.45), [x1] = iso(c + 0.45, r - 0.45), y0 = iso(c - 0.45, r - 0.45, h)[1], y1 = iso(c + 0.45, r + 0.45, 0)[1];
+    const [a, b] = toScreen(x0, y0), [cc, d] = toScreen(x1, y1);
+    if (sx >= a && sx <= cc && sy >= b && sy <= d) return m;
+  }
+  return null;
+}
+function worldTap(sx, sy) {
+  const [cf, rf] = toCell(sx, sy), c = Math.floor(cf), r = Math.floor(rf);
+  if (state.placing) {
+    const li = (r - 1) / 2, s = c - 1;
+    if (r % 2 === 1 && li >= 0 && li < state.linesOpen && s >= 0 && s < state.slotsPerLine) placeAt(li, s);
+    else { if (state.placing.m) toast('Spostamento annullato'); state.placing = null; }
+    return;
+  }
+  const m = machineAt(sx, sy);
+  if (m) {
+    if (m.phase < 3) startBuild(m);
+    else { state.sel = m; state.panel = 'machine'; sfx.click(); }
+    return;
+  }
+  if (r % 2 === 1 && c === CRATE_COL) { const li = (r - 1) / 2; if (li < state.linesOpen) { state.panel = 'recipes'; sfx.click(); } }
+  else if (r >= openRows() && r < MAXROWS && c >= 0 && c < COLS) { state.panel = 'shop'; state.shopTab = 1; sfx.click(); }
+}
+
+// ---- Scenes -------------------------------------------------------------------------------
+function updateWorld(dt) {
+  state.t += dt;
+  state.lines.forEach((L, li) => { if (li < state.linesOpen) updateLine(L, li, dt); L.bump = Math.max(0, (L.bump || 0) - dt * 4); });
+  updateWorkers(dt);
+  for (const f of state.floats) { f.life -= dt; f.wy -= 22 * dt; }
+  state.floats = state.floats.filter(f => f.life > 0);
+  for (const tt of state.toasts) tt.life -= dt;
+  state.toasts = state.toasts.filter(tt => tt.life > 0);
+  if (state.banner) { state.banner.life -= dt; if (state.banner.life <= 0) state.banner = null; }
+  state.welcome = Math.max(0, state.welcome - dt);
+  checkGoals();
+  state.score = state.earned;
+  state.saveT += dt; if (state.saveT > 5) { state.saveT = 0; save(); }
+}
+function drawWorld(t) {
+  ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-cam.x, -cam.y);
+  drawGround(); drawFloor(t); drawWalls();
+  const signP = iso(4, 0, 35); ctx.save(); ctx.translate(signP[0], signP[1]); ctx.transform(1, 0.5, 0, 1, 0, 0); textW('FABBRICA CNC', 0, 0, 10, '#f2c230'); ctx.restore();
+  for (let li = 0; li < state.linesOpen; li++) drawBelt(li, t);
+  drawCables(); drawSlots(t);
+  const objs = [];
+  objs.push({ d: RACK.c + RACK.r + 1, f: () => drawRack(t) });
+  for (let li = 0; li < state.linesOpen; li++) {
+    const L = state.lines[li], row = lineRow(li);
+    objs.push({ d: row + 1, f: () => drawFeeder(li) });
+    objs.push({ d: CRATE_COL + row + 1, f: () => drawCrate(li, t, L.bump || 0) });
+    for (const p of L.pieces) if (!(p.proc > 0)) objs.push({ d: p.x + row + 1.02, f: () => drawPiece(p.ops, p.x + 0.5, row + 0.5) });
+    L.slots.forEach(m => {
+      if (!m) return;
+      const moving = state.placing && state.placing.m === m;
+      objs.push({ d: m.slot + 1 + row + 1, f: () => {
+        if (moving) ctx.globalAlpha = 0.45 + 0.2 * Math.sin(t * 6);
+        if (m.phase < 3) { ctx.globalAlpha = 0.6; drawMachine(m.type, m.slot + 1, row, { status: 'off', t }); ctx.globalAlpha = 1; drawScaffold(m.slot + 1, row, machineTop(m.type)); }
+        else drawMachine(m.type, m.slot + 1, row, { status: m.busy ? 'work' : 'wait', busy: !!m.busy, t });
+        ctx.globalAlpha = 1;
+      } });
+    });
+  }
+  for (let li = state.linesOpen; li < 3; li++) objs.push({ d: lineRow(li) + 4, f: () => drawLockedSign(li) });
+  for (const w of state.workers) objs.push({ d: w.c + w.r, f: () => drawWorker(w, t) });
+  // ghost of the machine being placed, under the pointer
+  if (state.placing && !state.placing.m && ptr.inside) {
+    const [cf, rf] = toCell(ptr.x, ptr.y), c = Math.floor(cf), r = Math.floor(rf), li = (r - 1) / 2, s = c - 1;
+    if (r % 2 === 1 && li >= 0 && li < state.linesOpen && s >= 0 && s < state.slotsPerLine && !state.lines[li].slots[s]) objs.push({ d: c + r + 1.5, f: () => { ctx.globalAlpha = 0.55; drawMachine(state.placing.type, c, r, { status: 'off', t }); ctx.globalAlpha = 1; } });
+  }
+  objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
+  ctx.restore();
+}
+function drawOverlaysWorld(t) {
+  // labels above each crate: what the line makes now
+  for (let li = 0; li < state.linesOpen; li++) {
+    const L = state.lines[li], ms = lineMachines(L), p = iso(CRATE_COL + 0.5, lineRow(li) + 0.5, 34), [sx, sy] = toScreen(p[0], p[1]);
+    let lab, col = '#fff', sub = '';
+    if (!ms.length) { lab = 'Linea vuota'; col = '#b9c4ce'; }
+    else if (ms.some(m => m.phase < 3)) { lab = 'In costruzione'; col = '#ffb35b'; }
+    else {
+      const seq = lineSeq(L), rec = recipeOf(seq);
+      lab = rec ? (state.found.includes(seq) ? rec.name : 'Nuovo pezzo...') : 'Scarto'; col = rec ? '#ffd9a8' : '#c9c9c9';
+      sub = `${fmt(recipeVal(seq) * lineQuality(ms))} al pezzo`;
+    }
+    ctx.font = `bold 15px ${FONT}`; const tw = Math.max(ctx.measureText(lab).width, sub ? 100 : 0) + 20;
+    rrect(sx - tw / 2, sy - 44, tw, sub ? 42 : 26, 8, 'rgba(20,26,34,0.82)', col, 1.5);
+    text(lab, sx, sy - 31, 15, col); if (sub) text(sub, sx, sy - 13, 13, '#9ce8b4');
+  }
+  // bubbles over machines being built
+  for (const m of allMachines()) if (m.phase < 3) {
+    const p = iso(m.slot + 1.5, lineRow(m.line) + 0.5, machineTop(m.type) + 18), [sx, sy0] = toScreen(p[0], p[1]), sy = sy0 + Math.sin(t * 3 + m.id) * 4;
+    rrect(sx - 22, sy - 22, 44, 40, 10, '#fff', '#2b2b2b', 2);
+    poly([[sx - 6, sy + 17], [sx + 6, sy + 17], [sx, sy + 26]], '#fff'); phaseIcon(m.phase, sx, sy - 2, 1.2);
+  }
+  // floating coins
+  for (const f of state.floats) {
+    const [sx, sy] = toScreen(f.wx, f.wy), a = Math.min(1, f.life * 2);
+    ctx.globalAlpha = a; if (f.coin) coinIcon(sx - 24, sy, 0.8); textO(f.txt, sx + (f.coin ? 4 : 0), sy, 20, f.col); ctx.globalAlpha = 1;
+  }
+  // welcome bubble over the first worker
+  if (state.welcome > 0 && state.workers[0] && !state.placing && !state.panel) {
+    const w = state.workers[0], p = iso(w.c, w.r, 44), [sx, sy] = toScreen(p[0], p[1]);
+    rrect(sx - 120, sy - 46, 240, 40, 10, '#fff', '#2b2b2b', 2); poly([[sx - 8, sy - 7], [sx + 8, sy - 7], [sx, sy + 4]], '#fff');
+    text('Benvenuto in fabbrica, capo!', sx, sy - 26, 17, '#2b2b2b');
+  }
+}
+function drawTopLayer(t) {
+  if (state.banner) {
+    const b = state.banner, a = Math.min(1, b.life * 2, (3.2 - b.life) * 4), y = 108 + (1 - a) * -30;
+    ctx.globalAlpha = a; rrect(W / 2 - 330, y, 660, 76, 16, 'rgba(20,26,34,0.92)', b.col, 3);
+    text(b.title, W / 2, y + 26, 26, b.col); text(b.sub, W / 2, y + 56, 16, '#e6e1d3'); ctx.globalAlpha = 1;
+  }
+  state.toasts.forEach((tt, i) => {
+    const y = 560 - i * 44; ctx.globalAlpha = Math.min(1, tt.life * 2);
+    ctx.font = `bold 17px ${FONT}`; const tw = ctx.measureText(tt.msg).width + 30;
+    rrect(W / 2 - tw / 2 - 120, y, tw, 36, 10, 'rgba(20,26,34,0.9)', tt.col, 1.5); text(tt.msg, W / 2 - 120, y + 19, 17, tt.col); ctx.globalAlpha = 1;
+  });
+  if (state.placing) {
+    text(state.placing.m ? 'Scegli dove spostarla' : `Piazza: ${MACH[state.placing.type].name}`, W / 2 - 120, 108, 20, '#fff');
+    button('Annulla', W / 2 - 200, 126, 160, 46, () => { state.placing = null; }, { color: '#9aa4ad', size: 18, name: 'cancel' });
+  }
+}
+
+const scenes = {
+  figures: {
+    update(dt) { state.t += dt; },
+    draw() {
+      clear('#2b3a48');
+      const t = state.t;
+      ORDER.forEach((tp, i) => {
+        const x = 150 + i * 245, y = 330;
+        ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x - 110, 90, 220, 300);
+        machineIcon(tp, x, y, 2.6, { t: 1.3, busy: true, status: 'work' });
+        text(MACH[tp].name, x, 420, 17, '#fff');
+      });
+      const items = [
+        ['Operaio', (x, y) => sprite('walk0', x, y, 5, false)],
+        ['Operaio che saluta', (x, y) => sprite('wave', x, y, 5, false)],
+        ['Operaio al lavoro', (x, y) => sprite('work', x, y, 5, false)],
+        ['Rack di rete', (x, y) => { ctx.save(); ctx.translate(x, y + 30); ctx.scale(1.5, 1.5); ctx.translate(-iso(7.5, 0.5)[0], -iso(7.5, 0.5)[1]); drawRack(1); ctx.restore(); }],
+        ['Magazzino barre', (x, y) => { ctx.save(); ctx.translate(x, y + 10); ctx.scale(1.8, 1.8); ctx.translate(-iso(0.5, 1.5)[0], -iso(0.5, 1.5)[1]); drawFeeder(0); ctx.restore(); }],
+        ['Cassa pezzi', (x, y) => { ctx.save(); ctx.translate(x, y + 10); ctx.scale(1.8, 1.8); ctx.translate(-iso(6.5, 1.5)[0], -iso(6.5, 1.5)[1]); drawCrate(0, 0, 0); ctx.restore(); }],
+        ['Pezzi', (x, y) => { ctx.save(); ctx.translate(x, y); ctx.scale(2.2, 2.2); ['', 'T', 'TL', 'TF', 'TFD', 'TX'].forEach((o, k) => { const p = iso(0, 0); ctx.save(); ctx.translate(-30 + k * 13 - p[0], (k % 2) * 10 - 10 - p[1]); drawPiece(o, 0, 0); ctx.restore(); }); ctx.restore(); }],
+      ];
+      items.forEach(([name, f], i) => { const x = 100 + i * 180, y = 600; f(x, y); text(name, x, 660, 15, '#fff'); });
+    },
+  },
+  title: {
+    update() {
+      const tp = taps.splice(0);
+      for (const p of tp) hitButtons(p.x, p.y);
+      if (pressed('Enter') || pressed('Space')) startGame(true);
+      if (pressed('KeyN')) startGame(false);
+    },
+    draw() {
+      ui = { buttons: [], named: {} };
+      drawWorld(clock.now());
+      ctx.fillStyle = 'rgba(14,20,28,0.62)'; ctx.fillRect(0, 0, W, H);
+      rrect(W / 2 - 360, 70, 720, 130, 22, 'rgba(28,36,44,0.92)', '#f2c230', 4);
+      for (let i = 0; i < 680; i += 34) { ctx.fillStyle = (i / 34) % 2 ? '#2b2b2b' : '#f2c230'; ctx.fillRect(W / 2 - 340 + i, 178, 34, 8); }
+      textO(TITLE, W / 2, 124, 72, '#f2c230', 'center', '#2b2b2b');
+      text('Compra, monta, cabla e configura le tue macchine CNC', W / 2, 232, 22, '#e6e1d3');
+      rrect(W / 2 - 440, 266, 880, 148, 14, 'rgba(20,26,34,0.9)', '#3a4552', 2);
+      CONTROLS.forEach((c, i) => text(c, W / 2, 290 + i * 34, 18, '#cfd6dd'));
+      ORDER.forEach((tp, i) => machineIcon(tp, W / 2 - 400 + i * 200, 520, 1.3, { t: clock.now(), busy: true, status: 'work' }));
+      const sv = hasSave();
+      button(sv ? 'Continua' : 'Gioca', W / 2 - 150, 560, 300, 70, () => startGame(true), { size: 28, name: 'play' });
+      if (sv) button(confirmNew ? 'Sicuro? Tocca ancora' : 'Nuova partita (N)', W / 2 - 150, 642, 300, 50, () => startGame(false), { size: 18, color: '#9aa4ad', name: 'new' });
+      text(sv ? 'Invio: continua' : 'Invio o tocca per iniziare', W / 2, 708, 15, '#9aa4ad');
+    },
+  },
+  play: {
+    update(dt) {
+      if (pressed('KeyP') || (pressed('Escape') && !state.panel && !state.mg && !state.placing)) { scene = 'pause'; confirmNew = 0; return; }
+      if (pressed('Escape')) { if (state.mg && state.mg.step === 'intro') state.mg = null; state.panel = null; state.placing = null; }
+      if (!state.mg) {
+        if (pressed('KeyB')) openPanel('shop');
+        if (pressed('KeyR')) openPanel('recipes');
+        if (pressed('KeyT')) openPanel('tools');
+        if (!state.panel) {
+          const sp = tune.panSpeed * dt / cam.zoom;
+          if (down.has('ArrowLeft')) cam.x -= sp; if (down.has('ArrowRight')) cam.x += sp;
+          if (down.has('ArrowUp')) cam.y -= sp; if (down.has('ArrowDown')) cam.y += sp;
+          if (pressed('Equal') || pressed('NumpadAdd')) setZoom(cam.zoom * 1.2);
+          if (pressed('Minus') || pressed('NumpadSubtract')) setZoom(cam.zoom / 1.2);
+          clampCam();
+        }
+      } else updateMinigame(dt);
+      const tp = taps.splice(0);
+      for (const p of tp) { if (!hitButtons(p.x, p.y) && !state.mg && !state.panel) worldTap(p.x, p.y); }
+      updateWorld(dt);
+    },
+    draw() {
+      const t = state.t;
+      ui = { buttons: [], named: {} };
+      drawWorld(t);
+      drawOverlaysWorld(t);
+      drawHUD(t);
+      drawTopLayer(t);
+      if (state.panel === 'shop') drawShop(t);
+      else if (state.panel === 'recipes') drawRecipes(t);
+      else if (state.panel === 'tools') drawTools(t);
+      else if (state.panel === 'machine') drawMachinePanel(t);
+      if (state.mg) drawMinigame(t);
+      drawTutorial(t);
+    },
+  },
+  pause: {
+    update() {
+      const tp = taps.splice(0); for (const p of tp) hitButtons(p.x, p.y);
+      if (pressed('KeyP') || pressed('Escape')) scene = 'play';
+      if (pressed('KeyN')) newGameFromPause();
+    },
+    draw() {
+      scenes.play.draw(); ui = { buttons: [], named: {} };
+      ctx.fillStyle = 'rgba(10,14,20,0.7)'; ctx.fillRect(0, 0, W, H);
+      textO('Pausa', W / 2, 220, 64, '#f2c230');
+      text('La fabbrica è salvata automaticamente.', W / 2, 290, 20, '#e6e1d3');
+      button('Riprendi (P)', W / 2 - 150, 340, 300, 66, () => { scene = 'play'; }, { size: 24, name: 'resume' });
+      button(confirmNew ? 'Sicuro? Tocca ancora' : 'Ricomincia da zero (N)', W / 2 - 150, 430, 300, 54, newGameFromPause, { size: 18, color: '#ff8a7a', name: 'restart' });
+      text(muted ? 'Audio: spento (M)' : 'Audio: acceso (M)', W / 2, 520, 18, '#cfd6dd');
+    },
+  },
+};
+function newGameFromPause() {
+  if (!confirmNew) { confirmNew = 1; return; }
+  confirmNew = 0; wipeSave(); reset(); scene = 'play'; toast('Nuova fabbrica!', '#7ef0a0');
+}
+function startGame(cont) {
+  if (cont && hasSave()) { if (!load()) reset(); }
+  else if (!cont && hasSave()) { if (!confirmNew) { confirmNew = 1; return; } confirmNew = 0; wipeSave(); reset(); }
+  else reset();
+  scene = 'play'; startAudio();
+}
+function hitButtons(x, y) {
+  for (let i = ui.buttons.length - 1; i >= 0; i--) {
+    const b = ui.buttons[i];
+    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { b.fn(); return true; }
+  }
+  return false;
+}
+
+// ---- Loop: fixed step, frame time clamped ---------------------------------------------
+function step() {
+  if (pressed('KeyM')) { setMuted(!muted); hit.delete('KeyM'); }
+  if (taps.length) drawFrame(); // buttons are laid out by drawing: make sure they match this state
+  scenes[scene].update(STEP); hit.clear();
+}
+let last, acc = 0, ALPHA = 1;
+function tick() {
+  const now = clock.now();
+  acc += Math.min(now - last, 0.25); last = now;
+  while (acc >= STEP) { step(); acc -= STEP; }
+  ALPHA = acc / STEP;
+  drawFrame();
+}
+function drawFrame() { ctx.setTransform(VIEW_R, 0, 0, VIEW_R, 0, 0); scenes[scene].draw(); }
+function frame() { tick(); requestAnimationFrame(frame); }
+function timer() { if (document.visibilityState === 'visible' && clock.now() - last > 0.1) tick(); }
+
+// ---- What a check can read and drive (?manual=1 stops the loop; players never see it) ----
+window.game = {
+  get scene() { return scene; },
+  get state() { return state; },
+  press(code) { hit.add(code); },
+  hold(code, on) { on ? down.add(code) : down.delete(code); },
+  tap(x, y) { taps.push({ x, y }); },
+  get events() { return events; },
+  step(n = 1, draw = true, alpha = 1) {
+    for (let i = 0; i < n; i++) step();
+    if (draw) { ALPHA = alpha; drawFrame(); }
+  },
+};
+
+reset();
+scene = params.get('scene') || 'title';
+last = clock.now();
+if (params.get('manual') === '1') drawFrame();
+else { requestAnimationFrame(frame); setInterval(timer, 50); }
+</script>
+</body>
+</html>
