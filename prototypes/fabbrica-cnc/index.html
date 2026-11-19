@@ -244,8 +244,21 @@ const RECIPES = [
   { seq: 'TLX', name: 'Girante turbina' }, { seq: 'TFDX', name: 'Blocco motore' },
   { seq: 'TLFDX', name: 'Pala aeronautica' },
 ];
-const recipeOf = seq => RECIPES.find(r => r.seq === seq);
-const recipeVal = seq => recipeOf(seq) ? tune['val_' + seq] : tune.val_scrap;
+const MAT_RECIPES = [ // pieces that only exist in a given material: new pages of the recipe book
+  { mat: 'all', seq: 'T', name: 'Profilato in alluminio' }, { mat: 'all', seq: 'TF', name: 'Staffa leggera' }, { mat: 'all', seq: 'TFD', name: 'Telaio forato' }, { mat: 'all', seq: 'TLF', name: 'Mozzo leggero' }, { mat: 'all', seq: 'TFX', name: 'Carter per droni' },
+  { mat: 'ott', seq: 'TL', name: 'Raccordo in ottone' }, { mat: 'ott', seq: 'TD', name: 'Boccola in ottone' }, { mat: 'ott', seq: 'TLD', name: 'Valvola idraulica' }, { mat: 'ott', seq: 'TLFD', name: 'Rubinetto industriale' }, { mat: 'ott', seq: 'TLX', name: 'Elica marina' },
+  { mat: 'inx', seq: 'TL', name: 'Perno chirurgico' }, { mat: 'inx', seq: 'TF', name: 'Piastra alimentare' }, { mat: 'inx', seq: 'TLD', name: 'Ugello inox' }, { mat: 'inx', seq: 'TFLD', name: 'Pompa inox' }, { mat: 'inx', seq: 'TFDX', name: 'Corpo valvola' },
+  { mat: 'tit', seq: 'TL', name: 'Vite medicale' }, { mat: 'tit', seq: 'TF', name: 'Placca ortopedica' }, { mat: 'tit', seq: 'TLX', name: 'Girante aerospaziale' }, { mat: 'tit', seq: 'TFDX', name: 'Supporto motore jet' }, { mat: 'tit', seq: 'TLFDX', name: 'Protesi d\'anca' },
+];
+const ALL_RECIPES = RECIPES.concat(MAT_RECIPES);
+const recipeKey = r => r.mat ? r.mat + ':' + r.seq : r.seq;
+const recipeOf = (seq, mat = 'acc') => mat === 'acc' ? RECIPES.find(r => r.seq === seq) : MAT_RECIPES.find(r => r.seq === seq && r.mat === mat);
+function recipeVal(seq, mat = 'acc') { // a piece's value: its steel recipe, times what the material is worth; a material's own pieces pay a third more
+  const base = RECIPES.find(r => r.seq === seq) ? tune['val_' + seq] : tune.val_scrap;
+  if (mat === 'acc') return base;
+  return Math.round(base * matOf(mat).val * (recipeOf(seq, mat) ? 1.3 : 1));
+}
+function pieceName(seq, mat = 'acc') { const r = recipeOf(seq, mat); if (r) return r.name; const b = RECIPES.find(x => x.seq === seq); return (b ? b.name : seq ? 'Scarto' : 'Barra grezza') + (mat === 'acc' ? '' : ' (' + matOf(mat).name.toLowerCase() + ')'); }
 const PHASES = ['Montaggio', 'Rete', 'Configurazione'];
 const TOOLS = [
   { key: 'W', name: 'Chiave dinamometrica', phase: 0, req: 'toolReqW', eff: l => `${boltTurnsAt(l)} ${boltTurnsAt(l) === 1 ? 'giro' : 'giri'} per bullone` },
@@ -308,7 +321,7 @@ const GOALS = [
   { text: 'Produci la Pala aeronautica (5 macchine)', done: () => state.found.includes('TLFDX') },
   { text: 'Raggiungi il livello massimo', done: () => state.level >= tune.maxLevel, prog: () => [state.level, tune.maxLevel] },
   { text: 'Capitolo 5: il grande stabilimento', done: () => anyB(b => b.stage >= 4), prog: () => [TIER() + 1, 5] },
-  { text: 'Scopri tutte le 15 ricette', done: () => state.found.length >= RECIPES.length, prog: () => [state.found.length, RECIPES.length] },
+  { text: `Scopri tutte le ${RECIPES.length + MAT_RECIPES.length} ricette (anche quelle degli altri materiali)`, done: () => state.found.length >= ALL_RECIPES.length, prog: () => [state.found.length, ALL_RECIPES.length] },
 ];
 function isU(b) { // a notch: some column or row of the bounding box has an outside gap with building on both ends
   const bb = bboxOf(b.cells), has = (c, r) => b.cells.has(K(c, r));
@@ -382,13 +395,13 @@ function levelXp(L) { return L <= 1 ? 0 : Math.round(tune.xpBase * Math.pow(L - 
 function serialize() {
   return JSON.stringify({
     v: 9, coins: state.coins, xp: state.xp, level: state.level, sold: state.sold, earned: state.earned,
-    tools: state.tools, guideHidden: !!state.guideHidden, tokens: state.tokens || 0, perks: state.perks || {}, crew: state.crew, found: state.found, t: state.t, siteStart: state.siteStart, goal: state.goal, nextId: state.nextId,
+    tok5: true, tools: state.tools, guideHidden: !!state.guideHidden, tokens: state.tokens || 0, perks: state.perks || {}, crew: state.crew, found: state.found, t: state.t, siteStart: state.siteStart, goal: state.goal, nextId: state.nextId,
     entered: state.entered, cur: Math.max(0, state.buildings.indexOf(F)),
     buildings: state.buildings.map(b => ({
       id: b.id, name: b.name, tiles: [...b.cells], stage: b.stage, grown: b.grown, workers: b.workers.length,
-      wh: b.wh ? { ...b.wh, orders: b.wh.orders.concat((b.trucks || []).filter(k => k.ph !== 'out').map(k => ({ n: k.n, at: 0 }))) } : null, cells: Object.values(b.grid).filter(o => o.kind !== 'wh' && o.kind !== 'office' && !(o.kind === 'mach' && !o.main)).map(o => o.kind === 'mach'
+      wh: b.wh ? { ...b.wh, orders: b.wh.orders.concat((b.trucks || []).filter(k => k.ph !== 'out').map(k => ({ n: k.n, at: 0, mat: k.mat || 'acc', sup: k.sup }))) } : null, cells: Object.values(b.grid).filter(o => o.kind !== 'wh' && o.kind !== 'office' && !(o.kind === 'mach' && !o.main)).map(o => o.kind === 'mach'
         ? { k: 'mach', c: o.c, r: o.r, id: o.m.id, type: o.m.type, dir: o.m.dir, phase: o.m.phase, pct: o.m.pct, net: o.m.netPct, op: o.m.op, input: o.m.input, age: o.m.age || 0, broken: o.m.broken || null , mk: o.m.mk || 1 }
-        : { k: o.kind, c: o.c, r: o.r, dir: o.dir }),
+        : { k: o.kind, c: o.c, r: o.r, dir: o.dir, mat: o.mat }),
     })),
   });
 }
@@ -401,13 +414,14 @@ function load() {
   Object.assign(state, { coins: d.coins, xp: d.xp, level: d.level, sold: d.sold, earned: d.earned || 0, tools: d.tools, crew: d.crew || [], found: d.found, t: d.t || 0, siteStart: d.siteStart || 0, goal: d.goal, nextId: d.nextId, entered: !!d.entered, welcome: 0 });
   state.guideHidden = !!d.guideHidden;
   state.perks = d.perks || {}; state.tokens = d.tokens != null ? d.tokens : Math.max(0, (d.level || 1) - 1); // older saves: the tokens their levels would have given
+  if (!d.tok5) state.tokens += Math.floor(state.level / 5); // the bonus token every fifth level, for saves older than it
   state.xp = Math.max(state.xp || 0, levelXp(state.level)); // the curve got steeper: an old save keeps its level
   for (const bd of d.buildings) {
     const b = { id: bd.id, name: bd.name, cells: new Set(bd.tiles), stage: bd.stage || 0, grown: !!bd.grown, grid: {}, machines: [], workers: [], lastSale: -9 };
     state.buildings.push(b); F = b;
     for (const o of bd.cells) {
       if (o.k === 'mach') { const m = makeMachine(o.type, o.c, o.r, o.dir, o.id, o.phase, o.pct, o.net ?? null); m.op = !!o.op; m.input = o.input || ''; m.age = o.age || 0; m.broken = o.broken || null; m.mk = o.mk || 1; b.machines.push(m); if (!fitsAt(m.c, m.r, m.mk, m.dir, null, m.type)) m.mk = 1; placeMachineCells(m); }
-      else if (o.k === 'src') setCell(o.c, o.r, { kind: 'src', dir: o.dir, t: 0.5 });
+      else if (o.k === 'src') setCell(o.c, o.r, { kind: 'src', dir: o.dir, t: 0.5, mat: o.mat || 'acc' });
       else if (o.k === 'crate') setCell(o.c, o.r, { kind: 'crate', last: null, bump: 0 });
       else setCell(o.c, o.r, { kind: o.k });
     }
@@ -731,10 +745,10 @@ function phaseIcon(ph, x, y, s, col = '#2b3138') {
   ctx.restore();
 }
 
-function drawPiece(ops, c, r) {
-  const last = ops[ops.length - 1], z = 6;
-  if (!last) { box(c - 0.2, r - 0.05, c + 0.2, r + 0.05, z, z + 4, '#9aa3ab'); return; }
-  const O = '#f0923a';
+function drawPiece(ops, c, r, mat = 'acc') {
+  const last = ops[ops.length - 1], z = 6, M = matOf(mat);
+  if (!last) { box(c - 0.2, r - 0.05, c + 0.2, r + 0.05, z, z + 4, M.col); return; }
+  const O = mat === 'acc' ? '#f0923a' : M.col;
   if (last === 'T') box(c - 0.1, r - 0.06, c + 0.1, r + 0.06, z, z + 5, O);
   else if (last === 'L') { box(c - 0.14, r - 0.05, c + 0.14, r + 0.05, z, z + 5, O); line(iso(c - 0.05, r + 0.05, z), iso(c - 0.05, r + 0.05, z + 5), '#fff3d6', 1); line(iso(c + 0.05, r + 0.05, z), iso(c + 0.05, r + 0.05, z + 5), '#fff3d6', 1); }
   else if (last === 'F') { box(c - 0.13, r - 0.1, c + 0.13, r + 0.1, z, z + 3, O); line(iso(c - 0.1, r, z + 3), iso(c + 0.1, r, z + 3), '#b8601e', 1.5); }
@@ -1106,7 +1120,7 @@ const JOBS = {
 };
 const JOB_ORDER = ['mach', 'mag', 'it', 'none'];
 const NAMES = ['Marco', 'Luca', 'Giulia', 'Sara', 'Paolo', 'Elena', 'Davide', 'Chiara', 'Matteo', 'Anna', 'Franco', 'Irene', 'Nicola', 'Rita'];
-function newItem() { return { ops: '', qs: [] }; }
+function newItem(mat = 'acc') { return { ops: '', qs: [], mat }; }
 const opsTotal = () => Math.floor(tune.opsBase + (state.level - 1) * tune.opsPerLvl);
 function crewSync() { // one crew member per slot; the first two start as operator and warehouse worker
   while (state.crew.length < opsTotal()) {
@@ -1128,7 +1142,7 @@ function moveCrew(cw, b) { // send someone to work in another site (their machin
 }
 // ---- Power: each site has a supply; every machine draws more the newer and bigger it is
 const MK_POW = [1, 1.6, 2.2, 3.2, 4.5];
-const powerOf = (t, mk = 1) => Math.round(mcfg('pow', t) * MK_POW[Math.max(1, Math.min(5, mk)) - 1]);
+const powerOf = (t, mk = 1) => Math.round(mcfg('pow', t) * MK_POW[Math.max(1, Math.min(5, mk)) - 1] * (PK('eco' + t) ? 0.8 : 1));
 const powerUsed = b => b.machines.reduce((s, m) => s + powerOf(m.type, mkOf(m)), 0);
 const powerCap = b => tune['power' + b.stage];
 const crewIn = (b, job) => state.crew.filter(cw => cw.job === job && crewB(cw) === b);
@@ -1244,7 +1258,7 @@ function updateIT(dt) { // IT staff wander: a machine to check its link, now and
 }
 function updateFactory(dt) {
   for (const o of Object.values(F.grid)) {
-    if (o.kind === 'src') { o.stock = o.stock || []; o.t -= dt; if (o.t <= 0) { if (o.stock.length < tune.stockCap) { if (whOf(F).bars > 0) { whOf(F).bars--; o.stock.push(newItem()); } else warnEmpty(F); } o.t = spawnGapE(); } }
+    if (o.kind === 'src') { o.stock = o.stock || []; o.t -= dt; if (o.t <= 0) { if (o.stock.length < tune.stockCap) { if (whTake(F, o.mat || 'acc')) o.stock.push(newItem(o.mat || 'acc')); else warnEmpty(F, o.mat || 'acc'); } o.t = spawnGapE(); } }
     else if (o.kind === 'crate') o.bump = Math.max(0, (o.bump || 0) - dt * 4);
   }
   for (const m of F.machines) {
@@ -1253,18 +1267,18 @@ function updateFactory(dt) {
     if (!m.cur && m.inbox) { m.cur = m.inbox; m.inbox = null; m.proc = timeOfM(m); }
     if (m.cur && !m.out) {
       m.proc -= dt;
-      if (m.proc <= 0) { const it = m.cur; it.ops += m.type; it.qs.push(m.quality + netBonus(m) + qualPerk(m.type) + MK_Q[mkOf(m) - 1]); m.cur = null; m.out = it; m.pop = 1; m.popOps = it.ops; }
+      if (m.proc <= 0) { const it = m.cur; it.ops += m.type; it.qs.push(m.quality + netBonus(m) + qualPerk(m.type) + MK_Q[mkOf(m) - 1]); m.cur = null; m.out = it; m.pop = 1; m.popOps = it.ops; m.popMat = it.mat; }
     }
   }
   updateHaulers(dt);
   updateIT(dt);
 }
 function sell(it, crate) {
-  const rec = recipeOf(it.ops), q = it.qs.length ? avg(it.qs) : 0;
-  const v = Math.max(1, Math.round(recipeVal(it.ops) * (tune.qualityBase + q)));
+  const mat = it.mat || 'acc', rec = recipeOf(it.ops, mat), q = it.qs.length ? avg(it.qs) : 0;
+  const v = Math.max(1, Math.round(recipeVal(it.ops, mat) * (tune.qualityBase + q)));
   state.coins += v; state.earned += v; state.sold++;
   state.incomeLog.push([state.t, v]);
-  crate.bump = 1; crate.last = { name: rec ? rec.name : it.ops ? 'Scarto' : 'Barra grezza', v, known: !!rec };
+  crate.bump = 1; crate.last = { name: pieceName(it.ops, mat), v, known: !!rec };
   const [x, y] = iso(crate.c + 0.5, crate.r + 0.5, 72);
   state.floats.push({ wx: x, wy: y, txt: '+' + fmt(v), col: rec ? '#7ef0a0' : '#c9c9c9', life: 1.4, coin: true, b: F.id });
   if (state.t - F.lastSale > 0.6) { // seen from outside: one coin at a time over the roof
@@ -1273,11 +1287,11 @@ function sell(it, crate) {
   }
   addXp(tune.xpPerSale);
   if (state.t - (state.lastCoinSfx || -9) > 0.18) { sfx.coin(); state.lastCoinSfx = state.t; }
-  if (rec && !state.found.includes(rec.seq)) {
-    state.found.push(rec.seq);
+  if (rec && !state.found.includes(recipeKey(rec))) {
+    state.found.push(recipeKey(rec));
     addXp(tune.xpRecipe);
-    showBanner('Nuova ricetta: ' + rec.name + '!', `${seqNames(rec.seq)}  ·  ${recipeVal(rec.seq)} monete al pezzo`, '#f0923a');
-    sfx.ding(); events.push({ type: 'recipe', seq: rec.seq }); save();
+    showBanner('Nuova ricetta: ' + rec.name + '!', `${matOf(mat).name} · ${seqNames(rec.seq)}  ·  ${recipeVal(rec.seq, mat)} monete al pezzo`, '#f0923a');
+    sfx.ding(); events.push({ type: 'recipe', seq: recipeKey(rec) }); save();
   }
 }
 const seqNames = seq => seq.split('').map(ch => MACH[ch].short).join(' > ');
@@ -1285,7 +1299,7 @@ const seqNames = seq => seq.split('').map(ch => MACH[ch].short).join(' > ');
 // ---- The skill web: a token each level (and two for each new site), spent on the upgrades you choose ----
 const PK = id => !!(state && state.perks && state.perks[id]);
 const timeOf = t => mcfg('time', t) * (PK('spd1' + t) ? tune.perkSpeed : 1) * (PK('spd2' + t) ? tune.perkSpeed : 1);
-const qualPerk = t => PK('q' + t) ? tune.perkQuality : 0;
+const qualPerk = t => (PK('q' + t) ? tune.perkQuality : 0) + (PK('q2' + t) ? tune.perkQuality * 0.67 : 0);
 const spawnGapE = () => tune.spawnGap * (PK('bench') ? 0.7 : 1);
 const magSpeedE = () => tune.magSpeed * (PK('mag1') ? 1.25 : 1) * (PK('mag2') ? 1.25 : 1) * (PK('mag3') ? 1.3 : 1);
 const barCostE = () => Math.max(0, Math.round(tune.barCost * (PK('buy') ? 0.6 : 1) * (PK('fleet') ? 0.8 : 1) * 100) / 100);
@@ -1307,42 +1321,45 @@ const ZONES = [ // the web opens ring by ring: further out needs higher levels a
   { open: () => TIER() >= 4 && state.level >= 35, txt: 'Si apre con la quinta sede e il livello 35' },
 ];
 const zoneOpen = z => ZONES[z].open();
-function perkNodes() { // id, where it sits (offset from the centre), what it needs, which ring, how it looks, what it does
-  const N = [{ id: 'core', x: 0, y: 0, req: [], zone: 0, name: 'La tua officina', desc: 'Il punto di partenza: da qui si sblocca tutto il resto.', icon: 'core', root: true }];
-  const sp = Math.round((1 - tune.perkSpeed) * 100);
-  ORDER.forEach((t, i) => { // one branch per machine, fanned out above
-    const a = (-160 + i * 35) * Math.PI / 180, at = r => [Math.cos(a) * r * 1.35, Math.sin(a) * r * 0.95], lv = mcfg('unlock', t) || 1, nm = MACH[t].name;
-    const add = (id, r, req, zone, name, desc, icon) => { const [x, y] = at(r); N.push({ id, x, y, req: [req], zone, lvl: lv, name, desc, icon, t }); };
-    const big = k => { const [a, b] = MK_FP[t][k - 1]; return `${a}×${b} celle`; };
-    add('spd1' + t, 110, 'core', 0, `${nm}: più veloce`, `Lavora ogni pezzo nel ${sp}% di tempo in meno.`, 'speed');
-    add('q' + t, 175, 'spd1' + t, 1, `${nm}: precisione`, `I pezzi che passano di qui valgono di più (+${Math.round(tune.perkQuality * 100)}% di qualità).`, 'qual');
-    add('mk2' + t, 240, 'q' + t, 2, `${nm} Mk II`, `Sblocca nel Negozio la ${nm} Mk II, gli anni del controllo numerico: ${Math.round((1 - MK_T[1]) * 100)}% più veloce, qualità +${Math.round(MK_Q[1] * 100)}%. Occupa ${big(2)} e costa ${MK_COST[1]} volte la base.`, 'mk2');
-    add('spd2' + t, 300, 'mk2' + t, 3, `${nm}: alta velocità`, `Altro ${sp}% di tempo in meno per pezzo, per tutte le versioni.`, 'speed2');
-    add('mk3' + t, 360, 'spd2' + t, 3, `${nm} Mk III`, `Sblocca la ${nm} Mk III, il primo CNC con la cabina: ${Math.round((1 - MK_T[2]) * 100)}% più veloce della base, qualità +${Math.round(MK_Q[2] * 100)}%. Occupa ${big(3)}, costa ${MK_COST[2]} volte la base.`, 'mk3');
-    add('mk4' + t, 420, 'mk3' + t, 4, `${nm} Mk IV`, `Sblocca la ${nm} Mk IV, moderna con magazzino utensili e touchscreen: ${Math.round((1 - MK_T[3]) * 100)}% più veloce, qualità +${Math.round(MK_Q[3] * 100)}%. Occupa ${big(4)}, costa ${MK_COST[3]} volte la base.`, 'mk4');
-    add('mk5' + t, 480, 'mk4' + t, 5, `${nm} Mk V`, `Sblocca la ${nm} Mk V, una cella con robot che carica i pezzi: ${Math.round((1 - MK_T[4]) * 100)}% più veloce, qualità +${Math.round(MK_Q[4] * 100)}%. Occupa ${big(5)}, costa ${MK_COST[4]} volte la base.`, 'mk5');
+function perkNodes() { // every node: its chapter (gen or a machine), where it sits in that chapter (offset from the hub), what it needs, its level and its ring
+  const N = [], sp = Math.round((1 - tune.perkSpeed) * 100), pq = Math.round(tune.perkQuality * 100);
+  ORDER.forEach(t => { // one chapter per machine: it opens at the level that unlocks the machine
+    const U = mcfg('unlock', t) || 1, nm = MACH[t].name, big = k => { const [a, b] = MK_FP[t][k - 1]; return `${a}×${b} celle`; };
+    const add = (id, x, y, req, lvl, zone, name, desc, icon) => N.push({ id, ch: t, t, x: Math.round(x * 0.76), y, req: req ? [req] : [], lvl, zone, name, desc, icon });
+    add('spd1' + t, -150, -95, null, U, 0, 'Più veloce', `La ${nm} lavora ogni pezzo nel ${sp}% di tempo in meno.`, 'speed');
+    add('spd2' + t, -275, -170, 'spd1' + t, U + 6, 0, 'Alta velocità', `Altro ${sp}% di tempo in meno per pezzo, per tutte le versioni.`, 'speed2');
+    add('q' + t, 150, -95, null, U + 2, 0, 'Precisione', `I pezzi che passano dalla ${nm} valgono di più (+${pq}% di qualità).`, 'qual');
+    add('q2' + t, 275, -170, 'q' + t, U + 10, 0, 'Precisione fine', `Altro +${Math.round(pq * 0.67)}% di qualità sui pezzi della ${nm}.`, 'qual2');
+    add('eco' + t, -160, 85, null, U + 4, 0, 'Risparmio energetico', `La ${nm} consuma il 20% di corrente in meno, in tutte le versioni.`, 'eco');
+    add('tough' + t, -285, 150, 'eco' + t, U + 8, 0, 'Componenti rinforzati', `La ${nm} si guasta il 40% in meno.`, 'tough');
+    add('mk2' + t, 140, 95, null, U + 3, 2, `${nm} Mk II`, `Sblocca nel Negozio la Mk II, gli anni del controllo numerico: ${Math.round((1 - MK_T[1]) * 100)}% più veloce, qualità +${Math.round(MK_Q[1] * 100)}%. Occupa ${big(2)}, costa ${MK_COST[1]} volte la base.`, 'mk2');
+    add('mk3' + t, 255, 165, 'mk2' + t, U + 6, 3, `${nm} Mk III`, `Sblocca la Mk III, il primo CNC con la cabina: ${Math.round((1 - MK_T[2]) * 100)}% più veloce della base, qualità +${Math.round(MK_Q[2] * 100)}%. Occupa ${big(3)}, costa ${MK_COST[2]} volte la base.`, 'mk3');
+    add('mk4' + t, 370, 95, 'mk3' + t, U + 9, 4, `${nm} Mk IV`, `Sblocca la Mk IV, moderna con magazzino utensili e touchscreen: ${Math.round((1 - MK_T[3]) * 100)}% più veloce, qualità +${Math.round(MK_Q[3] * 100)}%. Occupa ${big(4)}, costa ${MK_COST[3]} volte la base.`, 'mk4');
+    add('mk5' + t, 375, -25, 'mk4' + t, U + 12, 5, `${nm} Mk V`, `Sblocca la Mk V, una cella con robot che carica i pezzi: ${Math.round((1 - MK_T[4]) * 100)}% più veloce, qualità +${Math.round(MK_Q[4] * 100)}%. Occupa ${big(5)}, costa ${MK_COST[4]} volte la base.`, 'mk5');
   });
-  N.push(
-    { id: 'buy', x: 150, y: 70, req: ['core'], zone: 0, name: 'Fornitore di fiducia', desc: 'Le barre grezze costano il 40% in meno.', icon: 'bars' },
-    { id: 'fast', x: 255, y: 120, req: ['buy'], zone: 1, name: 'Consegna express', desc: 'I camion arrivano nella metà del tempo.', icon: 'truck' },
-    { id: 'bench', x: 255, y: 25, req: ['buy'], zone: 1, name: 'Banco veloce', desc: 'Il banco barre prepara le barre il 30% più in fretta.', icon: 'bench' },
-    { id: 'shelf', x: 350, y: 70, req: ['fast'], zone: 2, name: 'Scaffali capienti', desc: 'Ogni scaffale tiene il 50% di barre in più.', icon: 'shelf' },
-    { id: 'shelf2', x: 445, y: 30, req: ['shelf'], zone: 3, name: 'Scaffalature alte', desc: 'Scaffali ancora più alti: un altro 50% di barre.', icon: 'shelf' },
-    { id: 'fleet', x: 445, y: 140, req: ['shelf'], zone: 4, name: 'Flotta di camion', desc: 'Camion tuoi: le consegne arrivano in un altro 40% di tempo in meno e le barre costano un altro 20% in meno.', icon: 'truck' },
-    { id: 'mag1', x: -150, y: 70, req: ['core'], zone: 0, name: 'Magazzinieri svelti', desc: 'I magazzinieri camminano il 25% più veloci.', icon: 'mag' },
-    { id: 'mag2', x: -255, y: 120, req: ['mag1'], zone: 1, name: 'Carrelli', desc: 'Con i carrelli vanno un altro 25% più veloci.', icon: 'cart' },
-    { id: 'net', x: -255, y: 25, req: ['mag1'], zone: 1, lvl: tune.rackLvl, name: 'Informatico esperto', desc: 'La rete dà +5% in più a ogni macchina collegata.', icon: 'net' },
-    { id: 'mag3', x: -350, y: 150, req: ['mag2'], zone: 2, name: 'Muletto', desc: 'Un muletto per il magazzino: magazzinieri un altro 30% più veloci.', icon: 'cart' },
-    { id: 'net2', x: -350, y: 15, req: ['net'], zone: 3, lvl: tune.rackLvl, name: 'Server dedicato', desc: 'Un server tutto per la fabbrica: altro +5% di bonus rete.', icon: 'net' },
-    { id: 'care1', x: 0, y: 105, req: ['core'], zone: 0, name: 'Manutenzione', desc: 'Le macchine si guastano il 40% in meno.', icon: 'care' },
-    { id: 'care2', x: -70, y: 185, req: ['care1'], zone: 1, name: 'Manutenzione programmata', desc: 'Guasti ridotti di un altro 40%.', icon: 'care2' },
-    { id: 'age', x: 70, y: 185, req: ['care1'], zone: 1, name: 'Pezzi di ricambio', desc: 'Le macchine durano il 50% di giorni in più prima di andare sostituite.', icon: 'age' },
-    { id: 'care3', x: -70, y: 265, req: ['care2'], zone: 2, name: 'Diagnostica', desc: 'Sensori sulle macchine: guasti dimezzati ancora.', icon: 'care2' },
-    { id: 'age2', x: 70, y: 265, req: ['age'], zone: 4, name: 'Revisione completa', desc: 'Le macchine durano un altro 50% in più.', icon: 'age' },
-  );
+  const G = (id, x, y, req, zone, name, desc, icon, lvl) => N.push({ id, ch: 'gen', x: Math.round(x * 0.72), y: Math.round(y * 0.95) - 20, req: req ? [req] : [], zone, lvl, name, desc, icon });
+  G('buy', 150, 70, null, 0, 'Fornitore di fiducia', 'Le barre grezze costano il 40% in meno.', 'bars');
+  G('fast', 255, 120, 'buy', 1, 'Consegna express', 'I camion arrivano nella metà del tempo.', 'truck');
+  G('bench', 255, 25, 'buy', 1, 'Banco veloce', 'Il banco barre prepara le barre il 30% più in fretta.', 'bench');
+  G('shelf', 350, 70, 'fast', 2, 'Scaffali capienti', 'Ogni scaffale tiene il 50% di barre in più.', 'shelf');
+  G('shelf2', 445, 30, 'shelf', 3, 'Scaffalature alte', 'Scaffali ancora più alti: un altro 50% di barre.', 'shelf');
+  G('fleet', 445, 140, 'shelf', 4, 'Flotta di camion', 'Camion tuoi: consegne in un altro 40% di tempo in meno e barre un altro 20% più economiche.', 'truck');
+  G('mag1', -150, 70, null, 0, 'Magazzinieri svelti', 'I magazzinieri camminano il 25% più veloci.', 'mag');
+  G('mag2', -255, 120, 'mag1', 1, 'Carrelli', 'Con i carrelli vanno un altro 25% più veloci.', 'cart');
+  G('net', -255, 25, 'mag1', 1, 'Informatico esperto', 'La rete dà +5% in più a ogni macchina collegata.', 'net', tune.rackLvl);
+  G('mag3', -350, 150, 'mag2', 2, 'Muletto', 'Un muletto per il magazzino: magazzinieri un altro 30% più veloci.', 'cart');
+  G('net2', -350, 15, 'net', 3, 'Server dedicato', 'Un server tutto per la fabbrica: altro +5% di bonus rete.', 'net', tune.rackLvl);
+  G('care1', 0, 150, null, 0, 'Manutenzione', 'Tutte le macchine si guastano il 40% in meno.', 'care');
+  G('care2', -110, 225, 'care1', 1, 'Manutenzione programmata', 'Guasti ridotti di un altro 40%.', 'care2');
+  G('age', 110, 225, 'care1', 1, 'Pezzi di ricambio', 'Le macchine durano il 50% di giorni in più prima di andare sostituite.', 'age');
+  G('care3', -110, 300, 'care2', 2, 'Diagnostica', 'Sensori sulle macchine: guasti dimezzati ancora.', 'care2');
+  G('age2', 110, 300, 'age', 4, 'Revisione completa', 'Le macchine durano un altro 50% in più.', 'age');
   return N;
 }
-const perkState = n => PK(n.id) || n.root ? 'own' : !zoneOpen(n.zone || 0) ? 'fog' : n.req.every(r => PK(r) || r === 'core') && state.level >= (n.lvl || 1) ? 'open' : n.req.every(r => PK(r) || r === 'core') ? 'level' : 'locked';
+const CHAPTERS = () => [{ id: 'gen', name: 'Generale', sub: 'Magazzino, squadra, manutenzione', lvl: 1 }].concat(ORDER.map(t => ({ id: t, name: MACH[t].name, sub: 'Velocità, qualità, generazioni', lvl: mcfg('unlock', t) || 1, t })));
+const chapterOpen = ch => state.level >= ch.lvl;
+const perkState = n => PK(n.id) ? 'own' : !chapterOpen(CHAPTERS().find(c => c.id === n.ch)) || !zoneOpen(n.zone || 0) ? 'fog' : n.req.every(r => PK(r)) && state.level >= (n.lvl || 1) ? 'open' : n.req.every(r => PK(r)) ? 'level' : 'locked';
+function fogReason(n) { const ch = CHAPTERS().find(c => c.id === n.ch); return !chapterOpen(ch) ? `Il capitolo ${ch.name} si apre al livello ${ch.lvl}` : ZONES[n.zone || 0].txt; }
 function buyPerk(n) {
   if (perkState(n) !== 'open') return;
   if ((state.tokens || 0) < 1) return toast('Ti servono token: ne ricevi uno a ogni livello', '#ffb35b');
@@ -1353,7 +1370,7 @@ function perkIcon(n, x, y, s = 1) { // a drawn icon for each kind of node
   ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
   const bolt = (dx, dy, col) => poly([[dx + 2, dy - 9], [dx - 5, dy + 1], [dx, dy + 1], [dx - 2, dy + 9], [dx + 5, dy - 2], [dx, dy - 2]], col, '#2b2410', 1);
   const star = (dx, dy, r, col) => { const pts = []; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; pts.push([dx + Math.cos(a) * rr, dy + Math.sin(a) * rr]); } poly(pts, col, '#2b2410', 1); };
-  if (n.t) { machineIcon(n.t, 0, 4, 0.34, { mk: /^mk\d$/.test(n.icon) ? +n.icon[2] : 1 }); if (n.icon === 'speed') bolt(13, -11, '#ffe08a'); if (n.icon === 'speed2') { bolt(9, -11, '#ffe08a'); bolt(17, -9, '#ffe08a'); } if (n.icon === 'qual') star(13, -11, 8, '#7ef0a0'); if (/^mk\d$/.test(n.icon)) { rrect(4, -18, 24, 13, 3, '#e0b84a', '#2b2410', 1); text(['II', 'III', 'IV', 'V'][+n.icon[2] - 2], 16, -11, 10, '#2b2410'); } }
+  if (n.t) { machineIcon(n.t, 0, 4, 0.34, { mk: /^mk\d$/.test(n.icon) ? +n.icon[2] : 1 }); if (n.icon === 'speed') bolt(13, -11, '#ffe08a'); if (n.icon === 'speed2') { bolt(9, -11, '#ffe08a'); bolt(17, -9, '#ffe08a'); } if (n.icon === 'qual') star(13, -11, 8, '#7ef0a0'); if (n.icon === 'qual2') { star(9, -11, 7, '#7ef0a0'); star(18, -6, 6, '#7ef0a0'); } if (n.icon === 'eco') { poly([[13, -19], [8, -9], [12, -9], [10, -2], [17, -12], [13, -12]], '#7ef0a0', '#2b2410', 1); } if (n.icon === 'tough') { poly([[13, -20], [20, -17], [19, -9], [13, -4], [7, -9], [6, -17]], '#9aa4ad', '#2b2410', 1); } if (/^mk\d$/.test(n.icon)) { rrect(4, -18, 24, 13, 3, '#e0b84a', '#2b2410', 1); text(['II', 'III', 'IV', 'V'][+n.icon[2] - 2], 16, -11, 10, '#2b2410'); } }
   else if (n.icon === 'core') { gearIcon(0, 0, 1.6, '#9aa4ad'); rrect(-9, -9, 18, 18, 3, '#b07a3e', '#2b2410', 1.5); }
   else if (n.icon === 'bars') { for (let i = 0; i < 3; i++) rrect(-14, -8 + i * 6, 28, 5, 2, '#a7b0b8', '#3a4148', 1); coinIcon(10, 8, 0.45); }
   else if (n.icon === 'truck') { rrect(-16, -6, 20, 12, 2, '#a7b0b8', '#2b2b2b', 1); rrect(4, -3, 10, 9, 2, '#2f7fb0', '#2b2b2b', 1); ctx.fillStyle = '#1b1b1b'; ctx.fillRect(-12, 6, 5, 4); ctx.fillRect(6, 6, 5, 4); bolt(-6, -14, '#ffe08a'); }
@@ -1365,63 +1382,104 @@ function perkIcon(n, x, y, s = 1) { // a drawn icon for each kind of node
   else if (n.icon === 'age') { ctx.beginPath(); ctx.ellipse(0, 0, 12, 12, 0, 0, Math.PI * 2); ctx.fillStyle = '#f4f1e6'; ctx.fill(); ctx.strokeStyle = '#2b2410'; ctx.lineWidth = 2; ctx.stroke(); line([0, 0], [0, -8], '#2b2410', 2); line([0, 0], [6, 2], '#2b2410', 2); }
   ctx.restore();
 }
-function drawSkillWeb(t) {
+function drawSkillWeb(t) { // a map of chapters (general + one per machine); tap a chapter to open its own tree, where tokens are spent
   const P = panelFrame(`Abilità · token da spendere: ${state.tokens || 0}`, 1220, 640, () => { state.panel = null; });
-  state.webPan = state.webPan || { x: 0, y: 60 };
-  const N = perkNodes(), byId = Object.fromEntries(N.map(n => [n.id, n])), AX = P.x + 20, AY = P.y + 72, AW = 880, AH = P.h - 92;
-  const cx = AX + AW / 2 + state.webPan.x, cy = AY + AH / 2 + 40 + state.webPan.y, R = 30, ed = n => Math.hypot(n.x / 1.35, n.y / 0.95);
+  const N = perkNodes(), byId = Object.fromEntries(N.map(n => [n.id, n])), chs = CHAPTERS(), view = state.webView || 'map';
+  const prog = id => { const ns = N.filter(n => n.ch === id); return [ns.filter(n => PK(n.id)).length, ns.length]; };
+  const open = id => { state.webView = id; state.webPan = { x: 0, y: 0 }; state.perkSel = null; sfx.click(); };
+  // the chapter list, on the left
+  const LX = P.x + 18, LY = P.y + 72, LW = 214;
+  rrect(LX, LY, LW, P.h - 90, 12, 'rgba(0,0,0,0.3)');
+  [{ id: 'map', name: 'Panoramica', sub: 'Tutti i capitoli', lvl: 1 }].concat(chs).forEach((c, i) => {
+    const y = LY + 8 + i * 64, on = view === c.id, ok = chapterOpen(c), pr = c.id === 'map' ? null : prog(c.id);
+    rrect(LX + 6, y, LW - 12, 58, 9, on ? 'rgba(224,184,74,0.3)' : 'rgba(255,255,255,0.05)', on ? '#e0b84a' : 'rgba(255,255,255,0.1)', on ? 2 : 1);
+    ctx.save(); ctx.globalAlpha = ok ? 1 : 0.4;
+    if (c.t) machineIcon(c.t, LX + 32, y + 36, 0.42, { mk: Math.max(1, mkAvail(c.t)) }); else perkIcon({ icon: c.id === 'map' ? 'core' : 'bars' }, LX + 32, y + 29, 0.8);
+    ctx.restore();
+    ctx.font = `bold 14px ${FONT}`; const nm = ctx.measureText(c.name).width > LW - 72 ? c.name.replace(' CNC', '').replace('Centro di lavoro ', '') : c.name;
+    text(nm, LX + 58, y + 20, 14, ok ? '#fff' : '#9a8a78', 'left');
+    text(!ok ? `Si apre al livello ${c.lvl}` : pr ? `${pr[0]}/${pr[1]} abilità` : c.sub, LX + 58, y + 40, 11, !ok ? '#ffb35b' : pr && pr[0] === pr[1] ? '#7ef0a0' : '#cfd6dd', 'left');
+    if (!ok) { const lx = LX + LW - 28, ly = y + 22; rrect(lx - 7, ly, 14, 11, 2, '#9a8a78'); ctx.strokeStyle = '#9a8a78'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(lx, ly, 5, Math.PI, 0); ctx.stroke(); }
+    btn(LX + 6, y, LW - 12, 58, () => ok ? open(c.id) : toast(`${c.name}: si apre al livello ${c.lvl}`, '#ffb35b'), 'ch_' + c.id);
+  });
+  // the board in the middle
+  const AX = LX + LW + 12, AY = LY, AW = 650, AH = P.h - 90;
+  state.webPan = state.webPan || { x: 0, y: 0 };
   rrect(AX, AY, AW, AH, 14, 'rgba(0,0,0,0.25)');
   ctx.save(); ctx.beginPath(); ctx.rect(AX, AY, AW, AH); ctx.clip();
-  const vis = n => zoneOpen(n.zone || 0), maxZ = ZONES.reduce((m, z, i) => z.open() ? i : m, 0);
-  for (const n of N) for (const r of n.req) { // links: a braided cord; bright once both ends are yours
-    const a = byId[r]; if (!a || !vis(n)) continue;
-    const x0 = cx + a.x, y0 = cy + a.y, x1 = cx + n.x, y1 = cy + n.y, d = Math.hypot(x1 - x0, y1 - y0), ux = (x1 - x0) / d, uy = (y1 - y0) / d, own = PK(n.id);
-    line([x0, y0], [x1, y1], own ? '#e0b84a' : '#6b5a4a', 7); line([x0, y0], [x1, y1], own ? '#f6d88a' : '#8a7868', 3);
-    for (let k = R; k < d - R; k += 9) { const px = x0 + ux * k, py = y0 + uy * k; line([px - uy * 3, py + ux * 3], [px + ux * 4 + uy * 3, py + uy * 4 - ux * 3], own ? '#b8902a' : '#5a4a3a', 1.5); }
+  for (let gx = AX + ((state.webPan.x % 40) + 40) % 40; gx < AX + AW; gx += 40) { ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fillRect(gx, AY, 1, AH); }
+  for (let gy = AY + ((state.webPan.y % 40) + 40) % 40; gy < AY + AH; gy += 40) { ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fillRect(AX, gy, AW, 1); }
+  const cx = AX + AW / 2 + state.webPan.x, cy = AY + AH / 2 + state.webPan.y;
+  const cord = (x0, y0, x1, y1, own, r0, r1) => { const d = Math.hypot(x1 - x0, y1 - y0), ux = (x1 - x0) / d, uy = (y1 - y0) / d; line([x0, y0], [x1, y1], own ? '#e0b84a' : '#6b5a4a', 7); line([x0, y0], [x1, y1], own ? '#f6d88a' : '#8a7868', 3); for (let k = r0; k < d - r1; k += 9) { const px = x0 + ux * k, py = y0 + uy * k; line([px - uy * 3, py + ux * 3], [px + ux * 4 + uy * 3, py + uy * 4 - ux * 3], own ? '#b8902a' : '#5a4a3a', 1.5); } };
+  const hub = (x, y, r, c, ok, sel) => { // a big gear-shaped hub for a chapter
+    ctx.beginPath(); for (let i = 0; i < 24; i++) { const a = i * Math.PI / 12, rr = i % 2 ? r : r + 7; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } ctx.closePath();
+    ctx.fillStyle = ok ? '#8a8478' : '#3a3a3a'; ctx.fill(); ctx.strokeStyle = sel ? '#fff' : ok ? '#e0b84a' : '#4a4a4a'; ctx.lineWidth = sel ? 3 : 2; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x, y, r - 6, r - 6, 0, 0, Math.PI * 2); ctx.fillStyle = ok ? '#2b2b2b' : '#202020'; ctx.fill();
+    ctx.save(); ctx.globalAlpha = ok ? 1 : 0.35; if (c.t) machineIcon(c.t, x, y + 12, 0.75 * r / 40, { mk: Math.max(1, mkAvail(c.t)), status: 'work', t, busy: ok }); else perkIcon({ icon: c.id === 'gen' ? 'bars' : 'core' }, x, y, 1.5 * r / 40); ctx.restore();
+  };
+  if (view === 'map') { // the overview: the workshop in the middle, a hub per chapter around it
+    const ring = chs.map((c, i) => { const a = -Math.PI / 2 + i * 2 * Math.PI / chs.length; return { c, x: cx + Math.cos(a) * 230, y: cy + Math.sin(a) * 175 }; });
+    for (const h of ring) cord(cx, cy, h.x, h.y, chapterOpen(h.c) && prog(h.c.id)[0] > 0, 42, 46);
+    hub(cx, cy, 40, { id: 'core' }, true, false); text('La tua officina', cx, cy + 62, 13, '#ffe8b0');
+    for (const h of ring) {
+      const ok = chapterOpen(h.c), pr = prog(h.c.id);
+      if (ok && (state.tokens || 0) > 0 && N.some(n => n.ch === h.c.id && perkState(n) === 'open')) { ctx.beginPath(); ctx.ellipse(h.x, h.y, 52 + Math.sin(t * 4) * 2, 52 + Math.sin(t * 4) * 2, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(126,240,160,0.22)'; ctx.fill(); }
+      hub(h.x, h.y, 38, h.c, ok, false);
+      text(h.c.name.replace('Centro di lavoro ', ''), h.x, h.y + 58, 13, ok ? '#fff' : '#9a8a78');
+      text(ok ? `${pr[0]}/${pr[1]}` : `Livello ${h.c.lvl}`, h.x, h.y + 76, 12, ok ? (pr[0] === pr[1] ? '#7ef0a0' : '#e0b84a') : '#ffb35b');
+      btn(h.x - 46, h.y - 46, 92, 92, () => ok ? open(h.c.id) : toast(`${h.c.name}: si apre al livello ${h.c.lvl}`, '#ffb35b'), 'hub_' + h.c.id);
+    }
+    ctx.restore();
+    text('Tocca un capitolo per aprire il suo albero', AX + AW / 2, AY + AH - 14, 12, 'rgba(255,255,255,0.5)');
+  } else { // one chapter: its hub in the middle and its branches
+    const c = chs.find(x => x.id === view), ns = N.filter(n => n.ch === view), R = 28;
+    for (const n of ns) { const from = n.req.length ? byId[n.req[0]] : { x: 0, y: 0 }; if (perkState(n) === 'fog' && (!n.req.length || perkState(byId[n.req[0]]) === 'fog')) continue; cord(cx + from.x, cy + from.y, cx + n.x, cy + n.y, PK(n.id), n.req.length ? R : 44, R); }
+    hub(cx, cy, 40, c, true, false); text(c.name, cx, cy + 62, 13, '#ffe8b0');
+    for (const n of ns) {
+      const st = perkState(n), x = cx + n.x, y = cy + n.y, sel = state.perkSel === n.id;
+      if (st === 'fog') { // further on: a shape with a question mark, until levels and sites open it
+        if (n.req.length && perkState(byId[n.req[0]]) === 'fog') continue;
+        ctx.beginPath(); ctx.ellipse(x, y, R, R, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(60,56,70,0.7)'; ctx.fill(); ctx.strokeStyle = sel ? '#fff' : 'rgba(140,130,170,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+        text('?', x, y + 1, 20, 'rgba(220,210,240,0.6)');
+        btn(x - R, y - R, R * 2, R * 2, () => { state.perkSel = n.id; sfx.click(); }, 'perk_' + n.id); continue;
+      }
+      if (st === 'open' && (state.tokens || 0) > 0) { ctx.beginPath(); ctx.ellipse(x, y, R + 6 + Math.sin(t * 4) * 2, R + 6 + Math.sin(t * 4) * 2, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(126,240,160,0.25)'; ctx.fill(); }
+      ctx.beginPath(); ctx.ellipse(x, y, R, R, 0, 0, Math.PI * 2); ctx.fillStyle = st === 'own' ? '#4a3a24' : st === 'open' ? '#3a3a3a' : '#262626'; ctx.fill();
+      ctx.strokeStyle = sel ? '#ffffff' : st === 'own' ? '#e0b84a' : st === 'open' ? '#7ef0a0' : '#4a4a4a'; ctx.lineWidth = sel ? 4 : 3; ctx.stroke();
+      ctx.save(); ctx.globalAlpha = st === 'own' || st === 'open' ? 1 : 0.4; perkIcon(n, x, y, 0.95); ctx.restore();
+      if (st === 'level') { rrect(x - 16, y + R - 10, 32, 14, 5, '#2b2b2b', '#ffb35b', 1); text(`L${n.lvl}`, x, y + R - 3, 10, '#ffb35b'); }
+      btn(x - R, y - R, R * 2, R * 2, () => { state.perkSel = n.id; sfx.click(); }, 'perk_' + n.id);
+    }
+    ctx.restore();
+    button('◀ Panoramica', AX + 10, AY + 10, 150, 36, () => open('map'), { size: 14, color: '#e6e1d3', name: 'webBack' });
+    text('Trascina per spostarti', AX + AW / 2, AY + AH - 14, 11, 'rgba(255,255,255,0.45)');
   }
-  for (const n of N) {
-    if (!vis(n)) continue;
-    const st = perkState(n), x = cx + n.x, y = cy + n.y, sel = state.perkSel === n.id, rr = n.root ? R + 12 : R;
-    if (st === 'open' && (state.tokens || 0) > 0) { ctx.beginPath(); ctx.ellipse(x, y, rr + 6 + Math.sin(t * 4) * 2, rr + 6 + Math.sin(t * 4) * 2, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(126,240,160,0.25)'; ctx.fill(); }
-    ctx.beginPath(); ctx.ellipse(x, y, rr, rr, 0, 0, Math.PI * 2);
-    ctx.fillStyle = st === 'own' ? '#4a3a24' : st === 'open' ? '#3a3a3a' : '#262626'; ctx.fill();
-    ctx.strokeStyle = sel ? '#ffffff' : st === 'own' ? '#e0b84a' : st === 'open' ? '#7ef0a0' : '#4a4a4a'; ctx.lineWidth = sel ? 4 : 3; ctx.stroke();
-    ctx.globalAlpha = st === 'own' || st === 'open' ? 1 : 0.35; perkIcon(n, x, y, n.root ? 1.4 : 1); ctx.globalAlpha = 1;
-    if (st === 'level') text(`L${n.lvl}`, x, y + rr - 6, 11, '#ffb35b');
-    btn(x - rr, y - rr, rr * 2, rr * 2, () => { state.perkSel = n.id; sfx.click(); }, 'perk_' + n.id);
+  // the card on the right: the chosen node, or the chapter
+  const sx = AX + AW + 12, sw = P.x + P.w - 18 - sx, n = byId[state.perkSel];
+  rrect(sx, P.y + 72, sw, P.h - 90, 14, HT().card, '#e0b84a', 2);
+  if (!n || (view !== 'map' && n.ch !== view)) {
+    const c = chs.find(x => x.id === view);
+    text(view === 'map' ? 'Abilità' : c.name, sx + sw / 2, P.y + 110, 18, '#fff');
+    wrapText(view === 'map' ? 'Ogni macchina ha il suo albero, che si apre al livello in cui la sblocchi. Più avanti, livelli e nuove sedi aprono i rami più lontani: le Mk II-V e i potenziamenti migliori.' : 'Tocca un nodo per vedere cosa fa. I nodi con il ? si aprono più avanti, con i livelli e le nuove sedi.', sx + 16, P.y + 150, sw - 32, 14, '#e6e1d3', 19, 'left');
+  } else {
+    const st = perkState(n), fog = st === 'fog';
+    ctx.beginPath(); ctx.ellipse(sx + sw / 2, P.y + 140, 42, 42, 0, 0, Math.PI * 2); ctx.fillStyle = '#2b2b2b'; ctx.fill(); ctx.strokeStyle = '#e0b84a'; ctx.lineWidth = 3; ctx.stroke();
+    if (fog) text('?', sx + sw / 2, P.y + 141, 34, 'rgba(220,210,240,0.7)'); else perkIcon(n, sx + sw / 2, P.y + 140, 1.6);
+    wrapText(fog ? 'Ancora nascosto' : n.name, sx + sw / 2, P.y + 210, sw - 30, 18, '#fff', 22, 'center');
+    wrapText(fog ? fogReason(n) + '.' : n.desc, sx + 16, P.y + 262, sw - 32, 14, '#e6e1d3', 19, 'left');
+    const tok = state.tokens || 0, y = P.y + P.h - 150;
+    if (!fog) text(st === 'own' ? 'Già sbloccato' : st === 'open' ? 'Costo: 1 token' : st === 'level' ? `Serve il livello ${n.lvl}` : 'Prima sblocca il nodo collegato', sx + sw / 2, y, 15, st === 'own' ? '#7ef0a0' : st === 'open' ? '#ffe08a' : '#ffb35b');
+    if (st === 'open') button(tok ? 'Sblocca' : 'Nessun token', sx + 20, y + 22, sw - 40, 56, () => buyPerk(n), { enabled: tok > 0, size: 20, name: 'buyPerk' });
   }
-  // the fog: everything past the open rings is dark, with drifting clouds; the next ring shows as shapes with a question mark
-  const rev = Math.max(...N.filter(vis).map(ed)) + 45;
-  ctx.save(); ctx.translate(cx, cy); ctx.scale(1.35, 0.95);
-  const g = ctx.createRadialGradient(0, 0, rev, 0, 0, rev + 70); g.addColorStop(0, 'rgba(14,12,18,0)'); g.addColorStop(1, 'rgba(14,12,18,0.96)');
-  ctx.fillStyle = g; ctx.fillRect(-2000, -2000, 4000, 4000);
-  for (let i = 0; i < 26; i++) { const h = hash(i * 13 + 5, 77), a = (h % 360) * Math.PI / 180 + t * 0.02 * (i % 2 ? 1 : -1), d = rev + 40 + (h % 120); ctx.beginPath(); ctx.ellipse(Math.cos(a) * d, Math.sin(a) * d, 60 + h % 40, 34 + h % 20, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(40,36,48,0.55)'; ctx.fill(); }
-  ctx.restore();
-  for (const n of N) if ((n.zone || 0) === maxZ + 1) { const x = cx + n.x, y = cy + n.y; ctx.beginPath(); ctx.ellipse(x, y, R - 4, R - 4, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(60,56,70,0.6)'; ctx.fill(); text('?', x, y + 1, 20, 'rgba(220,210,240,0.5)'); }
-  if (maxZ + 1 < ZONES.length) { const yT = cy - rev * 0.95 - 26; rrect(cx - 170, yT - 14, 340, 28, 10, 'rgba(14,12,18,0.85)', '#8a7aa8', 1.5); text(`Zona oscurata · ${ZONES[maxZ + 1].txt}`, cx, yT, 13, '#d8ccf0'); }
-  // group names
-  [['MACCHINE', 0, -500], ['MAGAZZINO E CONSEGNE', 330, 205], ['SQUADRA', -320, 205], ['MANUTENZIONE', 0, 320]].forEach(([s, dx, dy]) => text(s, cx + dx, cy + dy, 12, 'rgba(255,232,176,0.55)'));
-  ctx.restore();
-  text('Trascina per spostarti nella ragnatela', AX + AW / 2, AY + AH - 14, 11, 'rgba(255,255,255,0.45)');
-  // the chosen node
-  const n = byId[state.perkSel] || byId.core, st = perkState(n), sx = P.x + 920, sw = P.w - 940;
-  rrect(sx, P.y + 72, sw, P.h - 92, 14, HT().card, '#e0b84a', 2);
-  ctx.beginPath(); ctx.ellipse(sx + sw / 2, P.y + 140, 42, 42, 0, 0, Math.PI * 2); ctx.fillStyle = '#2b2b2b'; ctx.fill(); ctx.strokeStyle = '#e0b84a'; ctx.lineWidth = 3; ctx.stroke(); perkIcon(n, sx + sw / 2, P.y + 140, 1.6);
-  wrapText(n.name, sx + sw / 2, P.y + 210, sw - 30, 18, '#fff', 22, 'center');
-  wrapText(n.desc, sx + 16, P.y + 270, sw - 32, 14, '#e6e1d3', 19, 'left');
-  const tok = state.tokens || 0, y = P.y + P.h - 150;
-  text(st === 'own' ? 'Già sbloccato' : st === 'open' ? 'Costo: 1 token' : st === 'level' ? `Serve il livello ${n.lvl}` : 'Prima sblocca il nodo collegato', sx + sw / 2, y, 15, st === 'own' ? '#7ef0a0' : st === 'open' ? '#ffe08a' : '#ffb35b');
-  if (st === 'open') button(tok ? 'Sblocca' : 'Nessun token', sx + 20, y + 22, sw - 40, 56, () => buyPerk(n), { enabled: tok > 0, size: 20, name: 'buyPerk' });
-  text(`Token: ${tok} · uno a ogni livello, due per ogni nuova sede`, sx + sw / 2, P.y + P.h - 36, 11, '#cfd6dd');
+  text(`Token: ${state.tokens || 0} · 1 a livello, +1 ogni 5 livelli, 2 per sede`, sx + sw / 2, P.y + P.h - 32, 10, '#cfd6dd');
 }
-
 // ---- Progress ---------------------------------------------------------------------------
 function addXp(n) {
   state.xp += n;
   while (state.level < tune.maxLevel && state.xp >= levelXp(state.level + 1)) {
-    state.level++; crewSync(); state.tokens = (state.tokens || 0) + 1;
+    state.level++; crewSync(); const gain = state.level % 5 === 0 ? 2 : 1; state.tokens = (state.tokens || 0) + gain;
     const un = unlocksAt(state.level);
-    showBanner(`Livello ${state.level}! +1 token`, un.length ? 'Sbloccato: ' + un.join(', ') + ' · spendi il token in Abilità (K)' : 'Spendi il token nel menu Abilità (K)', '#f2c230');
+    showBanner(`Livello ${state.level}! +${gain} token`, un.length ? 'Sbloccato: ' + un.join(', ') + ' · spendi il token in Abilità (K)' : 'Spendi il token nel menu Abilità (K)', '#f2c230');
     sfx.level(); events.push({ type: 'level', level: state.level }); save();
   }
 }
@@ -1854,7 +1912,7 @@ function drawBottomBar(t) {
       barButton(x, by, 90, bh, lab, k, (cx, cy) => toolbarIcon(id, cx, cy - 2), () => { sfx.click(); setTool(on ? null : id); }, 'tool_' + id, { on }); x += 96;
     });
     sep(x + 2); x += 12;
-    const nd = jobNeeds(F).length, low = whOf(F).bars < whCap(F) * tune.autoBelow && !onOrder(F);
+    const nd = jobNeeds(F).length, low = whTotal(F) < whCap(F) * tune.autoBelow && !onOrder(F);
     [['crew', 'Squadra', 'Q', (cx, cy) => { sprite('walk0', cx - 18, cy + 18, 2, false, OP_PAL); sprite('walk0', cx, cy + 18, 2, false, MAG_PAL); sprite('walk0', cx + 18, cy + 18, 2, false, IT_PAL); }, nd ? '!' : ''],
      ['office', 'Ufficio', 'U', (cx, cy) => officeIcon(cx, cy), low ? '!' : ''],
      ['tools', 'Attrezzi', 'T', (cx, cy) => toolIcon('W', cx, cy - 4, 0.95), ''],
@@ -1925,7 +1983,7 @@ function drawGoalChip(t, LX) { // a small button under the level; tap it to read
   wrapText(msg, bx + 15, y + 62, bw - 30, 16, '#fff', 22, 'left');
   btn(bx, y + 40, bw, 22 + lines * 22, () => { state.goalOpen = false; sfx.click(); });
 }
-function openPanel(id) { state.panel = id; state.placing = null; state.tool = null; state.demo = null; state.wtool = null; state.wplacing = null; }
+function openPanel(id) { if (id === 'skills') { state.webView = 'map'; state.webPan = { x: 0, y: 0 }; } state.panel = id; state.placing = null; state.tool = null; state.demo = null; state.wtool = null; state.wplacing = null; }
 function drawShop(t) {
   const P = panelFrame('Negozio', 1060, 580, () => { state.panel = null; });
   ['Macchine CNC', 'Logistica', 'Sede'].forEach((lab, i) => {
@@ -2059,20 +2117,27 @@ function drawRoutes(t) { // which trips one warehouse worker makes
     }, 'route' + i);
   });
 }
-function drawRecipes(t) {
-  const P = panelFrame(`Ricettario  ·  ${state.found.length}/${RECIPES.length}`, 1060, 600, () => { state.panel = null; });
-  text('L\'ordine delle macchine sulla linea decide il pezzo. Prova combinazioni diverse!', P.x + P.w / 2, P.y + 88, 16, '#cfd6dd');
-  RECIPES.forEach((rc, i) => {
-    const col = i % 2, row = Math.floor(i / 2), x = P.x + 26 + col * 510, y = P.y + 110 + row * 58;
-    const known = state.found.includes(rc.seq);
-    rrect(x, y, 494, 50, 10, known ? HT().card : '#3a2416', known ? '#f0923a' : '#3a4148', 2);
+function drawRecipes(t) { // the recipe book: a page per material; the order of the machines decides the piece
+  const P = panelFrame(`Ricettario  ·  ${state.found.length}/${ALL_RECIPES.length}`, 1060, 600, () => { state.panel = null; });
+  const pg = state.recPage || 'acc', list = pg === 'acc' ? RECIPES : MAT_RECIPES.filter(r => r.mat === pg);
+  MATS.forEach((m, i) => {
+    const x = P.x + 26 + i * 202, on = m.id === pg, open = matOpen(m), n = (m.id === 'acc' ? RECIPES : MAT_RECIPES.filter(r => r.mat === m.id)).filter(r => state.found.includes(recipeKey(r))).length, tot = m.id === 'acc' ? RECIPES.length : 5;
+    rrect(x, P.y + 74, 194, 40, 10, on ? m.col : open ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.25)', on ? '#fff' : '#3a4148', on ? 2.5 : 1.5);
+    text(`${m.name} ${open ? n + '/' + tot : '· liv. ' + m.lvl}`, x + 97, P.y + 94, 15, on ? '#1b1b1b' : open ? '#fff' : '#6b7178');
+    btn(x, P.y + 74, 194, 40, () => { state.recPage = m.id; sfx.click(); }, 'rec_' + m.id);
+  });
+  text(pg === 'acc' ? 'L\'ordine delle macchine sulla linea decide il pezzo. Prova combinazioni diverse!' : `Pezzi che esistono solo in ${matOf(pg).name.toLowerCase()}: metti un Banco barre su questo materiale e prova le sequenze.`, P.x + P.w / 2, P.y + 132, 15, '#cfd6dd');
+  list.forEach((rc, i) => {
+    const col = i % 2, row = Math.floor(i / 2), x = P.x + 26 + col * 510, y = P.y + 152 + row * 54;
+    const known = state.found.includes(recipeKey(rc)), mat = rc.mat || 'acc';
+    rrect(x, y, 494, 48, 10, known ? HT().card : '#3a2416', known ? matOf(mat).col : '#3a4148', 2);
     if (known) {
-      rc.seq.split('').forEach((ch, k) => badge(ch, x + 10 + k * 62, y + 12));
-      text(rc.name, x + 330, y + 26, 16, '#fff');
-      coinIcon(x + 432, y + 25, 0.7); text(fmt(tune['val_' + rc.seq]), x + 446, y + 26, 16, '#ffe08a', 'left');
+      rc.seq.split('').forEach((ch, k) => badge(ch, x + 10 + k * 62, y + 11));
+      text(rc.name, x + 330, y + 25, 15, '#fff');
+      coinIcon(x + 432, y + 24, 0.7); text(fmt(recipeVal(rc.seq, mat)), x + 446, y + 25, 16, '#ffe08a', 'left');
     } else {
-      for (let k = 0; k < rc.seq.length; k++) { rrect(x + 10 + k * 62, y + 12, 58, 26, 8, '#1b2229', '#3a4148', 2); text('?', x + 39 + k * 62, y + 26, 16, '#59626b'); }
-      text(`??? · ${rc.seq.length} macchin${rc.seq.length > 1 ? 'e' : 'a'}`, x + 400, y + 26, 15, '#7d8790');
+      for (let k = 0; k < rc.seq.length; k++) { rrect(x + 10 + k * 62, y + 11, 58, 26, 8, '#1b2229', '#3a4148', 2); text('?', x + 39 + k * 62, y + 25, 16, '#59626b'); }
+      text(`??? · ${rc.seq.length} macchin${rc.seq.length > 1 ? 'e' : 'a'}`, x + 400, y + 25, 15, '#7d8790');
     }
   });
 }
@@ -2287,7 +2352,7 @@ function drawTutorial(t) {
     } else if (!state.panel && !state.placing) at(N.shop, want.label);
   };
   if (g === 0) {
-    say = 'Benvenuto nella tua prima fabbrica, capo! È piccola e vuota: comincia piazzando un Banco barre e una Cassa. Le barre arrivano dagli scaffali del magazzino: le ordini in Ufficio. Il primo di ognuno è gratis.';
+    say = 'Ciao! Sono Noah, il ChiefTech: il capo di tutto qui. Ti guido io, dalla prima macchina al grande stabilimento. Questa fabbrica è piccola e vuota: comincia piazzando un Banco barre e una Cassa. Le barre arrivano dagli scaffali del magazzino: le ordini in Ufficio. Il primo di ognuno è gratis.';
     const miss = ['src', 'crate'].find(k => !countKind(k));
     if (miss) shopFor({ tab: 1, btn: 'buy_' + miss, label: 'Negozio > Logistica' });
   } else if (g === 1) { say = 'Ora la prima macchina: compra la Troncatrice nel Negozio e piazzala dove vuoi.'; shopFor({ tab: 0, btn: 'buyT', label: 'Compra la Troncatrice' }); }
@@ -2306,6 +2371,7 @@ function drawTutorial(t) {
   else if (g === 8) say = 'Tocca una macchina e scegli "Collega in rete": col minigioco del cavo la macchina rende +10%.';
   else if (g === 9 && state.level >= tune.unlockF && state.coins >= costOf('F')) shopFor({ tab: 0, btn: 'buyF', label: 'Compra la Fresa' });
   else if (g === 11) { say = state.level < tune.shed1Lvl ? `Il capannone si fa stretto? Al livello ${tune.shed1Lvl} potremo comprare la vecchia officina di mattoni.` : 'L\'officina di mattoni è in vendita: Negozio > Sede. Questa sede resta tua e continua a produrre; la nuova parte vuota.'; if (state.level >= tune.shed1Lvl && state.coins >= tune.shed1Cost) shopFor({ tab: 2, btn: 'expand', label: 'Compra la sede' }); }
+  if (!say) say = noahAdvice(t); // past the first steps Noah keeps advising on what matters now
   if (say && !state.panel && !state.placing) drawNarrator(t, say);
   if (!target) return;
   const ax = target.x, ay = target.y - 20 + bounce;
@@ -2546,10 +2612,42 @@ function drawWorldShop(t) {
   text(n >= tune.maxBuildings ? 'Capannoni separati: tutti costruiti' : state.level < buildingLvl(n) ? `Capannone separato n. ${n + 1}: livello ${buildingLvl(n)}` : `Capannoni separati: ${n} di ${tune.maxBuildings}`, x + w / 2, y + 320, 14, '#b9c4ce');
   button('Disegna', x + 100, y + 340, w - 200, 52, () => setWTool('draw'), { name: 'drawB', size: 20, color: '#5bc7ff' });
 }
+// ---- ChiefTech Noah: the boss of it all, who guides you through building and growing the factory ----
+SPR.noah = ['....HHHH....', '...HHHHHH...', '..HHHHHHHH..', '..HSSSSSSH..', '..SLLgLLSS..', '..SSSSSSSS..', '...SSmmSS...', '....ssss....', '..JJWTTWJJ..', '.SJJWTTWJJS.', '.SJJWTTWJJS.', '..jJJBBJJj..', '...GGGGGG...', '...GG..GG...', '...GG..GG...', '..KKK..KKK..'];
+SPR.noahTab = ['....HHHH....', '...HHHHHH...', '..HHHHHHHH..', '..HSSSSSSH..', '..SLLgLLSS..', '..SSSSSSSS..', '...SSmmSS...', '....ssss....', '..JJWTTWJJPP', '.SJJWTTWJJCP', '.SJJWTTWJJCP', '..jJJBBJJjPP', '...GGGGGG...', '...GG..GG...', '...GG..GG...', '..KKK..KKK..'];
+SPR.noahPoint = ['....HHHH....', '...HHHHHH...', '..HHHHHHHH..', '..HSSSSSSH.S', '..SLLgLLSS.S', '..SSSSSSSS.J', '...SSmmSS..J', '....ssss..J.', '..JJWTTWJJJ.', '.SJJWTTWJJ..', '.SJJWTTWJJ..', '..jJJBBJJj..', '...GGGGGG...', '...GG..GG...', '...GG..GG...', '..KKK..KKK..'];
+const NOAH_PAL = { H: '#2b1a12', L: '#bfe3ff', g: '#1b1b1b', m: '#a0503a', J: '#3a4654', j: '#262f39', W: '#f4f4f4', T: '#c0392b', B: '#1b1b1b', P: '#1b2229', C: '#5bc7ff', G: '#2b2f35', K: '#1b1b1b' };
+const NOAH_TIPS = [
+  'Una macchina nuova rende di più se la colleghi in rete: tocca la macchina > Collega in rete.',
+  'Le ricette nascono dall\'ordine delle macchine: Troncatrice, poi Tornio, poi Fresa... prova combinazioni diverse (R).',
+  'Più la qualità di montaggio è alta, più rende ogni pezzo: se una macchina è venuta male, Ricalibrala.',
+  'Il tempo veloce fa correre la produzione, ma durante il turno le macchine si guastano di più. Di notte puoi andare a x8 tranquillo.',
+  'Ogni sede ha la sua corrente: le macchine nuove consumano di più, scegli bene dove metterle.',
+  'Le sedi vecchie continuano a produrre: tienile rifornite di barre e con la squadra al completo.',
+  'Nella città (E) vedi i cantieri della prossima sede avanzare con i giorni.',
+];
+function noahAdvice(t) { // what the boss says once the first steps are done: the most useful thing for you right now
+  if (!F) return null;
+  const br = F.machines.find(m => m.broken);
+  if (br) return br.broken === 'old' ? `La ${MACH[br.type].name} è troppo vecchia: toccala e sostituiscila, sennò resta ferma.` : `La ${MACH[br.type].name} si è guastata! Toccala e riparala col minigioco.`;
+  const wh = whOf(F), cap = whCap(F);
+  if (F.machines.some(m => m.op) && whTotal(F) < cap * tune.autoBelow && !onOrder(F) && !wh.auto) return 'Il magazzino è quasi vuoto: apri l\'Ufficio (U) e ordina barre, oppure accendi il riordino automatico.';
+  const need = jobNeeds(F)[0]; if (need) return `Qui in ${F.name}: ${need}. Sistemalo nella Squadra (Q).`;
+  const idle = F.machines.find(m => m.phase >= 2 && !m.op && !m.broken);
+  if (idle && opsFree() > 0) return `La ${MACH[idle.type].name} è ferma: prendi lo strumento Operatore (1) e mettici chi è libero.`;
+  if (state.tokens > 0) return `Hai ${state.tokens} ${state.tokens === 1 ? 'token' : 'token'} da spendere: apri le Abilità (K) e scegli cosa potenziare.`;
+  const st = TIER() + 1;
+  if (st <= 4 && siteProgress() >= 1 && state.level >= tune['shed' + st + 'Lvl']) return state.coins >= tune['shed' + st + 'Cost'] ? `${TIERS[st].name} è pronta e te la puoi permettere: Negozio > Sede. Si comincia una nuova fabbrica!` : `${TIERS[st].name} è pronta: mettiti da parte ${fmt(tune['shed' + st + 'Cost'])} monete e comprala.`;
+  if (powerUsed(F) > powerCap(F) * 0.9) return `Qui la corrente è quasi finita (${powerUsed(F)}/${powerCap(F)} kW): per crescere ancora serve la prossima sede.`;
+  if (!onShift()) return 'Il turno è finito: è il momento di sistemare la fabbrica con calma. Metti x8 per far passare la notte.';
+  return NOAH_TIPS[Math.floor(state.t / 40) % NOAH_TIPS.length];
+}
 function drawNarrator(t, msg) { // the foreman: a pixel worker with a speech bubble, bottom left
   const x = 60, y = 556, hide = !!state.guideHidden, fresh = state.guideSeen !== msg;
-  sprite(hide ? 'walk0' : Math.sin(t * 4) > 0 ? 'wave' : 'walk0', x, y, 4, false);
-  btn(x - 34, y - 72, 68, 76, () => { state.guideHidden = !state.guideHidden; state.guideSeen = msg; sfx.click(); }, 'guide'); // tap the foreman to hide or show his advice
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x, y + 2, 22, 5, 0, 0, Math.PI * 2); ctx.fill();
+  sprite(hide ? 'noahTab' : Math.sin(t * 2.5) > 0.3 ? 'noahPoint' : 'noahTab', x, y, 4, false, NOAH_PAL);
+  if (!hide && Math.sin(t * 3) > 0) { ctx.fillStyle = '#7ef0a0'; ctx.fillRect(x + 22, y - 26, 3, 2); } // the tablet blinks
+  btn(x - 34, y - 72, 68, 76, () => { state.guideHidden = !state.guideHidden; state.guideSeen = msg; sfx.click(); }, 'guide'); // tap Noah to hide or show his advice
   if (hide) { // only a small bubble: a dot when nothing new, an exclamation mark when he has new advice
     const bx = x + 18, by = y - 92 + (fresh ? Math.sin(t * 6) * 3 : 0);
     rrect(bx, by, 30, 24, 10, fresh ? '#f2c230' : '#fff', '#2b2b2b', 2); poly([[bx + 4, by + 22], [bx - 4, by + 30], [bx + 12, by + 22]], fresh ? '#f2c230' : '#fff', '#2b2b2b', 2);
@@ -2561,10 +2659,12 @@ function drawNarrator(t, msg) { // the foreman: a pixel worker with a speech bub
   const maxW = 380, words = msg.split(' '); let lines = [], cur = '';
   for (const w of words) { const tt = cur ? cur + ' ' + w : w; if (ctx.measureText(tt).width > maxW && cur) { lines.push(cur); cur = w; } else cur = tt; }
   if (cur) lines.push(cur);
-  const bh = lines.length * 22 + 18, bx = x + 34, by = y - 70 - bh / 2;
+  const bh = lines.length * 22 + 40, bx = x + 34, by = y - 70 - bh / 2;
   rrect(bx, by, maxW + 24, bh, 12, '#fff', '#2b2b2b', 2); poly([[bx, by + bh - 20], [bx - 14, by + bh - 6], [bx, by + bh - 8]], '#fff', '#2b2b2b', 2);
-  lines.forEach((l, i) => text(l, bx + 12, by + 20 + i * 22, 16, '#2b2b2b', 'left'));
-  text('tocca l\'omino per nascondere', bx + maxW + 14, by + bh - 9, 10, '#9aa4ad', 'right');
+  rrect(bx + 10, by - 12, 168, 24, 8, '#3a4654', '#2b2b2b', 2); text('ChiefTech Noah', bx + 20, by, 14, '#fff', 'left'); // his name tag
+  rrect(bx + 140, by - 7, 32, 14, 4, '#f2c230'); text('CAPO', bx + 156, by, 9, '#2b2410');
+  lines.forEach((l, i) => text(l, bx + 12, by + 26 + i * 22, 16, '#2b2b2b', 'left'));
+  text('tocca Noah per nascondere', bx + maxW + 14, by + bh - 9, 10, '#9aa4ad', 'right');
   btn(bx, by, maxW + 24, bh, () => { state.guideHidden = true; state.guideSeen = msg; sfx.click(); }, 'guideBubble');
 }
 
@@ -3115,7 +3215,7 @@ function worldTap(sx, sy) {
   const o = inShed(c, r) ? cellAt(c, r) : null;
   if (false) { }
   else if (o && o.kind === 'crate') { state.panel = 'recipes'; sfx.click(); }
-  else if (o && o.kind === 'src') toast(`Banco barre: prende una barra dalla zona magazzino ogni ${spawnGapE().toFixed(1)} s (in magazzino: ${whOf(F).bars})`, '#bfe3ff');
+  else if (o && o.kind === 'src') { const open = MATS.filter(matOpen), i = open.findIndex(m => m.id === (o.mat || 'acc')), nx = open[(i + 1) % open.length]; o.mat = nx.id; o.stock = []; sfx.click(); save(); toast(open.length > 1 ? `Banco barre: ora prende ${nx.name.toLowerCase()} (in magazzino ${whStock(F)[nx.id] || 0}). Tocca ancora per cambiare` : `Banco barre: prende acciaio (in magazzino ${whStock(F).acc || 0}). Altri materiali dal livello ${MATS[1].lvl}`, nx.col === '#9aa3ab' ? '#bfe3ff' : nx.col); }
   else if (o && o.kind === 'rack') toast('Rack di rete: ogni macchina si collega qui col minigioco Rete', '#bfe3ff');
 }
 
@@ -3169,9 +3269,9 @@ function drawWorld(t) {
         else drawMachine(m.type, m.c, m.r, { ...mo, status: m.cur ? 'work' : m.op ? 'wait' : 'off', busy: !!m.cur, t });
         if (m.mk > 1 && m.phase >= 2) { const q = iso(m.c + fw / 2, m.r + fh - 0.04, 8); rrect(q[0] - 9, q[1] - 6, 18, 11, 2, '#e0b84a', '#2b2410', 1); textW(['', 'II', 'III', 'IV', 'V'][mkOf(m) - 1], q[0], q[1], 7, '#2b2410'); } // the Mk plate
         if (m.op && atWork && m.present !== false) { const p = iso(m.c + fw - 0.14, m.r + fh + 0.02, 0); sprite(m.cur && Math.sin(t * 9) > 0 ? 'work' : 'walk0', p[0], p[1], 2, true, OP_PAL); }
-        if (m.out) drawPiece(m.out.ops, m.c + 0.15, m.r + fh - 0.1);
-        if (m.inbox) drawPiece(m.inbox.ops, m.c + fw - 0.1, m.r + 0.15);
-        if (m.pop > 0) { ctx.globalAlpha = Math.min(1, m.pop * 2); drawPiece(m.popOps || '', m.c + fw / 2 - (1 - m.pop) * 0.6, m.r + fh / 2 - (1 - m.pop) * 0.6); ctx.globalAlpha = 1; }
+        if (m.out) drawPiece(m.out.ops, m.c + 0.15, m.r + fh - 0.1, m.out.mat);
+        if (m.inbox) drawPiece(m.inbox.ops, m.c + fw - 0.1, m.r + 0.15, m.inbox.mat);
+        if (m.pop > 0) { ctx.globalAlpha = Math.min(1, m.pop * 2); drawPiece(m.popOps || '', m.c + fw / 2 - (1 - m.pop) * 0.6, m.r + fh / 2 - (1 - m.pop) * 0.6, m.popMat); ctx.globalAlpha = 1; }
         ctx.globalAlpha = 1;
       } });
     }
@@ -3191,7 +3291,7 @@ function drawWorld(t) {
     const p = iso(w.c, w.r, 0), step = w.path.length ? Math.floor(w.walkT * 6) % 2 : 0;
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
     sprite(step ? 'walk1' : 'walk0', p[0], p[1] - step, 2, w.dir < 0, MAG_PAL);
-    if (w.carry) { ctx.save(); ctx.translate(0, -30); drawPiece(w.carry.ops, w.c, w.r); ctx.restore(); }
+    if (w.carry) { ctx.save(); ctx.translate(0, -30); drawPiece(w.carry.ops, w.c, w.r, w.carry.mat); ctx.restore(); }
   } });
   if (state.placing) {
     const h = hoverCell();
@@ -3229,9 +3329,47 @@ function drawOverlaysWorld(t) {
     ctx.globalAlpha = a; if (f.coin) coinIcon(sx - 24, sy, 0.8); textO(f.txt, sx + (f.coin ? 4 : 0), sy, 20, f.col); ctx.globalAlpha = 1;
   }
 }
+// ---- Materials, suppliers and their weekly prices ----
+const MATS = [ // what bars can be made of: from plain steel to titanium; dearer to buy, worth more once machined
+  { id: 'acc', name: 'Acciaio', col: '#9aa3ab', lvl: 1, price: 1, val: 1 },
+  { id: 'all', name: 'Alluminio', col: '#dfe6ec', lvl: 4, price: 1.6, val: 1.5 },
+  { id: 'ott', name: 'Ottone', col: '#d8b060', lvl: 8, price: 2.4, val: 2 },
+  { id: 'inx', name: 'Inox', col: '#bcd0dc', lvl: 15, price: 3.2, val: 2.7 },
+  { id: 'tit', name: 'Titanio', col: '#8090a8', lvl: 25, price: 6, val: 4.5 },
+];
+const matOf = id => MATS.find(m => m.id === id) || MATS[0];
+const matOpen = m => state.level >= m.lvl;
+const SUPPLIERS = [ // ten suppliers: what they sell, how dear they usually are, how long their lorries take (game hours)
+  { name: 'Acciaierie Bergamasche', mats: ['acc', 'inx'], f: 0.9, h: 3 },
+  { name: 'Metalli Rossi & Figli', mats: ['acc', 'all', 'ott'], f: 1, h: 2 },
+  { name: 'Alpi Metal', mats: ['all', 'tit'], f: 1.05, h: 4 },
+  { name: 'Fonderia Adriatica', mats: ['acc', 'ott'], f: 0.95, h: 3 },
+  { name: 'Lega Nord-Est', mats: ['all', 'inx'], f: 1, h: 2 },
+  { name: 'Ferro & Fuoco', mats: ['acc'], f: 0.82, h: 5 },
+  { name: 'Titan Italia', mats: ['tit', 'inx'], f: 1.08, h: 3 },
+  { name: 'Ottoni Veneti', mats: ['ott'], f: 0.88, h: 2 },
+  { name: 'InoxPiù', mats: ['inx', 'acc'], f: 1, h: 1.5 },
+  { name: 'Barre Express', mats: ['acc', 'all', 'ott', 'inx', 'tit'], f: 1.3, h: 0.5 },
+];
+const weekNum = () => Math.floor(dayNum() / 7);
+function supPrice(si, mid, wk = weekNum()) { // price of one bar this week: the material's base, the supplier's usual level, and the week's swing (up to ±25%)
+  const s = SUPPLIERS[si], mi = MATS.findIndex(m => m.id === mid), h = hash(wk * 31 + si * 7 + 3, mi * 13 + si) / 999;
+  return Math.max(0.1, Math.round(matOf(mid).price * barCostE() * s.f * (0.75 + 0.5 * h) * 100) / 100);
+}
+const supHours = si => SUPPLIERS[si].h * deliveryE() / tune.deliveryHours;
+const cheapest = mid => SUPPLIERS.map((s, i) => i).filter(i => SUPPLIERS[i].mats.includes(mid)).sort((a, b) => supPrice(a, mid) - supPrice(b, mid))[0];
+function whStock(b) { const wh = whOf(b); return wh.stock; }
+const whTotal = b => MATS.reduce((n, m) => n + (whStock(b)[m.id] || 0), 0);
+function whTake(b, mid) { const st = whStock(b); if ((st[mid] || 0) > 0) { st[mid]--; return true; } return false; }
+function whAdd(b, mid, n) { const st = whStock(b), room = whCap(b) - whTotal(b), k = Math.max(0, Math.min(n, room)); st[mid] = (st[mid] || 0) + k; return k; }
+function whClamp(b) { const st = whStock(b); let over = whTotal(b) - whCap(b); for (const m of MATS.slice().reverse()) { if (over <= 0) break; const k = Math.min(over, st[m.id] || 0); st[m.id] -= k; over -= k; } }
 // ---- Warehouse zone and office ---------------------------------------------------------------
 // Each site has a warehouse zone (shelves of raw bars) that grows with the site, and an office desk where stock is checked and bars are ordered.
-function whOf(b) { if (!b.wh) b.wh = { bars: tune.barsStart, orders: [], auto: false }; return b.wh; }
+function whOf(b) { // bars on the shelves, by material (older saves had a single count: that was steel)
+  if (!b.wh) b.wh = { stock: { acc: tune.barsStart }, orders: [], auto: false };
+  if (!b.wh.stock) { b.wh.stock = { acc: b.wh.bars || 0 }; delete b.wh.bars; }
+  return b.wh;
+}
 const whCells = b => Object.values(b.grid).filter(o => o.kind === 'wh');
 const whCap = b => whCells(b).length * barsPerCellE();
 const onOrder = b => whOf(b).orders.reduce((n, o) => n + o.n, 0) + (b.trucks || []).filter(k => k.ph !== 'out').reduce((n, k) => n + k.n, 0);
@@ -3243,25 +3381,25 @@ function layoutZones(b) { // two fixed areas outside the work floor: the warehou
   let i = 0;
   for (let r = 0; r < R; r++) for (let c = C; c < C + w; c++) { b.annex.add(K(c, r)); if (r % 2 === 0 || r === R - 1) setCell(c, r, { kind: 'wh', i: i++ }); } // shelves with aisles between
   for (let r = R; r < R + oh + 1; r++) for (let c = 0; c < ow; c++) { b.annex.add(K(c, r)); if (r > R) setCell(c, r, { kind: 'office' }); }
-  whOf(b).bars = Math.min(whOf(b).bars, whCap(b));
+  whClamp(b);
   F = keep;
 }
-function orderBars(b, n, auto) {
-  const room = whCap(b) - whOf(b).bars - onOrder(b); n = Math.min(n, room);
+function orderBars(b, n, auto, mid = 'acc', si = cheapest(mid)) {
+  const room = whCap(b) - whTotal(b) - onOrder(b); n = Math.min(n, room);
   if (n <= 0) return auto || toast('Il magazzino è pieno (contando gli ordini in arrivo)', '#ffb35b');
-  const cost = Math.ceil(n * barCostE());
+  const cost = Math.ceil(n * supPrice(si, mid));
   if (state.coins < cost) return auto || toast('Monete insufficienti', '#ffb35b');
-  state.coins -= cost; whOf(b).orders.push({ n, at: state.t + deliveryE() * hourSec() });
-  if (!auto) { sfx.click(); toast(`Ordinate ${n} barre: -${fmt(cost)} monete, arrivano in ${hoursTxt(deliveryE())}`, '#bfe3ff'); }
+  state.coins -= cost; whOf(b).orders.push({ n, at: state.t + supHours(si) * hourSec(), mat: mid, sup: si });
+  if (!auto) { sfx.click(); toast(`Ordinate ${n} barre di ${matOf(mid).name.toLowerCase()} da ${SUPPLIERS[si].name}: -${fmt(cost)} monete, arrivano in ${hoursTxt(supHours(si))}`, '#bfe3ff'); }
   events.push({ type: 'order', n, auto: !!auto }); save();
 }
-function autoOrder(b) { const wh = whOf(b); if (wh.auto && wh.bars + onOrder(b) < whCap(b) * tune.autoBelow) orderBars(b, whCap(b), true); }
+function autoOrder(b) { const wh = whOf(b); if (wh.auto && whTotal(b) + onOrder(b) < whCap(b) * tune.autoBelow) { const mid = matOpen(matOf(wh.autoMat || 'acc')) ? (wh.autoMat || 'acc') : 'acc'; orderBars(b, whCap(b), true, mid, cheapest(mid)); } }
 function updateStock(b) { // an order that is due sends a truck; the bars go on the shelves once it has unloaded
   const wh = whOf(b), come = wh.orders.filter(o => o.at <= state.t);
   if (!come.length) return;
   wh.orders = wh.orders.filter(o => o.at > state.t);
   b.trucks = b.trucks || [];
-  b.trucks.push({ n: come.reduce((a, o) => a + o.n, 0), ph: 'in', r: -10, t: 0 });
+  for (const o of come) b.trucks.push({ n: o.n, mat: o.mat || 'acc', sup: o.sup, ph: 'in', r: -10 - b.trucks.length * 4, t: 0 }); // one lorry per order
   if (b === F) toast('Il camion delle barre sta arrivando', '#bfe3ff');
 }
 const yardOf = b => { const A = b.annexBox, mid = Math.max(1.5, A.r1 / 2); return { c0: A.c1, c1: A.c1 + 2.6, r0: mid - 1.4, r1: mid + 1.4, mid, lane: A.c1 + 3.45, park: A.c1 + 1.85 }; };
@@ -3273,7 +3411,7 @@ function updateTrucks(b, dt) { // along the road, back into the unloading yard, 
     k.t += dt;
     if (k.ph === 'in') { k.r = Math.min(Y.mid, k.r + dt * sp * Math.min(1, (Y.mid - k.r) / 2 + 0.25)); if (Y.mid - k.r < 0.02) { k.ph = 'back'; k.face = 'c'; k.t = 0; } }
     else if (k.ph === 'back') { k.c = Math.max(Y.park, k.c - dt * 1.4); if (k.c - Y.park < 0.02) { k.ph = 'unload'; k.t = 0; } }
-    else if (k.ph === 'unload') { if (k.t > tune.unloadTime) { const wh = whOf(b); wh.bars = Math.min(whCap(b), wh.bars + k.n); wh.told = false; k.ph = 'leave'; k.t = 0; if (b === F) { toast(`Consegna scaricata: +${k.n} barre in magazzino`, '#7ef0a0'); sfx.ding(); } autoOrder(b); } }
+    else if (k.ph === 'unload') { if (k.t > tune.unloadTime) { const wh = whOf(b); whAdd(b, k.mat || 'acc', k.n); wh.told = false; k.ph = 'leave'; k.t = 0; if (b === F) { toast(`Consegna scaricata: +${k.n} barre di ${matOf(k.mat || 'acc').name.toLowerCase()}`, '#7ef0a0'); sfx.ding(); } autoOrder(b); } }
     else if (k.ph === 'leave') { k.c = Math.min(Y.lane, k.c + dt * 2); if (Y.lane - k.c < 0.02) { k.ph = 'out'; k.face = 'r'; k.t = 0; } }
     else k.r += dt * sp * Math.min(1, k.t * 0.8 + 0.2);
   }
@@ -3302,10 +3440,10 @@ function drawTruckBody(k, t) {
     if (carry) box(wc - 0.18, wr - 0.06, wc + 0.18, wr + 0.06, 26, 30, '#a7b0b8');
   }
 }
-function warnEmpty(b) {
+function warnEmpty(b, mid = 'acc') {
   const wh = whOf(b); autoOrder(b);
   if (wh.told || onOrder(b)) return; wh.told = true;
-  showBanner('Magazzino vuoto', 'Ordina barre dall\'Ufficio per tenere le macchine al lavoro', '#ffb35b');
+  showBanner(`Niente ${matOf(mid).name.toLowerCase()} in magazzino`, 'Ordina barre dall\'Ufficio, o cambia materiale al Banco barre', '#ffb35b');
 }
 function drawAnnexFloor() { // the warehouse wing on the right (grey concrete, taped), the office apart in front (blue carpet)
   const A = F.annexBox, O = F.officeBox; if (!A) return;
@@ -3345,7 +3483,8 @@ function annexWalls() { // warehouse: back wall and a low rail toward the work f
   return out;
 }
 function drawShelf(o, t) { // a metal shelving unit; its bar bundles show how full the warehouse is
-  const c = o.c + 0.5, r = o.r + 0.5, cs = whCells(F).length, per = whOf(F).bars - o.i * barsPerCellE(), fill = Math.max(0, Math.min(1, per / barsPerCellE()));
+  const c = o.c + 0.5, r = o.r + 0.5, cs = whCells(F).length, pc = barsPerCellE(), per = whTotal(F) - o.i * pc, fill = Math.max(0, Math.min(1, per / pc));
+  const st = whStock(F), colAt = n => { let a = 0; for (const m of MATS) { a += st[m.id] || 0; if (n < a) return m.col; } return '#a7b0b8'; }; // bundles coloured by material, shelf after shelf
   for (const [dc, dr] of [[-0.4, -0.34], [0.36, -0.34], [-0.4, 0.3], [0.36, 0.3]]) box(c + dc, r + dr, c + dc + 0.04, r + dr + 0.04, 0, 46, '#e07a2e');
   const lv = 3, slots = 3;
   for (let k = 0; k < lv; k++) {
@@ -3354,7 +3493,8 @@ function drawShelf(o, t) { // a metal shelving unit; its bar bundles show how fu
     for (let j = 0; j < slots; j++) {
       if ((k * slots + j + 1) / (lv * slots) > fill + 0.001) continue;
       const y0 = r - 0.26 + j * 0.2;
-      for (let q = 0; q < 3; q++) box(c - 0.34, y0 + q * 0.045, c + 0.34, y0 + q * 0.045 + 0.04, z + 2 + (q % 2) * 3, z + 6 + (q % 2) * 3, '#a7b0b8', 'rgba(40,46,52,0.5)');
+      const bc = colAt(o.i * pc + (k * slots + j) / (lv * slots) * pc);
+      for (let q = 0; q < 3; q++) box(c - 0.34, y0 + q * 0.045, c + 0.34, y0 + q * 0.045 + 0.04, z + 2 + (q % 2) * 3, z + 6 + (q % 2) * 3, bc, 'rgba(40,46,52,0.5)');
     }
   }
   box(c - 0.4, r - 0.34, c + 0.4, r + 0.34, 46, 47.5, '#8a949c'); line(iso(c - 0.4, r + 0.34, 47), iso(c + 0.4, r + 0.34, 47), '#e07a2e', 2);
@@ -3404,44 +3544,69 @@ function officeDecor(O, t) { // around the desks: carpet tiles, plants, a water 
 const CLERK_PALS = [{ Y: '#6b4527', y: '#4a2f1d', B: '#e8eef4', b: '#9fb0c4', O: '#2f7fb0' }, { Y: '#e8c070', y: '#b89040', B: '#c0392b', b: '#8a2a20', O: '#ffffff' }, { Y: '#2b2b2b', y: '#1b1b1b', B: '#7ed08a', b: '#4a8a5a', O: '#ffffff' }];
 function drawStockChip() { // under the clock: what is on the shelves, tap to open the office
   if (!F || state.town) return;
-  const x = 538, y = 58, wh = whOf(F), cap = whCap(F), low = wh.bars < cap * tune.autoBelow, ord = onOrder(F);
+  const x = 538, y = 58, wh = whOf(F), cap = whCap(F), tot = whTotal(F), low = tot < cap * tune.autoBelow, ord = onOrder(F);
   rrect(x, y, 268, 30, 10, HT().panel, low ? '#ff8a7a' : '#a7b0b8', 2);
-  rrect(x + 10, y + 9, 70, 12, 4, '#1b2229'); rrect(x + 10, y + 9, Math.max(0, 70 * wh.bars / Math.max(1, cap)), 12, 4, low ? '#ff8a7a' : '#a7b0b8');
-  text(`Barre ${wh.bars}/${cap}${ord ? ` · +${ord} in arrivo` : ''}`, x + 174, y + 16, 13, low ? '#ffb3a8' : '#e6e1d3');
+  rrect(x + 10, y + 9, 70, 12, 4, '#1b2229'); rrect(x + 10, y + 9, Math.max(0, 70 * tot / Math.max(1, cap)), 12, 4, low ? '#ff8a7a' : '#a7b0b8');
+  text(`Barre ${tot}/${cap}${ord ? ` · +${ord} in arrivo` : ''}`, x + 174, y + 16, 13, low ? '#ffb3a8' : '#e6e1d3');
   btn(x, y, 268, 30, () => { sfx.click(); openPanel('office'); }, 'stockChip');
 }
-function drawOfficePanel(t) {
+function drawOfficePanel(t) { // the office PCs: stock by material, then buy: pick a material, a supplier (prices change every week) and how many bars
   const b = F; if (!b) { state.panel = null; return; }
-  const P = panelFrame('Ufficio · Magazzino', 820, 520, () => { state.panel = null; }), wh = whOf(b), cap = whCap(b), ord = onOrder(b);
-  const x = P.x + 34, w = P.w - 68;
-  // stock
-  rrect(x, P.y + 82, w, 112, 14, HT().card, '#a7b0b8', 2);
-  text('Barre grezze in magazzino', x + 20, P.y + 106, 18, '#fff', 'left');
-  rrect(x + 20, P.y + 126, w - 40, 26, 8, '#1b2229');
-  rrect(x + 20, P.y + 126, (w - 40) * wh.bars / Math.max(1, cap), 26, 8, wh.bars < cap * tune.autoBelow ? '#ff8a7a' : '#a7b0b8');
-  if (ord) rrect(x + 20 + (w - 40) * wh.bars / cap, P.y + 126, (w - 40) * ord / cap, 26, 8, 'rgba(91,199,255,0.45)');
-  text(`${wh.bars} / ${cap}   ·   ${whCells(b).length} scaffali da ${barsPerCellE()}`, x + w / 2, P.y + 139, 15, '#fff');
-  const use = b.machines.filter(m => m.op && m.phase >= 2 && !m.broken && m.input === '').length, perH = use ? Math.round(hourSec() / spawnGapE()) : 0;
-  text(perH ? `Consumo: fino a ${perH} barre l'ora di turno` : 'Nessuna macchina sta prendendo barre ora', x + 20, P.y + 176, 14, '#cfd6dd', 'left');
-  // orders
-  text('Ordina materiale', x, P.y + 226, 20, '#ffe08a', 'left');
-  text(`${String(barCostE()).replace('.', ',')} monete a barra · consegna in ${hoursTxt(deliveryE())} di turno`, x + w, P.y + 226, 14, '#cfd6dd', 'right');
-  const room = Math.max(0, cap - wh.bars - ord);
+  const P = panelFrame('Ufficio · Acquisti', 1100, 600, () => { state.panel = null; }), wh = whOf(b), cap = whCap(b), tot = whTotal(b), ord = onOrder(b);
+  state.buyMat = matOpen(matOf(state.buyMat || 'acc')) ? (state.buyMat || 'acc') : 'acc';
+  const mid = state.buyMat, M = matOf(mid), wk = weekNum(), dLeft = 7 - (dayNum() % 7);
+  // left: what is on the shelves
+  const lx = P.x + 24, lw = 330;
+  rrect(lx, P.y + 76, lw, P.h - 96, 12, HT().card, '#a7b0b8', 2);
+  text('Magazzino', lx + 16, P.y + 100, 18, '#fff', 'left');
+  text(`${tot} / ${cap}`, lx + lw - 16, P.y + 100, 15, tot < cap * tune.autoBelow ? '#ff8a7a' : '#cfd6dd', 'right');
+  rrect(lx + 16, P.y + 116, lw - 32, 14, 6, '#1b2229');
+  let acc = 0; for (const m of MATS) { const n = wh.stock[m.id] || 0; if (n > 0) rrect(lx + 16 + (lw - 32) * acc / cap, P.y + 116, Math.max(3, (lw - 32) * n / cap), 14, 4, m.col); acc += n; }
+  if (ord) rrect(lx + 16 + (lw - 32) * Math.min(1, acc / cap), P.y + 116, (lw - 32) * Math.min(ord, cap - acc) / cap, 14, 4, 'rgba(91,199,255,0.45)');
+  MATS.forEach((m, i) => {
+    const y = P.y + 146 + i * 46, open = matOpen(m), n = wh.stock[m.id] || 0, used = Object.values(b.grid).filter(o => o.kind === 'src' && (o.mat || 'acc') === m.id).length;
+    rrect(lx + 12, y, lw - 24, 40, 8, 'rgba(0,0,0,0.2)');
+    rrect(lx + 22, y + 10, 30, 20, 3, open ? m.col : '#3a3a3a', '#1b1b1b', 1.5); for (let k = 0; k < 3; k++) line([lx + 24, y + 14 + k * 6], [lx + 50, y + 14 + k * 6], 'rgba(0,0,0,0.25)', 1);
+    text(m.name, lx + 64, y + 13, 15, open ? '#fff' : '#7d8790', 'left');
+    text(open ? (used ? `${used} ${used === 1 ? 'banco lo usa' : 'banchi lo usano'}` : 'nessun banco lo usa') : `si sblocca al livello ${m.lvl}`, lx + 64, y + 30, 11, open ? '#b9c4ce' : '#ffb35b', 'left');
+    if (open) text(String(n), lx + lw - 24, y + 20, 18, n ? '#fff' : '#7d8790', 'right');
+  });
+  button(wh.auto ? `Riordino automatico: SÌ (${matOf(wh.autoMat || 'acc').name})` : 'Riordino automatico: NO', lx + 12, P.y + P.h - 132, lw - 24, 44, () => { wh.auto = !wh.auto; wh.autoMat = mid; sfx.click(); autoOrder(b); save(); }, { color: wh.auto ? '#7ef0a0' : '#e6e1d3', size: 14, name: 'autoOrder' });
+  wrapText(`Sotto ${Math.round(cap * tune.autoBelow)} barre l'ufficio riordina da solo il materiale scelto dal fornitore più economico della settimana. Tocca un Banco barre per cambiare il materiale che usa.`, lx + 16, P.y + P.h - 74, lw - 32, 11, '#9aa4ad', 15, 'left');
+  // middle and right: buying
+  const bx = lx + lw + 16, bw = P.x + P.w - 24 - bx;
+  text(`Settimana ${wk + 1} · i prezzi cambiano tra ${daysTxt(dLeft)}`, bx, P.y + 92, 14, '#ffe08a', 'left');
+  MATS.forEach((m, i) => { // material tabs
+    const x = bx + i * ((bw + 8) / 5), w = (bw + 8) / 5 - 8, open = matOpen(m), on = m.id === mid;
+    rrect(x, P.y + 106, w, 38, 9, on ? m.col : open ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.25)', on ? '#fff' : '#3a4148', on ? 2.5 : 1.5);
+    text(m.name, x + w / 2, P.y + 125, 14, on ? '#1b1b1b' : open ? '#fff' : '#6b7178');
+    btn(x, P.y + 106, w, 38, () => { if (!open) return toast(`${m.name}: si sblocca al livello ${m.lvl}`, '#ffb35b'); state.buyMat = m.id; state.buySup = cheapest(m.id); sfx.click(); }, 'mat_' + m.id);
+  });
+  const sups = SUPPLIERS.map((s, i) => i).filter(i => SUPPLIERS[i].mats.includes(mid)).sort((a, q) => supPrice(a, mid) - supPrice(q, mid));
+  if (!sups.includes(state.buySup)) state.buySup = sups[0];
+  text('Fornitore', bx + 12, P.y + 162, 12, '#9aa4ad', 'left'); text('Prezzo a barra', bx + bw - 200, P.y + 162, 12, '#9aa4ad', 'right'); text('Consegna', bx + bw - 14, P.y + 162, 12, '#9aa4ad', 'right');
+  sups.forEach((si, k) => {
+    const y = P.y + 172 + k * 40, s = SUPPLIERS[si], pr = supPrice(si, mid), prev = supPrice(si, mid, wk - 1), on = si === state.buySup, best = k === 0;
+    rrect(bx, y, bw, 34, 8, on ? 'rgba(224,184,74,0.28)' : 'rgba(0,0,0,0.2)', on ? '#e0b84a' : 'rgba(255,255,255,0.08)', on ? 2 : 1);
+    text(s.name, bx + 12, y + 17, 15, '#fff', 'left');
+    if (best) { rrect(bx + 12 + Math.min(220, s.name.length * 8.4) + 8, y + 9, 74, 16, 5, '#4caf6a'); text('più conveniente', bx + 12 + Math.min(220, s.name.length * 8.4) + 45, y + 17, 9, '#fff'); }
+    const up = pr > prev + 0.004, down = pr < prev - 0.004;
+    text(String(pr.toFixed(2)).replace('.', ','), bx + bw - 214, y + 17, 15, '#ffe08a', 'right');
+    poly(up ? [[bx + bw - 206, y + 22], [bx + bw - 198, y + 22], [bx + bw - 202, y + 12]] : down ? [[bx + bw - 206, y + 12], [bx + bw - 198, y + 12], [bx + bw - 202, y + 22]] : [[bx + bw - 207, y + 16], [bx + bw - 197, y + 16], [bx + bw - 197, y + 18], [bx + bw - 207, y + 18]], up ? '#ff8a7a' : down ? '#7ef0a0' : '#9aa4ad');
+    text(hoursTxt(supHours(si)), bx + bw - 14, y + 17, 13, '#cfd6dd', 'right');
+    btn(bx, y, bw, 34, () => { state.buySup = si; sfx.click(); }, 'sup' + si);
+  });
+  const si = state.buySup, pr = supPrice(si, mid), room = Math.max(0, cap - tot - ord), qy = P.y + 182 + Math.max(sups.length, 3) * 40;
+  text(`Ordina ${M.name.toLowerCase()} da ${SUPPLIERS[si].name}`, bx, qy, 15, '#fff', 'left');
   [[10, '+'], [30, '+'], [room, 'Riempi +']].forEach(([n, lab], i) => {
-    const nn = Math.min(n, room);
-    button(nn ? `${lab}${nn}  ·  ${fmt(Math.ceil(nn * barCostE()))} monete` : (ord ? 'Già in arrivo' : 'Magazzino pieno'), x + i * ((w + 16) / 3), P.y + 248, (w - 32) / 3, 56, () => orderBars(b, n), { enabled: nn > 0 && state.coins >= Math.ceil(nn * barCostE()), size: 17, name: 'order' + i });
+    const nn = Math.min(n, room), cost = Math.ceil(nn * pr);
+    button(nn ? `${lab}${nn} · ${fmt(cost)}` : (ord ? 'Già in arrivo' : 'Magazzino pieno'), bx + i * ((bw + 12) / 3), qy + 14, (bw - 24) / 3, 48, () => orderBars(b, n, false, mid, si), { enabled: nn > 0 && state.coins >= cost, size: 15, name: 'order' + i });
   });
-  button(wh.auto ? 'Riordino automatico: SÌ' : 'Riordino automatico: NO', x, P.y + 318, w, 48, () => { wh.auto = !wh.auto; sfx.click(); autoOrder(b); save(); }, { color: wh.auto ? '#7ef0a0' : '#e6e1d3', size: 16, name: 'autoOrder' });
-  text(`Quando restano meno di ${Math.round(cap * tune.autoBelow)} barre, l'ufficio riempie il magazzino da solo`, x + w / 2, P.y + 382, 13, '#b9c4ce');
-  // deliveries
-  text('In arrivo', x, P.y + 418, 18, '#ffe08a', 'left');
-  if (!wh.orders.length) text('Nessun ordine in viaggio', x, P.y + 450, 15, '#b9c4ce', 'left');
-  wh.orders.slice(0, 3).forEach((o, i) => {
-    const hLeft = Math.max(0, (o.at - state.t) / hourSec());
-    rrect(x, P.y + 436 + i * 36, w, 30, 8, '#3a2416');
-    text(`Camion con ${o.n} barre`, x + 14, P.y + 451 + i * 36, 15, '#fff', 'left');
-    text(hLeft < 0.25 ? 'sta arrivando' : `tra ${hLeft < 1 ? Math.max(15, Math.round(hLeft * 4) * 15) + ' min' : hLeft.toFixed(1).replace('.0', '') + ' ore'}`, x + w - 14, P.y + 451 + i * 36, 15, '#9ce8b4', 'right');
-  });
+  // what is on its way
+  const oy = qy + 80; text('In arrivo', bx, oy, 15, '#ffe08a', 'left');
+  const all = wh.orders.map(o => ({ n: o.n, mat: o.mat || 'acc', sup: o.sup, h: Math.max(0, (o.at - state.t) / hourSec()) })).concat((b.trucks || []).filter(k => k.ph !== 'out' && k.ph !== 'leave').map(k => ({ n: k.n, mat: k.mat || 'acc', sup: k.sup, h: 0 })));
+  if (!all.length) text('Nessun ordine in viaggio', bx + 90, oy, 13, '#9aa4ad', 'left');
+  all.slice(0, 3).forEach((o, i) => { const y = oy + 14 + i * 26; rrect(bx, y, bw, 22, 6, 'rgba(0,0,0,0.2)'); rrect(bx + 8, y + 6, 18, 10, 2, matOf(o.mat).col); text(`${o.n} barre di ${matOf(o.mat).name.toLowerCase()}${o.sup != null ? ' · ' + SUPPLIERS[o.sup].name : ''}`, bx + 34, y + 11, 12, '#fff', 'left'); text(o.h < 0.05 ? 'sta scaricando' : `tra ${hoursTxt(o.h)}`, bx + bw - 10, y + 11, 12, '#9ce8b4', 'right'); });
 }
 // ---- Calendar, speed and surprises ------------------------------------------------------------
 const MONTHS = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
@@ -3469,7 +3634,7 @@ function onWorkHour() { // each hour of the shift every running machine has a sm
   const fast = (state.speed - 1) / Math.max(1, tune.speedFast - 1);
   for (const b of state.buildings) for (const m of b.machines) {
     if (m.phase < 2 || m.broken) continue;
-    const p = breakE() * (1 + fast * (tune.breakFastMult - 1)) * (1 + (m.age || 0) / tune.ageRef);
+    const p = breakE() * (PK('tough' + m.type) ? 0.6 : 1) * (1 + fast * (tune.breakFastMult - 1)) * (1 + (m.age || 0) / tune.ageRef);
     if (rng() < p) { m.broken = 'repair'; incident(m, 'si è guastata: va riparata'); }
   }
 }
@@ -3677,7 +3842,7 @@ const scenes = {
         if (pressed('KeyT')) openPanel('tools');
         if (pressed('KeyQ')) openPanel('crew');
         if (pressed('KeyU') && F) openPanel('office');
-        if (pressed('KeyK')) openPanel('skills');
+        if (pressed('KeyK')) { openPanel('skills'); state.webView = 'map'; }
         if (!state.panel) {
           if (F) {
             if (pressed('Digit1')) setTool(state.tool === 'op' ? null : 'op');
@@ -3751,7 +3916,7 @@ function startSandbox() { // a trial game with everything: top level, all five s
   for (const k of Object.keys(state.tools)) state.tools[k] = tune.toolMax;
   state.perks = {}; for (const n of perkNodes()) if (!n.root) state.perks[n.id] = true;
   for (let st = 1; st <= 4; st++) { const [C, R] = shedSize(st), keep = F, b = newBuilding(rectCells(0, 0, C, R)); F = keep; b.stage = st; b.name = TIERS[st].short; b.grown = true; b.wh = { bars: 0, orders: [], auto: true }; layoutZones(b); }
-  for (const b of state.buildings) whOf(b).bars = whCap(b);
+  for (const b of state.buildings) { const st = whStock(b), cap = whCap(b); st.acc = Math.round(cap * 0.4); st.all = Math.round(cap * 0.2); st.ott = Math.round(cap * 0.15); st.inx = Math.round(cap * 0.15); st.tit = cap - st.acc - st.all - st.ott - st.inx; }
   { const bs = state.buildings.slice().reverse(); let k = 0; for (const cw of state.crew) { cw.b = -1; for (let n = 0; n < bs.length; n++) { const b = bs[(k + n) % bs.length]; if (crewOf(b).length < staffCap(b)) { cw.b = b.id; k = (k + n + 1) % bs.length; break; } } } } // the crew spread over the sites, the big ones first
   state.siteStart = -9999; state.siteToldDone = true;
   F = state.buildings[state.buildings.length - 1]; state.cur = state.buildings.length - 1; centerCam();

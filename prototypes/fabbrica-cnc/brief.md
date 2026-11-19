@@ -56,6 +56,9 @@ After play: modifica gli uffici falli più estetici prendi spunto da uffici real
 After play: usa SpriteCook per rifare la grafica delle macchine: 25 sprite isometrici in pixel art (5 tipi x 5 generazioni), posizionati e scalati sull'ingombro, specchiati per le rotazioni, con spia di stato, targhetta Mk, operatore e pezzi sopra; il disegno vettoriale resta come ripiego
 After play: mentre rifaccio la grafica tu fai un check di tutto il gioco approfondito e fixa tutti i possibili bug sia visivi che di gioco
 After play: prendi le grafiche fatte tramite spritecook e implementale controllando che non ci siano bug visivi nel gioco
+After play: crea ChiefTech Noah il capo di tutto che ti guida nella creazione e nel avanzamento della fabbrica
+After play: Migliora la skill tree in questo modo per esempio c'è l'icona del Tornio e cliccandoci ti apre lo skill tree del Tornio in cui spendere token le specifiche skill tree delle macchine si sbloccano quando arrivi al livello di sbloccare quella macchina e andando avanti sblocchi l'avanzamento dello skill tree (con un'immagine di riferimento: capitoli a sinistra, nodi raggruppati attorno a ingranaggi)
+After play: Dai pc dell`ufficio devi crearmi un menu dove scegliere che tipo di materiale prendere per rifornire il magazzino e da che fornitore prenderlo, i prezzi dei fornitori variano di settimana in settimana, creami una lista di 10 fornitori casuali poi creiamo nuovi pezzi da lavorare per ampliare il libro delle ricette
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 
