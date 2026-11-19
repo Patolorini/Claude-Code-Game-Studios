@@ -51,6 +51,17 @@ window.CONFIG = {
   spawnGap: { value: 1.2, min: 0.3, max: 5, step: 0.1 },     // s tra una barra grezza e la successiva, per Magazzino
   stockCap: { value: 8, min: 1, max: 50, step: 1 },          // pezzi massimi di un tipo nel magazzino interno del capannone
   opsBase: { value: 2, min: 1, max: 10, step: 1 },           // operatori al livello 1
+  phoneBelow: { value: 0.8, min: 0.3, max: 1.5, step: 0.05 },   // sotto questa scala dello schermo il gioco si comporta da telefono
+  phoneMinText: { value: 16, min: 10, max: 24, step: 1 },       // sul telefono i testi piccoli crescono fino a questa misura
+  phoneTextGrow: { value: 1.45, min: 1, max: 2, step: 0.05 },   // di quanto cresce un testo piccolo sul telefono
+  phoneTextRoom: { value: 1.2, min: 1, max: 1.6, step: 0.05 },  // quanto spazio in più può prendere (poi si stringe)
+  phoneTouch: { value: 44, min: 30, max: 64, step: 2 },         // un pulsante piccolo prende i tocchi entro questa misura (pixel veri)
+  guideFullSec: { value: 7, min: 2, max: 30, step: 1 },         // secondi in cui un consiglio nuovo di Noah resta aperto, poi si accorcia
+  skipBreakMult: { value: 1.5, min: 1, max: 5, step: 0.1 },   // simulando fino a un giorno del calendario i guasti sono così più probabili (1,5 = +50%)
+  skipMaxDays: { value: 60, min: 1, max: 365, step: 1 },        // quanti giorni avanti si possono simulare al massimo
+  skipSpeed: { value: 8, min: 1, max: 40, step: 1 },            // passo di tempo della simulazione (non cambia il risultato, solo la precisione)
+  skipBudgetMs: { value: 12, min: 2, max: 40, step: 1 },        // millisecondi di calcolo per fotogramma mentre simula
+  opsPerMag: { value: 4, min: 1, max: 10, step: 1 },        // macchine servite da un magazziniere quando la Squadra si organizza da sola
   opsPerLvl: { value: 0.5, min: 0, max: 5, step: 0.25 }, // operatori in più per ogni livello (0,5 = uno ogni due livelli)
   qualityBase: { value: 0.5, min: 0, max: 1, step: 0.05 },   // resa = qualityBase + qualità% / 100
 

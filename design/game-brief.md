@@ -63,6 +63,14 @@ After play: Dall`ufficio oltre che gli acquisti crea una sezione di task che il 
 After play: Aggiungi uno dei più grandi clienti Officine Di Giacopo a questa lista, poi cliccando sul magazzino deve aprirmi una casella di stoccaggio in cui posso inserire gli oggetti che creo senza venderli per futuri clienti così quando si accetta una task si può subito completare con i pezzi in stock
 After play: Le task completabili devono essere poche all`inizio altrimenti si avanza troppo in fretta se si accettano tutte, è una fabbrica appena avviata si deve far conoscere sul territorio e inoltre aggiungi anche task non accettabili in cui magari ti manca il livello o il macchinario però scopri nuove ricette in base alla richiesta della task
 After play: le task bloccate devono essere rare, il minigioco dei manometri a volte è buggato e quando clicchi mentre la lancetta scorre sulla zona verde non prende, non cè la possibilità di tornare al menù principale per selezionare la partita
+After play: le disposizioni di ufficio e magazzino devono essere randomiche per ogni stabilimento/fabbrica come anche in ogni partita la cittadina e le costruzioni sono randiomizzate per tutta la mappa non sono mai uguali alla partita precedente
+After play: randomizza proprio le disposizioni dell`interno degli stambilimenti/fabbrica
+After play: Ogni tanto inverti anche la posizione del magazzino con l'ufficio
+After play: Le task sono in comune in tutte le fabbriche, ma metti che in ogni fabbrica dal menu ricette scegli che pezzo produrre in base ai macchinari disponibili quindi se l'azienda é abbastanza grande e può produrre pezzi diversi allo stesso tempo il giocatore può farlo, ovviamente modifica in base alle ricette i percorsi dei magazzinieri
+After play: Dobbiamo migliorare la parte di assegnazione degli operatori da una fabbrica all'altra, perché ora è troppo difficile e troppo complicato.
+After play: Dobbiamo migliorare l'assegnazione degli operatori alle proprie mansioni
+After play: Fai un check con le skills installate in precedenza e guarda cosa si può migliorare (scelti: telefono leggibile, Noah compatto, HUD in alto unificato, ritocchi ai pannelli)
+After play: Vorrei mettere la possibilità di selezionare il calendario e simulare fino ad un giorno specifico selezionato dal giocatore così facendo però le probabilità di guasto aumentano del 50%
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 
