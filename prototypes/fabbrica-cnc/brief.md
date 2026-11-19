@@ -18,12 +18,26 @@ After play: Togli le mura e metti la possibilità di creare da capo il capannone
 After play: Metti la possibilità di creare più capannoni e collegarli tra loro tipo creare delle creazioni ad U, inoltre metti che il rack di rete si sblocca dopo un po’ cosi e puoi decidere tu quando collegare le macchine in rete in modo che il mini gioco non parte subito ma decide il giocatore
 After play: Tra un capannone e l’altro se non c’é spazio per passare con i nastri non puoi lasciarlo fare al giocatore per non avere bug visivi , mentre il collegamento in rete garantisce alla macchina inizialmente il 10% in più di guadagno
 After play: Lascia la possibilità di creare come si vuole il capannone ma avvisa il giocatore quando manca lo spazio per far passare i nastri deve avere almeno un collegamento di un 3x2 tra un capannone e l’altro
+After play: ok riprendiamo vorrei togliere i nastri trasportatori e far in modo che avanzando di livello sblocchi operatori in più da piazzare sui vari macchinari, così facendo non si devono più mettere per forza in serie
+After play: ogni lavoro deve essere diviso e bisogna assegnare almeno un operatore aggiungi altri lavori tipo informatico che mantiene la rete agibile magari aggiungi una postazione pc per controllare la rete/rack, poi aggiungi un magazziniere che prende i pezzi dalle macchine e li trasporta di postazione in postazione, fai magari una casella dove selezionare i lavori per ogni operatore disponibile
+After play: Il magazziniere può fare diversi percorsi quindi gli si possono assegnare più percorsi da fare e non solo uno, mentre per quanto riguarda l`informatico fallo che gira per le macchine a controllare i collegamenti alla rete ogni tanto va al rack poi torna in postazione pc, deve essere un po randomico
+After play: miglioriamo la grafica fammela più realistica rimanendo sempre sull`animato
+After play: prendi ispirazione da Stardew Valley e Graveyard Keeper 2 per la grafica di gioco
+After play: devi mischiare un po i due giochi e modifica interamente la grafica di tutto il gioco mi sembra rimasta all`inizio
+After play: Ok ho pensato a come proseguire con la storia ci sarà un video intro che sorvola la cittadina arriva nella zona industriale ed entra nella piccola fabbrica e torniamo a prima che ti chiedessi di creare il capannone da zero, ritorniamo all’ampliamento del capannone con l’avanzare dei livelli
+After play: La cittadina deve sembrare più disordinata le case sembrano troppo ordinate
+After play: Deve sembrare +1 cittadina europea con chiese edifici storici progettali tu vedi tu come mischiare senza strade a ragnatela come stai facendo ora
+After play: Ok, sperimenta anche con la zona industriale e non fare un taglio così netto tra cittadine e zona industriale, ma fai una cosa un po’ più Smooth no
+After play: Ok, intorno alla zona cittadina e industriale continua col paesaggio metti altre case ovviamente non è raggiungibile con la visuale spostandosi con la visuale però almeno crea senso di completezza del paesaggio
+After play: Ora dobbiamo creare una storia su questo gioco in cui appunto l’azienda con l’avanzare dei livelli si vuole ingrandire e quindi anche la città avanza si creano nuovi edifici si crea la possibilità di acquistare un’altro edificio più grande con l’avanzare dei livelli sempre più grande fino ad arrivare alla fine in cui hai un edificio bello grande una fabbrica è abbastanza grande in cui inserire tutti i macchinari che poi andremo a creare in più in più forme
+After play: Creiamo un sistema di giorni e mesi dove si può avanzare basse, decidi di avanzare velocemente accadono degli imprevisti ai macchinari quali riparazioni o c’è da sostituire appunto macchinario perché è troppo vecchio in questo modo puoi anche far progredire le costruzioni delle fabbriche l’avanzamento della città con l’avanzamento dei giorni in modo che quando arrivi a livello stabilito magari la fabbrica è costruita del tutto e tu puoi acquistarla una volta raggiunto il livello.
+After play: Facciamo che ogni giornata di lavoro duri 8 ore di gioco non effettive e che in quelle ore c’è una minima possibilità di guasti, ecc. e se riesci fai una zona adibita al magazzino in ogni fabbrica ovviamente si ingrandisce anche quella con l’avanzare dei livelli e cambiando fabbrica in cui bisogna rifornirlo ed é cui che aggiungeremo anche l’ufficio nella fabbrica dove si posso controllare lo stock del magazzino e i vari ordini per riempirlo di materiale qualora sia mancante
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 
 **Genre:** management / tycoon con minigiochi (a catena di produzione)
 
-**Controls:** tap per selezionare e piazzare (E o il pulsante Ruota gira l'uscita), strumenti Nastro (trascina per posare), Ruota e Demolisci (tasti 1-3), trascina per muovere la visuale, rotellina o pizzico per lo zoom; nei minigiochi tap e trascinamento *(inferred (strong))*. Col mouse funziona allo stesso modo.
+**Controls:** tap per selezionare e piazzare; fuori strumento Costruisci (trascina un rettangolo), dentro strumenti Operatore e Demolisci (tasti 1-2), trascina per muovere la visuale, rotellina o pizzico per lo zoom; nei minigiochi tap e trascinamento *(inferred (strong))*. Col mouse funziona allo stesso modo.
 
 **Question:** montare, cablare e configurare ogni macchina con i minigiochi, e poi scoprire quale ordine di macchine produce il pezzo migliore, regge come loop rilassante per una sessione di 15-20 minuti? *(guessed)*
 
@@ -32,12 +46,12 @@ After play: Lascia la possibilità di creare come si vuole il capannone ma avvis
 **Intent:** no goal to reach *(you said)* · soft or no failure *(you said)*
 
 ## Look and references
-- Look: fabbrica isometrica in stile base-builder mobile. Il capannone ha pavimento in cemento a piastrelle grigio-azzurre, strisce di sicurezza gialle e nere ai bordi delle celle, muri in mattoni rossi e lucernari. Le macchine CNC sono disegnate come blocchi isometrici con carenatura bianca/grigio chiaro, porta in vetro, pannello di controllo e una spia di stato (verde se lavora, gialla se attende, grigia se spenta). I cavi di rete blu corrono a terra fino al rack del server. Gli operai sono piccoli e in pixel art (sprite 16×16 ingranditi senza sfocatura), con tuta blu e casco giallo, e camminano tra le macchine. Palette: cemento grigio-azzurro (fondo), giallo sicurezza (selezione e accenti), verde (soldi e successo), blu rete (cavi e connessioni), arancione (pezzi in uscita). Dettaglio distintivo: ogni pezzo finito esce dalla macchina e scivola sul nastro fino alla successiva, e sopra l'ultima sale una moneta. Ogni figura è disegnata: niente emoji, niente cerchi semplici.
-- References: Clash of Clans (la visuale isometrica della base e gli edifici dettagliati da toccare); Hay Day (il ritmo calmo, le produzioni a catena, la soddisfazione del raccogliere); Satisfactory (il piazzamento libero delle macchine e dei nastri: ognuno disegna la sua catena).
+- Look: fabbrica isometrica in stile base-builder mobile. Il capannone ha pavimento in cemento a piastrelle grigio-azzurre, strisce di sicurezza gialle e nere ai bordi delle celle, muri in mattoni rossi e lucernari. Le macchine CNC sono disegnate come blocchi isometrici con carenatura bianca/grigio chiaro, porta in vetro, pannello di controllo e una spia di stato (verde se lavora, gialla se attende, grigia se spenta). I cavi di rete blu corrono a terra fino al rack del server. Gli operai sono piccoli e in pixel art (sprite 16×16 ingranditi senza sfocatura), con tuta blu e casco giallo, e camminano tra le macchine. Palette: cemento grigio-azzurro (fondo), giallo sicurezza (selezione e accenti), verde (soldi e successo), blu rete (cavi e connessioni), arancione (pezzi in uscita). Dettaglio distintivo: ogni pezzo finito esce dalla macchina e scivola sul nastro fino alla successiva, e sopra l'ultima sale una moneta. (After play) Più realistico ma sempre animato: facce sfumate dalla luce, ombre morbide, cemento con macchie, mattoni di toni diversi, vetri con riflessi, spie che brillano, prato a più toni con fili d'erba, alberi a chiome tonde ombreggiate, tetti a shed in lamiera; i personaggi restano in pixel art con contorno scuro. (After play) Tutto il mondo in pixel art alla stessa scala dei personaggi, palette calda e terrosa con luce dorata di tardo pomeriggio, contorni marrone scuro, pannelli dell'interfaccia in legno. (After play) Grafica rifatta mescolando i due: dentro pavimento in assi di legno, pareti con zoccolo di pietra e assi, mensole, attrezzi appesi, avvisi e lanterne, pozze di luce calda; macchine in smalto crema e ferro con rivetti su basamento di legno; fuori capannoni tipo fienile (assi, pietra, tegole scure, portone con croce), vialetti di terra, cespugli, sassi, fiori e staccionata; ciclo giorno-notte con finestre e lanterne accese; interfaccia a tavole di legno con chiodi. Ogni figura è disegnata: niente emoji, niente cerchi semplici.
+- References: Stardew Valley e Graveyard Keeper (pixel art accogliente, colori caldi e terrosi, interfaccia in legno: lo spirito, non la loro grafica); Clash of Clans (la visuale isometrica della base e gli edifici dettagliati da toccare); Hay Day (il ritmo calmo, le produzioni a catena, la soddisfazione del raccogliere); Satisfactory (il piazzamento libero delle macchine e dei nastri: ognuno disegna la sua catena).
 - View: 2.5D isometrica · Camera: isometrica dall'alto, trascinamento e zoom.
 
 ## First minute
-(After play) Si apre su un prato pulito: l'operaio-guida chiede di disegnare il capannone; si trascina un rettangolo (6×5 consigliato), lo si tocca per entrare e si piazzano Rack, Magazzino e Cassa gratis; poi la Troncatrice, i tre minigiochi e i nastri dal Magazzino alla Cassa. Prima versione:
+(After play) Si apre su un prato pulito: l'operaio-guida chiede di disegnare il capannone; si trascina un rettangolo (6×5 consigliato), lo si tocca per entrare e si piazzano Magazzino e Cassa gratis; poi la Troncatrice (Montaggio e Configurazione) e un operatore sopra: le barre arrivano dal magazzino interno e i pezzi finiti vanno alla Cassa. Prima versione:
 Si apre su un capannone quasi vuoto, con un operaio pixel che saluta e 500 monete. Una freccia indica il negozio: compri la Troncatrice CNC e la piazzi su una cella (il fantasma verde mostra dove va, si sente il "clack"). Parte il minigioco Montaggio: tocchi i bulloni nell'ordine indicato prima che il tempo finisca, e il risultato dà una percentuale, per esempio 92%. Poi il minigioco Rete: trascini il cavo dal rack alla macchina su una griglia, girando intorno agli ostacoli. Poi il minigioco Configurazione: fermi un ago su una zona verde per impostare velocità e avanzamento. La macchina si accende, sforna barre tagliate e salgono le prime monete. Con quei soldi compri il Tornio CNC, lo metti dopo la troncatrice sul nastro e il pezzo cambia in "Perno tornito", che vale il triplo: è qui che si capisce il gioco.
 
 ## Challenge
@@ -55,14 +69,17 @@ Nessun fallimento *(you said)*. La sfida è di ottimizzazione: verso il 3°-5° 
 - Nessun fallimento *(you said)*: si gioca e si cresce, con salvataggio automatico.
 
 ## Features
-- [x] Esterno: prato pulito visto dall'alto dove disegni tu le pareti del capannone trascinando rettangoli: uno attaccato a un capannone lo allarga (forme a L, a U), uno staccato ne crea un altro (fino a 4, staccati di almeno una casella); un pezzo attaccato deve avere un collegamento largo almeno 3×2 per far passare i nastri, altrimenti il gioco avvisa e non lo costruisce; più è grande più costa, limite di celle che cresce col livello; toccandone uno ci entri
+- [x] Video intro: sorvolo di un borgo europeo (piazza con fontana, chiesa con campanile, municipio con orologio e portico, palazzine colorate a schiera lungo vie lastricate tortuose, fiume con ponte di pietra; passaggio graduale verso una zona industriale varia con officine, fabbriche in mattoni con ciminiere, silos, container, piazzali coi camion, torre dell'acqua e ferrovia col treno merci; intorno la campagna fino all'orizzonte: campi coltivati, cascine con fienile, boschetti, frazioni lungo le strade e il fiume che continua), la zona industriale, poi dentro la piccola fabbrica (si può saltare)
 - [x] Dentro ogni capannone si parte vuoti: Magazzino e Cassa da piazzare (il primo di ognuno gratis); il Rack di rete si sblocca al livello 3
 - [x] Una macchina si costruisce con Montaggio e Configurazione e lavora subito; il collegamento in rete (minigioco Rete) lo sceglie il giocatore dalla macchina e la fa rendere +10% all'inizio (fino a +25% con la Crimpatrice al massimo)
-- [x] Capannone isometrico a griglia con trascinamento e zoom, piazzamento libero con anteprima e rotazione dell'uscita
-- [x] Nastri trasportatori posati trascinando, Magazzini barre e Casse vendita acquistabili: ogni giocatore disegna le sue linee
+- [x] Storia in 5 capitoli, 5 sedi sempre più grandi (capannone di legno 6×5, officina di mattoni 8×6, stabilimento 10×8, fabbrica moderna 13×9, grande stabilimento 16×12): con il livello si compra la sede nuova (Negozio > Sede), una scena vola dalla vecchia alla nuova con il testo del capitolo e le macchine traslocano
+- [x] Calendario con giorni e mesi, tempo a x1, x3, x8: col tempo veloce più imprevisti (guasti da riparare col minigioco, macchine vecchie da sostituire); i cantieri della sede successiva e della città avanzano coi giorni e la sede si compra con livello e cantiere finito
+- [x] La città cresce con l'azienda: scuola, stazione merci, uffici di vetro, supermercato, stadio e case nuove; il prossimo edificio si vede come cantiere con la gru
+- [x] Interni diversi per sede: legno, cemento e mattoni, resina con pareti metalliche e corsie gialle
+- [x] Squadra (2 persone all'inizio, +1 per livello), ognuna con un lavoro scelto in una casella: Operatore macchina (sta sulla macchina e la fa lavorare), Magazziniere (porta a piedi i pezzi dal Magazzino alle macchine e alla Cassa, sui percorsi che gli assegni: uno, alcuni o tutti), Informatico (gira a caso tra le macchine a controllare i collegamenti, ogni tanto al Rack, poi torna alla Postazione PC: con lui la rete resta attiva); ogni lavoro che serve deve avere qualcuno, altrimenti il gioco avvisa
 - [x] Tutorial iniziale: l'operaio-guida e le frecce accompagnano dal disegno del capannone alle prime vendite
 - [x] 5 macchine CNC sbloccabili per livello: Troncatrice, Tornio, Fresa, Foratrice, Centro di lavoro 5 assi *(guessed)*
-- [x] Linee di produzione: l'ordine in cui il pezzo attraversa le macchine decide il pezzo (ricette), con un ricettario che si riempie scoprendole
+- [x] Ogni macchina sceglie cosa lavora (barre grezze o il pezzo di un'altra macchina): la catena decide il pezzo (ricette) senza mettere le macchine in serie; i pezzi finiti vanno alla Cassa; ricettario che si riempie scoprendole
 - [x] 3 minigiochi: Montaggio (bulloni in ordine) e Configurazione (ago nella zona verde) per costruire, Rete (percorso del cavo su griglia) quando il giocatore decide; la percentuale dipende dal tempo
 - [x] Livelli/XP che sbloccano macchine e ampliamenti del capannone
 - [x] Attrezzi potenziabili (Chiave, Crimpatrice, Tester) che danno più tempo nel loro minigioco
@@ -78,19 +95,22 @@ Nessun fallimento *(you said)*. La sfida è di ottimizzazione: verso il 3°-5° 
 - sistema a livelli che sblocca le macchine · in the slice
 - attrezzi potenziabili che velocizzano i minigiochi · in the slice
 - fabbrica sempre più grande · in the slice
-- piazzamento libero di macchine e catena di costruzione (nastri) · in the slice
+- piazzamento libero di macchine, catena decisa dal giocatore · in the slice
+- squadra con lavori divisi: operatore macchina, magazziniere, informatico · in the slice
+- postazione PC per controllare rete e rack · in the slice
 - capannone espandibile per livello e acquisto, con limiti di spazio · in the slice
-- prato esterno dove si disegnano i capannoni, si entra toccando un edificio · in the slice
+- video intro sulla città fino alla fabbrica · in the slice
+- storia: l'azienda si ingrandisce, nuove sedi sempre più grandi, la città cresce · in the slice
+- giorni e mesi, tempo veloce con imprevisti, cantieri che avanzano coi giorni · in the slice
 - tutorial iniziale per fare i primi soldi · in the slice
 - rack di rete piazzato dal giocatore, sbloccato al livello 3, rete a scelta del giocatore · in the slice
-- capannoni collegati tra loro in forme a U · in the slice
 
 ## Keep
 -
 
 ## Avoid
 - Fallimento o game over (niente fallimento, solo crescita)
-- Fretta e pressione: niente ordini in scadenza, niente guasti a sorpresa
+- Fretta e pressione: niente ordini in scadenza (i guasti ora ci sono, chiesti dopo il gioco: capitano soprattutto se si fa correre il tempo)
 
 ## Out of scope
 - Albero di ricerca: grow it

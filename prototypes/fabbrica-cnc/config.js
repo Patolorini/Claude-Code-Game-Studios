@@ -48,8 +48,10 @@ window.CONFIG = {
   dialsX: { value: 4, min: 1, max: 5, step: 1 },
 
   // ---- Linee di produzione ----
-  beltSpeed: { value: 1.8, min: 0.3, max: 5, step: 0.1 },    // celle al secondo sul nastro (un pezzo per cella)
   spawnGap: { value: 1.2, min: 0.3, max: 5, step: 0.1 },     // s tra una barra grezza e la successiva, per Magazzino
+  stockCap: { value: 8, min: 1, max: 50, step: 1 },          // pezzi massimi di un tipo nel magazzino interno del capannone
+  opsBase: { value: 2, min: 1, max: 10, step: 1 },           // operatori al livello 1
+  opsPerLvl: { value: 1, min: 0, max: 5, step: 1 },          // operatori in più per ogni livello
   qualityBase: { value: 0.5, min: 0, max: 1, step: 0.05 },   // resa = qualityBase + qualità% / 100
 
   // ---- Ricette: monete per pezzo (prima della qualità) ----
@@ -108,17 +110,48 @@ window.CONFIG = {
   toolReqStep: { value: 2, min: 0, max: 5, step: 1 },        // livelli in più per ogni livello attrezzo
 
   // ---- Logistica (piazzamento libero) ----
-  beltCost: { value: 5, min: 0, max: 200, step: 1 },          // monete per cella di nastro (rimborsate se demolito)
   sourceCost: { value: 300, min: 0, max: 5000, step: 10 },    // Magazzino barre in più
   crateCost: { value: 150, min: 0, max: 5000, step: 10 },     // Cassa vendita in più
   logisticsCopyMult: { value: 0.5, min: 0, max: 2, step: 0.05 }, // ogni Magazzino/Cassa in più costa +50%
 
   rackCost: { value: 400, min: 0, max: 5000, step: 10 },      // Rack di rete in più (il primo di ogni capannone è gratis)
-  rackLvl: { value: 3, min: 1, max: 10, step: 1 },           // livello che sblocca il Rack di rete
+  rackLvl: { value: 3, min: 1, max: 10, step: 1 },           // livello che sblocca Rack di rete e Postazione PC
+  pcCost: { value: 300, min: 0, max: 5000, step: 10 },        // Postazione PC in più (la prima di ogni capannone è gratis)
+  magSpeed: { value: 2.6, min: 0.3, max: 6, step: 0.1 },      // celle al secondo di un magazziniere
+  handTime: { value: 0.2, min: 0, max: 3, step: 0.05 },      // s per prendere o posare un pezzo
+  itSpeed: { value: 1.4, min: 0.3, max: 6, step: 0.1 },       // celle al secondo di un informatico
+  itCheckMin: { value: 1.5, min: 0, max: 10, step: 0.1 },     // s minimi che passa a controllare una macchina, il rack o il PC
+  itCheckMax: { value: 4, min: 0, max: 20, step: 0.1 },       // s massimi
+  itMachineOdds: { value: 0.55, min: 0, max: 1, step: 0.05 }, // probabilità di andare a una macchina
+  itRackOdds: { value: 0.2, min: 0, max: 1, step: 0.05 },     // probabilità di andare al rack (il resto: torna al PC)
   netBonus: { value: 0.1, min: 0, max: 2, step: 0.01 },       // resa in più di una macchina in rete al 100%, all'inizio (0.1 = +10%)
   netBonusPerLvl: { value: 0.05, min: 0, max: 1, step: 0.01 }, // in più per ogni livello della Crimpatrice oltre il primo
 
-  // ---- Esterno: prato e capannoni disegnati dal giocatore ----
+  // ---- Sedi della storia: misura (celle) di ogni sede, livello che la sblocca e costo del trasloco ----
+  shed0Cols: { value: 6, min: 3, max: 14, step: 1 },
+  shed0Rows: { value: 5, min: 3, max: 10, step: 1 },
+  shed1Cols: { value: 8, min: 3, max: 14, step: 1 },
+  shed1Rows: { value: 6, min: 3, max: 10, step: 1 },
+  shed1Lvl: { value: 4, min: 1, max: 10, step: 1 },
+  shed1Cost: { value: 1500, min: 0, max: 90000, step: 100 },
+  shed2Cols: { value: 10, min: 3, max: 14, step: 1 },
+  shed2Rows: { value: 8, min: 3, max: 16, step: 1 },
+  shed2Lvl: { value: 6, min: 1, max: 10, step: 1 },
+  shed2Cost: { value: 4000, min: 0, max: 90000, step: 100 },
+  shed3Cols: { value: 13, min: 3, max: 20, step: 1 },
+  shed3Rows: { value: 9, min: 3, max: 16, step: 1 },
+  shed3Lvl: { value: 8, min: 1, max: 10, step: 1 },
+  shed3Cost: { value: 9000, min: 0, max: 90000, step: 100 },
+  shed4Cols: { value: 16, min: 3, max: 20, step: 1 },
+  shed4Rows: { value: 12, min: 3, max: 16, step: 1 },
+  shed4Lvl: { value: 10, min: 1, max: 10, step: 1 },
+  shed4Cost: { value: 18000, min: 0, max: 90000, step: 100 },
+
+  // ---- Video intro ----
+  introLength: { value: 14, min: 4, max: 40, step: 0.5 },     // s del sorvolo sulla città fino alla fabbrica
+  moveLength: { value: 9, min: 3, max: 30, step: 0.5 },       // s del volo dalla vecchia sede alla nuova nel trasloco
+
+  // ---- Esterno (usato dal sorvolo e dalle versioni precedenti) ----
   worldCols: { value: 30, min: 10, max: 60, step: 1 },        // larghezza del prato (caselle)
   worldRows: { value: 24, min: 10, max: 60, step: 1 },        // profondità del prato (caselle)
   worldZoom: { value: 1.0, min: 0.4, max: 3, step: 0.05 },    // zoom iniziale all'esterno
@@ -138,7 +171,7 @@ window.CONFIG = {
   building3Cost: { value: 4000, min: 0, max: 90000, step: 100 },
   building4Lvl: { value: 9, min: 1, max: 10, step: 1 },
   building4Cost: { value: 9000, min: 0, max: 90000, step: 100 },
-  cellsPerWorker: { value: 10, min: 4, max: 50, step: 1 },    // un operaio ogni tot celle di capannone
+  cellsPerWorker: { value: 60, min: 4, max: 200, step: 1 },   // un muratore in più ogni tot celle di capannone
 
   // ---- Obiettivi ----
   goalCoins: { value: 100, min: 0, max: 2000, step: 10 },    // monete premio (x numero obiettivo/3+1)
@@ -150,5 +183,30 @@ window.CONFIG = {
   zoomStart: { value: 1.75, min: 0.5, max: 3, step: 0.05 },
   panSpeed: { value: 420, min: 50, max: 2000, step: 10 },    // px/s con le frecce
   workerSpeed: { value: 1.3, min: 0.2, max: 5, step: 0.1 },  // celle al secondo
-  workers: { value: 3, min: 1, max: 8, step: 1 },            // operai iniziali (+1 per ogni ampliamento)
+  dayLength: { value: 120, min: 20, max: 1800, step: 10 },   // s reali di una giornata lavorativa (8 ore di gioco, 08:00-16:00) a velocità x1
+  nightDark: { value: 0.4, min: 0, max: 0.8, step: 0.05 },    // quanto si scurisce di notte
+  // ---- Calendario, velocità e imprevisti ----
+  speedMid: { value: 3, min: 1, max: 20, step: 1 },          // velocità del secondo pulsante
+  speedFast: { value: 8, min: 1, max: 40, step: 1 },         // velocità del terzo pulsante
+  breakBase: { value: 0.003, min: 0, max: 0.2, step: 0.001 }, // probabilità ogni ora di lavoro che una macchina si guasti (a x1, nuova)
+  breakFastMult: { value: 3, min: 1, max: 10, step: 0.5 },    // quanto aumentano i guasti col tempo veloce (alla velocità più alta)
+  ageRef: { value: 60, min: 5, max: 400, step: 5 },          // giorni dopo cui una macchina si guasta il doppio
+  maxAge: { value: 120, min: 10, max: 1000, step: 5 },        // giorni dopo cui una macchina è troppo vecchia e va sostituita
+  replaceCost: { value: 0.6, min: 0, max: 2, step: 0.05 },    // quota del prezzo per sostituire una macchina vecchia
+  // ---- Magazzino e ufficio ----
+  barsStart: { value: 40, min: 0, max: 500, step: 5 },        // barre in magazzino all'inizio
+  barCost: { value: 1, min: 0, max: 100, step: 1 },           // monete per barra ordinata
+  barsPerCell: { value: 25, min: 1, max: 100, step: 1 },      // barre che stanno in una cella della zona magazzino
+  deliveryHours: { value: 2, min: 0, max: 24, step: 0.5 },    // ore di gioco perché arrivi un ordine
+  autoBelow: { value: 0.25, min: 0, max: 0.9, step: 0.05 },   // il riordino automatico scatta sotto questa quota del magazzino
+  wh0W: { value: 2, min: 1, max: 8, step: 1 }, wh0H: { value: 1, min: 1, max: 8, step: 1 }, // zona magazzino per sede (celle)
+  wh1W: { value: 2, min: 1, max: 8, step: 1 }, wh1H: { value: 2, min: 1, max: 8, step: 1 },
+  wh2W: { value: 3, min: 1, max: 8, step: 1 }, wh2H: { value: 2, min: 1, max: 8, step: 1 },
+  wh3W: { value: 3, min: 1, max: 8, step: 1 }, wh3H: { value: 3, min: 1, max: 8, step: 1 },
+  wh4W: { value: 4, min: 1, max: 8, step: 1 }, wh4H: { value: 3, min: 1, max: 8, step: 1 },
+  build1Days: { value: 8, min: 0, max: 200, step: 1 },        // giorni di cantiere della sede del capitolo 2
+  build2Days: { value: 14, min: 0, max: 200, step: 1 },
+  build3Days: { value: 20, min: 0, max: 200, step: 1 },
+  build4Days: { value: 28, min: 0, max: 200, step: 1 },
+  workers: { value: 1, min: 0, max: 8, step: 1 },            // muratori che costruiscono le macchine, per capannone
 };
