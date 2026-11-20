@@ -2278,7 +2278,7 @@ function drawGoalChip(t, LX) { // a small button under the level; tap it to read
   wrapText(msg, bx + 15, y + 62, bw - 30, 16, '#fff', 22, 'left');
   btn(bx, y + 40, bw, 22 + lines * 22, () => { state.goalOpen = false; sfx.click(); });
 }
-function openPanel(id) { state.fromSchema = false; if (id === 'store' || id === 'office') state.whSite = F ? F.id : null; if (id === 'crew') { state.crewSite = F ? F.id : null; state.movePick = null; state.jobPick = null; } if (id === 'skills') { state.webView = 'map'; state.webPan = { x: 0, y: 0 }; } state.panel = id; state.placing = null; state.tool = null; state.demo = null; state.wtool = null; state.wplacing = null; }
+function openPanel(id) { state.supMat = null; state.fromSchema = false; if (id === 'store' || id === 'office') state.whSite = F ? F.id : null; if (id === 'crew') { state.crewSite = F ? F.id : null; state.movePick = null; state.jobPick = null; } if (id === 'skills') { state.webView = 'map'; state.webPan = { x: 0, y: 0 }; } state.panel = id; state.placing = null; state.tool = null; state.demo = null; state.wtool = null; state.wplacing = null; }
 const fitMemo = { k: null, v: {} };
 function fitsSomewhere(tp, mk) { // is there a free spot for this footprint in the site you are in? (worked out once per site layout)
   const k = F.id + ':' + Object.keys(F.grid).length + ':' + F.machines.map(m => m.c + ',' + m.r + ',' + (m.mk || 1) + ',' + (m.dir || 0)).join(';');
@@ -4271,6 +4271,27 @@ function drawOfficePanel(t) { // the office PCs: stock by material, then buy: pi
 // ---- Ordine multiplo: several materials in one go; how many kinds grows with the site, how many bars with the warehouse
 const cartStep = b => Math.max(5, Math.round(whCap(b) / tune.cartSteps / 5) * 5);
 const cartKinds = b => tune['multiMat' + b.stage];
+function drawSupMenu(P, mid) { // every supplier of one material this week: price, trend, delivery; pick one or leave it automatic
+  const M = matOf(mid), wk = weekNum(), sups = SUPPLIERS.map((s2, k) => k).filter(k => SUPPLIERS[k].mats.includes(mid)).sort((a, c) => supPrice(a, mid) - supPrice(c, mid));
+  const fast = sups.slice().sort((a, c) => supHours(a) - supHours(c))[0], cur = supOf(mid), auto = (state.supPick || {})[mid] == null;
+  ctx.fillStyle = 'rgba(8,12,18,0.6)'; ctx.fillRect(P.x, P.y, P.w, P.h); btn(P.x, P.y, P.w, P.h, () => { state.supMat = null; });
+  const w = 640, h = 150 + sups.length * 56, x = P.x + (P.w - w) / 2, y = P.y + Math.max(60, (P.h - h) / 2);
+  rrect(x, y, w, h, 14, HT().frame, M.col, 3); btn(x, y, w, h, () => {});
+  rrect(x + 20, y + 22, 34, 22, 4, M.col, '#1b1b1b', 1.5); text(`Fornitori di ${M.name.toLowerCase()} · settimana ${wk + 1}`, x + 66, y + 33, 19, '#fff', 'left');
+  text(`I prezzi cambiano tra ${daysTxt(7 - (dayNum() % 7))}`, x + w - 20, y + 33, 12, '#ffe08a', 'right');
+  button(auto ? '✓ Automatico: sempre il più conveniente' : 'Automatico: sempre il più conveniente', x + 20, y + 60, w - 40, 40, () => { if (state.supPick) delete state.supPick[mid]; state.supMat = null; sfx.click(); }, { color: auto ? '#7ef0a0' : '#e6e1d3', size: 14, name: 'supAuto' });
+  sups.forEach((si, k) => {
+    const yy = y + 112 + k * 56, pr = supPrice(si, mid), prev = supPrice(si, mid, wk - 1), on = !auto && si === cur, up = pr > prev + 0.004, down = pr < prev - 0.004;
+    rrect(x + 20, yy, w - 40, 48, 10, on ? 'rgba(91,199,255,0.22)' : HT().card, on ? '#5bc7ff' : 'rgba(255,255,255,0.1)', on ? 2.5 : 1);
+    text(SUPPLIERS[si].name, x + 36, yy + 17, 15, '#fff', 'left');
+    const tags = [k === 0 ? ['il più conveniente', '#4caf6a'] : null, si === fast ? ['il più veloce', '#3d8fd6'] : null].filter(Boolean);
+    let tx = x + 36; for (const [lab, col] of tags) { ctx.font = `bold 10px ${FONT}`; const tw = ctx.measureText(lab).width + 12; rrect(tx, yy + 28, tw, 15, 5, col); text(lab, tx + tw / 2, yy + 35, 10, '#fff'); tx += tw + 6; }
+    text(pr.toFixed(2).replace('.', ',') + ' a barra', x + w - 230, yy + 24, 16, '#ffe08a', 'right');
+    poly(up ? [[x + w - 222, yy + 30], [x + w - 212, yy + 30], [x + w - 217, yy + 18]] : down ? [[x + w - 222, yy + 18], [x + w - 212, yy + 18], [x + w - 217, yy + 30]] : [[x + w - 223, yy + 23], [x + w - 211, yy + 23], [x + w - 211, yy + 25], [x + w - 223, yy + 25]], up ? '#ff8a7a' : down ? '#7ef0a0' : '#9aa4ad');
+    text(`arriva in ${hoursTxt(supHours(si))}`, x + w - 36, yy + 24, 13, '#cfd6dd', 'right');
+    btn(x + 20, yy, w - 40, 48, () => { state.supPick = state.supPick || {}; state.supPick[mid] = si; state.supMat = null; sfx.click(); toast(`${M.name}: ora da ${SUPPLIERS[si].name}`, '#bfe3ff'); }, 'supPick' + k);
+  });
+}
 function supOf(mid) { const k = (state.supPick || {})[mid]; return k != null && SUPPLIERS[k] && SUPPLIERS[k].mats.includes(mid) ? k : cheapest(mid); } // the week's cheapest, unless you picked one
 function drawCart(P, b, t) {
   const C = state.cart = state.cart && state.cart.b === b.id ? state.cart : { b: b.id, n: {} }, wh = whOf(b);
@@ -4278,7 +4299,7 @@ function drawCart(P, b, t) {
   const sum = () => Object.values(C.n).reduce((a, n) => a + n, 0), chosen = () => Object.keys(C.n).filter(k => C.n[k] > 0);
   const x0 = P.x + 24, w0 = P.w - 48, autos = autoMatsOf(b);
   text(`Settimana ${weekNum() + 1}: i prezzi cambiano tra ${daysTxt(7 - (dayNum() % 7))} · fino a ${kinds} ${kinds === 1 ? 'materiale' : 'materiali'} per ordine`, x0, P.y + 128, 13, '#ffe08a', 'left');
-  text('"Auto" riordina da solo quel materiale quando scende · il fornitore è il più conveniente, tocca il nome per sceglierne un altro', x0, P.y + 148, 11, '#cfd6dd', 'left');
+  text('"Auto" riordina da solo quel materiale quando scende · tocca un materiale per vedere tutti i suoi fornitori', x0, P.y + 148, 11, '#cfd6dd', 'left');
   let cost = 0;
   MATS.forEach((m, i) => {
     const y = P.y + 164 + i * 60, open = matOpen(m), si = supOf(m.id), pr = supPrice(si, m.id), n = C.n[m.id] || 0, have = wh.stock[m.id] || 0, on = !!autos[m.id];
@@ -4291,9 +4312,9 @@ function drawCart(P, b, t) {
     // supplier: tap to pick another
     const sups = SUPPLIERS.map((s2, k) => k).filter(k => SUPPLIERS[k].mats.includes(m.id)).sort((a, c) => supPrice(a, m.id) - supPrice(c, m.id));
     rrect(x0 + 200, y + 8, 300, 36, 8, 'rgba(0,0,0,0.2)', 'rgba(255,255,255,0.12)', 1);
-    text(`${SUPPLIERS[si].name}${si === sups[0] ? ' · più conveniente' : ''}`, x0 + 212, y + 19, 11, si === sups[0] ? '#9ce8b4' : '#ffe08a', 'left');
+    text(`${SUPPLIERS[si].name}${si === sups[0] ? ' · più conveniente' : ''}  ▸`, x0 + 212, y + 19, 11, si === sups[0] ? '#9ce8b4' : '#ffe08a', 'left');
     text(`${pr.toFixed(2).replace('.', ',')} a barra · arriva in ${hoursTxt(supHours(si))}`, x0 + 212, y + 34, 10, '#cfd6dd', 'left');
-    btn(x0 + 200, y + 8, 300, 36, () => { state.supPick = state.supPick || {}; state.supPick[m.id] = sups[(sups.indexOf(si) + 1) % sups.length]; sfx.click(); }, 'sup_' + m.id);
+    btn(x0, y, 500, 52, () => { state.supMat = m.id; sfx.click(); }, 'sup_' + m.id); // the whole material opens its suppliers
     const full = !n && chosen().length >= kinds, left = room - sum(), lim = () => toast(`In ${b.name} un ordine può avere al massimo ${kinds} ${kinds === 1 ? 'materiale' : 'materiali'}`, '#ffb35b');
     button('−', x0 + w0 - 470, y + 8, 48, 36, () => { C.n[m.id] = Math.max(0, n - step); if (!C.n[m.id]) delete C.n[m.id]; sfx.click(); }, { enabled: n > 0, size: 20, name: 'cm_' + m.id });
     text(String(n), x0 + w0 - 392, y + 26, 19, n ? '#fff' : '#7d8790');
@@ -4309,6 +4330,7 @@ function drawCart(P, b, t) {
     let got = 0; for (const k of ch) { const before = whOf(b).orders.length; orderBars(b, C.n[k], true, k, supOf(k)); if (whOf(b).orders.length > before) got++; }
     C.n = {}; sfx.click(); toast(got ? `Ordinati ${got} ${got === 1 ? 'materiale' : 'materiali'}: ${got === 1 ? 'arriva un camion' : 'arrivano ' + got + ' camion'}` : whCap(b) - whTotal(b) - onOrder(b) <= 0 ? 'Magazzino pieno, contando gli ordini già in arrivo' : 'Monete insufficienti', got ? '#7ef0a0' : '#ffb35b'); save();
   }, { enabled: s > 0 && state.coins >= cost, color: '#7ef0a0', size: 18, name: 'cartGo' });
+  if (state.supMat && matOpen(matOf(state.supMat))) drawSupMenu(P, state.supMat); // over everything on the page
 }
 // ---- Calendar, speed and surprises ------------------------------------------------------------
 const MONTHS = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
