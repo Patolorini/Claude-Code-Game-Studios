@@ -72,6 +72,8 @@ After play: Dobbiamo migliorare l'assegnazione degli operatori alle proprie mans
 After play: Fai un check con le skills installate in precedenza e guarda cosa si può migliorare (scelti: telefono leggibile, Noah compatto, HUD in alto unificato, ritocchi ai pannelli)
 After play: Vorrei mettere la possibilità di selezionare il calendario e simulare fino ad un giorno specifico selezionato dal giocatore così facendo però le probabilità di guasto aumentano del 50%
 After play: Una volta posizionato il rack ed il pc puoi scegliere che macchinari collegare e fare una sola volta il mini gioco mentre per quanto riguarda i guasti crea anche un mini gioco del guasto della rete dove devi pulire uno schema di collegamenti di rete da letterali BUG
+After play: quando sblocco nuovi macchinari nel ricettacolo non si sbloccano le ricette inerenti a quei macchinari, dal magazzino mettimi la possibilità di switchare all'ufficio per acquistare i pezzi mancanti e da li metti la possibilità di comandare più materiali alla volta (graduale per fabbrica e ampiezza del magazzino), dal magazzino passare da un magazzino all'altro con più fabbriche; la lista operatori a volte assegna ruoli che non servono; togli il tasto 1 Operatore
+After play: togli il pulsante uno e riorganizza la sbarra sotto, poi circa 50 simulazioni dalla a alla z del gioco per trovare bug o migliorie
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 

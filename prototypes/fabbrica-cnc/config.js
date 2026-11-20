@@ -67,6 +67,9 @@ window.CONFIG = {
   bugPerMach: { value: 1, min: 0, max: 5, step: 0.5 },         // BUG in più per ogni macchina in rete
   parBug: { value: 0.8, min: 0.2, max: 4, step: 0.05 },        // s ottimi per schiacciare un BUG
   bugSpeed: { value: 0.16, min: 0.02, max: 1, step: 0.01 },    // velocità dei BUG lungo i cavi (cavi al secondo)
+  multiMat0: { value: 1, min: 1, max: 5, step: 1 }, multiMat1: { value: 2, min: 1, max: 5, step: 1 }, multiMat2: { value: 3, min: 1, max: 5, step: 1 }, // materiali diversi in un solo ordine multiplo, per sede
+  multiMat3: { value: 4, min: 1, max: 5, step: 1 }, multiMat4: { value: 5, min: 1, max: 5, step: 1 },
+  cartSteps: { value: 20, min: 4, max: 100, step: 1 },          // il passo del carrello è il magazzino diviso per questo (più grande il magazzino, più grande il passo)
   opsPerMag: { value: 4, min: 1, max: 10, step: 1 },        // macchine servite da un magazziniere quando la Squadra si organizza da sola
   opsPerLvl: { value: 0.5, min: 0, max: 5, step: 0.25 }, // operatori in più per ogni livello (0,5 = uno ogni due livelli)
   qualityBase: { value: 0.5, min: 0, max: 1, step: 0.05 },   // resa = qualityBase + qualità% / 100
