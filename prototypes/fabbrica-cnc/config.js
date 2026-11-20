@@ -61,7 +61,7 @@ window.CONFIG = {
   skipMaxDays: { value: 60, min: 1, max: 365, step: 1 },        // quanti giorni avanti si possono simulare al massimo
   skipSpeed: { value: 8, min: 1, max: 40, step: 1 },            // passo di tempo della simulazione (non cambia il risultato, solo la precisione)
   skipBudgetMs: { value: 12, min: 2, max: 40, step: 1 },        // millisecondi di calcolo per fotogramma mentre simula
-  netBreakBase: { value: 0.012, min: 0, max: 0.3, step: 0.001 }, // probabilità ogni ora di lavoro che la rete di una sede si riempia di BUG (a x1)
+  netBreakBase: { value: 0.004, min: 0, max: 0.3, step: 0.001 }, // probabilità ogni ora di lavoro che la rete di una sede si riempia di BUG (a x1)
   netItSave: { value: 0.5, min: 0, max: 1, step: 0.05 },       // con un Informatico nella sede i guasti di rete sono moltiplicati per questo
   bugBase: { value: 6, min: 1, max: 30, step: 1 },             // BUG da schiacciare nel minigioco del guasto di rete
   bugPerMach: { value: 1, min: 0, max: 5, step: 0.5 },         // BUG in più per ogni macchina in rete
@@ -70,6 +70,8 @@ window.CONFIG = {
   multiMat0: { value: 1, min: 1, max: 5, step: 1 }, multiMat1: { value: 2, min: 1, max: 5, step: 1 }, multiMat2: { value: 3, min: 1, max: 5, step: 1 }, // materiali diversi in un solo ordine multiplo, per sede
   multiMat3: { value: 4, min: 1, max: 5, step: 1 }, multiMat4: { value: 5, min: 1, max: 5, step: 1 },
   cartSteps: { value: 20, min: 4, max: 100, step: 1 },          // il passo del carrello è il magazzino diviso per questo (più grande il magazzino, più grande il passo)
+  newRecipePieces: { value: 25, min: 0, max: 200, step: 5 },   // la prima volta che produci una ricetta nuova: premio pari a tanti pezzi
+  newRecipeXp: { value: 3, min: 1, max: 10, step: 0.5 },        // e l'esperienza della scoperta moltiplicata per questo
   opsPerMag: { value: 4, min: 1, max: 10, step: 1 },        // macchine servite da un magazziniere quando la Squadra si organizza da sola
   opsPerLvl: { value: 0.5, min: 0, max: 5, step: 0.25 }, // operatori in più per ogni livello (0,5 = uno ogni due livelli)
   qualityBase: { value: 0.5, min: 0, max: 1, step: 0.05 },   // resa = qualityBase + qualità% / 100

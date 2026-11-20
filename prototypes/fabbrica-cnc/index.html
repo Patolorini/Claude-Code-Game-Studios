@@ -34,7 +34,7 @@ const TITLE = 'Fabbrica CNC';
 const CONTROLS = [
   'Tocca o clicca: compra, piazza, costruisci e assegna i lavori',
   'Trascina: sposta la visuale  ·  Rotella o pizzico: zoom',
-  'Dentro: Q squadra (i lavori si danno da qui) · D demolisci · U ufficio · K abilità · B negozio · E città',
+  'Dentro: S schema della fabbrica · Q squadra · D demolisci · U ufficio · K abilità · B negozio · E città',
   'Frecce: sposta · + / -: zoom · F: ferma il tempo · Spazio: ferma l\'ago · P: pausa · M: audio',
 ];
 const clock = window.GAME_CLOCK || { now: () => performance.now() / 1000 }; // a check may inject one
@@ -309,11 +309,11 @@ const GOALS = [
   { text: 'Piazza un Banco barre e una Cassa (Negozio > Logistica)', done: () => anyB(b => hasKind(b, 'src') && hasKind(b, 'crate')) },
   { text: 'Compra la Troncatrice e piazzala nel capannone', done: () => allMachines().length >= 1 },
   { text: 'Costruiscila: montaggio e configurazione', done: () => built('T') },
-  { text: 'Strumento Operatore: metti un operatore sulla Troncatrice', done: () => allMachines().some(m => m.op) },
+  { text: 'Un operatore sulla Troncatrice (si siede da solo)', done: () => allMachines().some(m => m.op) },
   { text: 'Vendi i tuoi primi 5 pezzi', done: () => state.sold >= 5, prog: () => [state.sold, 5] },
   { text: `Livello ${CONFIG.unlockL.value}: un Tornio che lavora le Barre tagliate (Perno tornito)`, done: () => state.found.includes('TL'), prog: () => [Math.min(state.level, tune.unlockL), tune.unlockL] },
-  { text: `Livello ${CONFIG.rackLvl.value}: piazza Rack di rete e Postazione PC`, done: () => anyB(b => hasKind(b, 'rack') && hasKind(b, 'pc')) },
-  { text: 'Squadra (Q): dai a qualcuno il lavoro di Informatico', done: () => state.crew.some(cw => cw.job === 'it') },
+  { text: `Livello ${CONFIG.rackLvl.value}: piazza il Rack di rete (Negozio > Logistica)`, done: () => anyB(b => hasKind(b, 'rack')) },
+  { text: 'Ufficio > Acquisti: metti un materiale su "Auto"', done: () => anyB(b => Object.values(autoMatsOf(b)).some(Boolean)) },
   { text: 'Collega le macchine in rete: tocca il Rack e scegli quali', done: () => allMachines().some(m => m.netPct != null) },
   { text: 'Costruisci la Fresa CNC', done: () => built('F') },
   { text: 'Scopri una ricetta con 3 macchine', done: () => state.found.some(s => s.length >= 3) },
@@ -408,7 +408,7 @@ function serialize() {
     entered: state.entered, cur: Math.max(0, state.buildings.indexOf(F)),
     buildings: state.buildings.map(b => ({
       id: b.id, name: b.name, tiles: [...b.cells], stage: b.stage, grown: b.grown, workers: b.workers.length,
-      lines: b.lines || [], lineSeq: b.lineSeq || 0, netFault: !!b.netFault, layoutV: b.layoutV || null, notched: !!b.notched, store: b.store || {}, keep: b.keep || {}, wh: b.wh ? { ...b.wh, orders: b.wh.orders.concat((b.trucks || []).filter(k => k.ph !== 'out').map(k => ({ n: k.n, at: 0, mat: k.mat || 'acc', sup: k.sup }))) } : null, cells: Object.values(b.grid).filter(o => o.kind !== 'wh' && o.kind !== 'office' && o.kind !== 'pillar' && !(o.kind === 'mach' && !o.main)).map(o => o.kind === 'mach'
+      lines: b.lines || [], lineSeq: b.lineSeq || 0, netFault: !!b.netFault, autoCrew: b.autoCrew !== false, layoutV: b.layoutV || null, notched: !!b.notched, store: b.store || {}, keep: b.keep || {}, wh: b.wh ? { ...b.wh, orders: b.wh.orders.concat((b.trucks || []).filter(k => k.ph !== 'out').map(k => ({ n: k.n, at: 0, mat: k.mat || 'acc', sup: k.sup }))) } : null, cells: Object.values(b.grid).filter(o => o.kind !== 'wh' && o.kind !== 'office' && o.kind !== 'pillar' && !(o.kind === 'mach' && !o.main)).map(o => o.kind === 'mach'
         ? { k: 'mach', c: o.c, r: o.r, id: o.m.id, type: o.m.type, dir: o.m.dir, phase: o.m.phase, pct: o.m.pct, net: o.m.netPct, op: o.m.op, input: o.m.input, age: o.m.age || 0, broken: o.m.broken || null , mk: o.m.mk || 1, line: o.m.line ?? null, mat: o.m.mat || null, last: !!o.m.lineLast }
         : { k: o.kind, c: o.c, r: o.r, dir: o.dir, mat: o.mat }),
     })),
@@ -435,7 +435,7 @@ function load() {
       else if (o.k === 'crate') setCell(o.c, o.r, { kind: 'crate', last: null, bump: 0 });
       else setCell(o.c, o.r, { kind: o.k });
     }
-    b.wh = bd.wh || null; b.store = bd.store || {}; b.keep = bd.keep || {}; b.lines = bd.lines || []; b.lineSeq = bd.lineSeq || 0; b.netFault = !!bd.netFault; b.layoutV = bd.layoutV || null; b.notched = !!bd.notched; layoutZones(b);
+    b.wh = bd.wh || null; b.store = bd.store || {}; b.keep = bd.keep || {}; b.lines = bd.lines || []; b.lineSeq = bd.lineSeq || 0; b.netFault = !!bd.netFault; b.autoCrew = bd.autoCrew !== false; b.layoutV = bd.layoutV || null; b.notched = !!bd.notched; layoutZones(b);
     for (let i = 0; i < (bd.workers || tune.workers); i++) addWorker(false);
   }
   crewSync(); state.cur = Math.min(state.buildings.length - 1, d.cur || 0); F = state.buildings[state.cur]; centerCam();
@@ -1162,14 +1162,14 @@ const powerCap = b => tune['power' + b.stage];
 const crewIn = (b, job) => state.crew.filter(cw => cw.job === job && crewB(cw) === b);
 const freeOps = (b = F) => state.crew.filter(cw => cw.job === 'mach' && cw.m == null && crewB(cw) === b);
 const opsFree = () => freeOps().length;
-const netOk = b => !!b && hasKind(b, 'rack') && hasKind(b, 'pc') && crewIn(b, 'it').length > 0;
+const netOk = b => !!b && hasKind(b, 'rack'); // the rack alone makes the network work; an IT person only keeps the bugs away
 function jobNeeds(b) { // the jobs this building is missing, in words
   const out = [];
   if (b.machines.some(m => m.phase >= 2) && !b.machines.some(m => m.op)) out.push('nessun operatore sulle macchine');
   if (b.machines.some(m => m.op) && !crewIn(b, 'mag').length) out.push('nessun magazziniere: i pezzi restano fermi');
   else { const lone = routesOf(b).find(rt => !crewIn(b, 'mag').some(cw => mayDo(cw, rt.id))); if (lone) out.push(`nessun magazziniere fa il percorso ${lone.label}`); }
   if (b.netFault) out.push('la rete è piena di BUG: tocca il Rack o la PC e ripuliscila');
-  if (b.machines.some(m => m.netPct != null) && !netOk(b)) out.push(!rackOf(b) ? 'manca il Rack di rete: la rete non dà bonus' : !hasKind(b, 'pc') ? 'manca la Postazione PC: la rete non dà bonus' : 'nessun informatico: la rete non dà bonus');
+  if (b.machines.some(m => m.netPct != null) && !netOk(b)) out.push('manca il Rack di rete: la rete non dà bonus');
   return out;
 }
 function inputChoices(m, b) { // what a machine can be set to work: raw bars, or what the other machines here make
@@ -1201,7 +1201,7 @@ function routesOf(b) { // every trip a warehouse worker can be given: feeding a 
   for (const o of staffed) if (o.line != null ? o.lineLast : !used.has(o.input + o.type)) out.push({ id: 's' + o.id, label: `${MACH[o.type].short} > Cassa` });
   return out;
 }
-const mayDo = (cw, id) => !cw || !cw.routes || cw.routes.includes(id);
+const mayDo = (cw, id) => true; // every warehouse worker takes any trip: the lines decide where pieces go
 function findHaul(b, cw) {
   const staffed = b.machines.filter(m => m.op && m.phase >= 2 && !m.broken), used = new Set(staffed.map(m => m.input));
   const srcs = Object.values(b.grid).filter(o => o.kind === 'src'), crates = Object.values(b.grid).filter(o => o.kind === 'crate');
@@ -1259,7 +1259,7 @@ function updateIT(dt) { // IT staff wander: a machine to check its link, now and
   for (const id of Object.keys(F.itw)) if (!mine.some(cw => String(cw.id) === id)) delete F.itw[id];
   for (const cw of mine) {
     let w = F.itw[cw.id];
-    if (!w) { const pc = Object.values(F.grid).find(o => o.kind === 'pc'), p = pc ? nearWalkable(pc, [pc.c, pc.r]) : (walkCells()[0] || [0, 0]); w = F.itw[cw.id] = { c: p[0] + 0.5, r: p[1] + 0.5, path: [], dir: 1, walkT: 0, wait: 1, check: 'pc', going: null }; }
+    if (!w) { const pc = Object.values(F.grid).find(o => o.kind === 'pc') || rackOf(F), p = pc ? nearWalkable(pc, [pc.c, pc.r]) : (walkCells()[0] || [0, 0]); w = F.itw[cw.id] = { c: p[0] + 0.5, r: p[1] + 0.5, path: [], dir: 1, walkT: 0, wait: 1, check: 'pc', going: null }; }
     if (w.path.length) {
       const [tc, tr] = w.path[0], dx = tc - w.c, dy = tr - w.r, d = Math.hypot(dx, dy), sp = tune.itSpeed * dt;
       if (d <= sp) { w.c = tc; w.r = tr; w.path.shift(); } else { w.c += dx / d * sp; w.r += dy / d * sp; }
@@ -1298,7 +1298,8 @@ function sell(it, crate) {
   const mat = it.mat || 'acc', rec = recipeOf(it.ops, mat), q = it.qs.length ? avg(it.qs) : 0, key = pieceKey(it.ops, mat);
   const v = Math.max(1, Math.round(recipeVal(it.ops, mat) * (tune.qualityBase + q)));
   const forJob = jobDeliver(it);
-  if (!forJob && storeOf(F) && F.keep[key] && storePut(F, key, v)) { // set aside in the warehouse instead of sold
+  const asked = jobsOf().offers.some(o => !o.locked && jobKey(o) === key && storedAll(key) < o.qty); // a waiting request wants it: keep it, accepting will deliver at once
+  if (!forJob && storeOf(F) && (F.keep[key] || asked) && storePut(F, key, v)) { // set aside in the warehouse instead of sold
     crate.bump = 1; const [x, y] = iso(crate.c + 0.5, crate.r + 0.5, 72);
     state.floats.push({ wx: x, wy: y, txt: '+1 in magazzino', col: '#bfe3ff', life: 1.4, b: F.id });
     discover(rec, mat); return;
@@ -1318,9 +1319,12 @@ function sell(it, crate) {
 }
 function discover(rec, mat) { // a new recipe: book page, XP and a banner
   if (rec && !state.found.includes(recipeKey(rec))) {
-    state.found.push(recipeKey(rec));
-    addXp(tune.xpRecipe);
-    showBanner('Nuova ricetta: ' + rec.name + '!', `${matOf(mat).name} · ${seqNames(rec.seq)}  ·  ${recipeVal(rec.seq, mat)} monete al pezzo`, '#f0923a');
+    const k = recipeKey(rec), fresh = (state.seenRec || []).includes(k); // it was waiting in the book: the first piece brings a prize
+    state.found.push(k);
+    const prize = fresh ? Math.round(recipeVal(rec.seq, mat) * tune.newRecipePieces) : 0;
+    if (prize) { state.coins += prize; state.earned += prize; }
+    addXp(Math.round(tune.xpRecipe * (fresh ? tune.newRecipeXp : 1)));
+    showBanner('Nuova ricetta: ' + rec.name + '!', prize ? `Primo pezzo prodotto: premio +${fmt(prize)} monete e +${Math.round(tune.xpRecipe * tune.newRecipeXp)} XP` : `${matOf(mat).name} · ${seqNames(rec.seq)}  ·  ${recipeVal(rec.seq, mat)} monete al pezzo`, '#f0923a');
     sfx.ding(); events.push({ type: 'recipe', seq: recipeKey(rec) }); save();
   }
 }
@@ -1420,6 +1424,7 @@ function drawSkillWeb(t) { // a map of chapters (general + one per machine); tap
   const open = id => { state.webView = id; state.webPan = { x: 0, y: 0 }; state.perkSel = null; sfx.click(); };
   // the chapter list, on the left
   const LX = P.x + 18, LY = P.y + 72, LW = 214;
+  button('Attrezzi ▸', LX, P.y + P.h - 68, LW, 46, () => { state.panel = 'tools'; sfx.click(); }, { size: 16, color: '#f2c230', name: 'toTools' }); // the tools live with the skills
   rrect(LX, LY, LW, P.h - 90, 12, 'rgba(0,0,0,0.3)');
   [{ id: 'map', name: 'Panoramica', sub: 'Tutti i capitoli', lvl: 1 }].concat(chs).forEach((c, i) => {
     const y = LY + 8 + i * 64, on = view === c.id, ok = chapterOpen(c), pr = c.id === 'map' ? null : prog(c.id);
@@ -1601,6 +1606,7 @@ function toggleOp(m) {
 }
 function cycleJob(cw) { state.jobPick = cw.id; state.movePick = null; sfx.click(); } // the job box opens the job picker
 function setJob(cw, job, m) { // give someone a job; an operator can be put straight on a chosen machine
+  const b = crewB(cw); if (b && b.autoCrew !== false) { b.autoCrew = false; toast(`Squadra di ${b.name} ora a mano: riaccendi "Automatica" quando vuoi`, '#ffe08a'); }
   if (cw.m != null) { const o = allMachines().find(x => x.id === cw.m); if (o) o.op = false; cw.m = null; }
   if (job !== 'mag') cw.routes = null;
   cw.job = job;
@@ -1612,11 +1618,12 @@ function autoSeat(b) { // free operators sit by themselves at the built machines
   const empty = b.machines.filter(m => m.phase >= 2 && !m.op && !m.broken).sort((x, y) => (x.line == null) - (y.line == null));
   for (const m of empty) { const cw = free.shift(); if (!cw) break; cw.m = m.id; m.op = true; m.present = onShift(); }
 }
-function organizeCrew(b) { // one tap: the right number of people in each job here, keeping whoever already sits at a machine
+function organizeCrew(b, quiet) { // one tap: the right number of people in each job here, keeping whoever already sits at a machine
+  for (const cw of crewOf(b)) { const m = cw.m != null && b.machines.find(x => x.id === cw.m); if (m && m.broken && b.machines.some(x => x.phase >= 2 && !x.broken && !x.op)) { m.op = false; cw.m = null; } } // someone at a broken machine moves to a working one that has nobody
   const ppl = crewOf(b), mach = b.machines.filter(m => m.phase >= 2 && !m.broken);
   const wantOps = Math.min(ppl.length, mach.length);
   const wantMag = mach.length ? Math.min(ppl.length - wantOps > 0 ? Math.max(1, Math.ceil(mach.length / tune.opsPerMag)) : 1, Math.max(1, ppl.length - wantOps)) : 0;
-  const wantIt = b.machines.some(m => m.netPct != null) && hasKind(b, 'pc') && rackOf(b) ? 1 : 0; // an IT person only where a network can work
+  const wantIt = b.machines.some(m => m.netPct != null) && rackOf(b) ? 1 : 0; // optional: only from who is left, it halves the network bugs
   const order = ppl.slice().sort((x, y) => (y.m != null) - (x.m != null) || (y.job === 'mag') - (x.job === 'mag') || (y.job === 'it') - (x.job === 'it'));
   // with few people the machines come first, then one warehouse worker, and the IT person only from who is left
   let mag = wantMag, ops = Math.min(wantOps, Math.max(mach.length ? 1 : 0, ppl.length - mag)), it = Math.min(wantIt, Math.max(0, ppl.length - ops - mag));
@@ -1625,7 +1632,7 @@ function organizeCrew(b) { // one tap: the right number of people in each job he
   for (const cw of order) { if (plan.has(cw)) continue; if (cw.job === 'mag' && mag > 0) { plan.set(cw, 'mag'); mag--; } else if (cw.job === 'it' && it > 0) { plan.set(cw, 'it'); it--; } }
   for (const cw of order) { if (plan.has(cw)) continue; if (ops > 0) { plan.set(cw, 'mach'); ops--; } else if (mag > 0) { plan.set(cw, 'mag'); mag--; } else if (it > 0) { plan.set(cw, 'it'); it--; } else plan.set(cw, 'none'); }
   for (const [cw, j] of plan) if (cw.job !== j) { if (cw.m != null) { const o = allMachines().find(x => x.id === cw.m); if (o) o.op = false; cw.m = null; } cw.job = j; if (j !== 'mag') cw.routes = null; }
-  autoSeat(b); sfx.click(); save();
+  autoSeat(b); if (quiet) return; sfx.click(); save();
   const c = j => ppl.filter(cw => cw.job === j).length;
   const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   toast(`${b.name}: ${pl(c('mach'), 'operatore', 'operatori')}, ${pl(c('mag'), 'magazziniere', 'magazzinieri')}, ${pl(c('it'), 'informatico', 'informatici')}, ${pl(c('none'), 'libero', 'liberi')}`, '#7ef0a0');
@@ -1803,8 +1810,8 @@ function drawNetPick(t) {
   const ms = F.machines.filter(m => m.phase >= 2), pick = state.netPick || [], rack = !!rackOf(F), pc = hasKind(F, 'pc'), it = crewIn(F, 'it').length > 0;
   const P = panelFrame('Rete · quali macchine colleghi?', 960, 600, () => { state.panel = null; });
   // what the network needs to give its bonus
-  const need = [[rack, 'Rack di rete'], [pc, 'Postazione PC'], [it, 'un Informatico']];
-  need.forEach(([ok, lab], i) => { const x = P.x + 30 + i * 300; rrect(x, P.y + 74, 286, 36, 10, ok ? 'rgba(126,240,160,0.15)' : 'rgba(216,67,58,0.2)', ok ? '#7ef0a0' : '#ff8a7a', 1.5); text(`${ok ? '✓' : '✗'} ${lab}`, x + 143, P.y + 92, 15, ok ? '#9ce8b4' : '#ffb3a8'); });
+  const need = [[rack, 'Rack di rete (serve)'], [it, it ? 'Informatico: tiene lontani i BUG' : 'Informatico: facoltativo, dimezza i BUG']];
+  need.forEach(([ok, lab], i) => { const x = P.x + 30 + i * 450; if (i === 1 && !ok) { rrect(x, P.y + 74, 436, 36, 10, 'rgba(255,255,255,0.06)', '#59626b', 1.5); text(lab, x + 218, P.y + 92, 15, '#cfd6dd'); return; } x; rrect(x, P.y + 74, 436, 36, 10, ok ? 'rgba(126,240,160,0.15)' : 'rgba(216,67,58,0.2)', ok ? '#7ef0a0' : '#ff8a7a', 1.5); text(`${ok ? '✓' : '✗'} ${lab}`, x + 218, P.y + 92, 15, ok ? '#9ce8b4' : '#ffb3a8'); });
   if (F.netFault) text('La rete è piena di BUG: prima ripuliscila (tocca il Rack)', P.x + P.w / 2, P.y + 126, 14, '#ff8a7a');
   else text('Un solo minigioco del cavo collega tutte le macchine spuntate: il risultato vale per ognuna', P.x + P.w / 2, P.y + 126, 14, '#cfd6dd');
   if (!ms.length) text('Qui non c\'è ancora nessuna macchina finita', P.x + P.w / 2, P.y + 260, 16, '#9aa4ad');
@@ -1922,6 +1929,92 @@ function drawBugGame(t) {
   const R = (SMALL() ? 44 : 32);
   for (const g of mg.bugs) { if (!g.alive) continue; const [gx, gy, a] = bugPos(mg, g); drawBug(gx, gy, a, g.ph); btn(gx - R, gy - R, R * 2, R * 2, () => squash(g), 'bug' + mg.bugs.indexOf(g)); }
   if (mg.flash > 0) { ctx.fillStyle = `rgba(216,67,58,${mg.flash})`; ctx.fillRect(x + 3, y + 60, w - 6, h - 63); }
+}
+// ---- Schema: the whole factory as a flow diagram — warehouse, benches, machines line by line, crates, network — and every node opens what it is about
+function cycleBench(o) { // the material of a bench comes from the line that uses it: the schema shows the lines
+  state.panel = 'recipes'; state.recView = 'lines'; return;
+  const open = MATS.filter(matOpen), i = open.findIndex(m => m.id === (o.mat || 'acc')), nx = open[(i + 1) % open.length];
+  if (linesOf(F).some(l => l.mat === (o.mat || 'acc')) && Object.values(F.grid).filter(b => b.kind === 'src' && (b.mat || 'acc') === (o.mat || 'acc')).length === 1) return toast('Questo banco serve a una linea: fermala prima di cambiare materiale', '#ffb35b');
+  o.mat = nx.id; o.stock = []; sfx.click(); save(); toast(`Banco barre: ora prende ${nx.name.toLowerCase()}`, '#bfe3ff');
+}
+function schemaStatus(m) {
+  if (m.broken) return [m.broken === 'old' ? 'troppo vecchia' : 'guasta', '#ff8a7a'];
+  if (m.phase < 2) return ['da costruire', '#9aa4ad'];
+  if (!m.op) return ['senza operatore', '#ffb35b'];
+  if (m.present === false) return [onShift() ? 'operatore in arrivo' : 'fuori turno', '#9fb3d6'];
+  if (m.cur) return ['lavora', '#7ef0a0'];
+  return ['aspetta pezzi', '#f2c230'];
+}
+function drawSchema(t) {
+  const b = F; if (!b) { state.panel = null; return; }
+  const P = panelFrame(`Schema · ${b.name}`, 1220, 650, () => { state.panel = null; });
+  const L = linesOf(b), benches = Object.values(b.grid).filter(o => o.kind === 'src'), crates = Object.values(b.grid).filter(o => o.kind === 'crate');
+  const rack = rackOf(b), pc = Object.values(b.grid).find(o => o.kind === 'pc');
+  // the toolbar of the schema
+  button('Linee e ricette ▸', P.x + 20, P.y + 70, 190, 36, () => { state.panel = 'recipes'; state.recView = 'lines'; sfx.click(); }, { size: 13, color: '#7ef0a0', name: 'scLines' });
+  button('Squadra ▸', P.x + 218, P.y + 70, 130, 36, () => { openPanel('crew'); sfx.click(); }, { size: 13, name: 'scCrew' });
+  button('Demolisci', P.x + 356, P.y + 70, 130, 36, () => { state.panel = null; setTool('demo'); toast('Tocca quello che vuoi demolire · tocca di nuovo Schema per chiudere', '#ffb35b'); }, { size: 13, color: '#ff8a7a', name: 'scDemo' });
+  // the network, top right
+  const nx = P.x + P.w - 470;
+  const net = (x, lab, ok, sub, fn, name) => { rrect(x, P.y + 68, 140, 40, 9, ok ? 'rgba(91,199,255,0.18)' : 'rgba(0,0,0,0.3)', b.netFault && ok ? '#ff8a7a' : ok ? '#5bc7ff' : '#59626b', 2); text(lab, x + 70, P.y + 82, 13, ok ? '#fff' : '#7d8790'); text(sub, x + 70, P.y + 98, 10, b.netFault && ok ? '#ff8a7a' : '#9aa4ad'); btn(x, P.y + 68, 140, 40, fn, name); };
+  net(nx, 'Rack di rete', !!rack, rack ? (b.netFault ? 'pieno di BUG!' : `${b.machines.filter(m => m.netPct != null).length} macchine in rete`) : 'da comprare', () => { if (!rack) { openPanel('shop'); state.shopTab = 1; } else if (b.netFault) startBugs(b); else openNetPick(); }, 'scRack');
+  net(nx + 150, 'Informatico', crewIn(b, 'it').length > 0, crewIn(b, 'it').length ? 'tiene lontani i BUG' : 'facoltativo', () => openPanel('crew'), 'scPc');
+  net(nx + 300, 'Corrente', true, `${powerUsed(b)}/${powerCap(b)} kW`, () => toast(`Corrente di ${b.name}: ${powerUsed(b)} kW usati su ${powerCap(b)}`, '#ffe08a'), 'scPow');
+  // the diagram area
+  const ax = P.x + 20, ay = P.y + 120, aw = P.w - 40, ah = P.h - 140;
+  rrect(ax, ay, aw, ah, 12, '#14202c', '#2e4458', 1.5);
+  ctx.strokeStyle = 'rgba(91,199,255,0.07)'; ctx.lineWidth = 1; for (let gx = ax + 24; gx < ax + aw; gx += 24) { ctx.beginPath(); ctx.moveTo(gx, ay + 2); ctx.lineTo(gx, ay + ah - 2); ctx.stroke(); }
+  const free = b.machines.filter(m => m.line == null), lineMats = new Set(L.map(l => l.mat)), spareBench = benches.filter(o => !lineMats.has(o.mat || 'acc'));
+  const freeRows = Math.max(1, Math.ceil((free.length + spareBench.length) / 7)), rows = L.length + freeRows;
+  const rh = Math.max(56, Math.min(96, (ah - 30) / rows)), nh = Math.min(64, rh - 14);
+  const colX = k => ax + 330 + k * 148, NW = 128;
+  const arrow = (x1, y1, x2, y2, col, moving, label) => {
+    line([x1, y1], [x2 - 8, y2], col, 3); poly([[x2, y2], [x2 - 10, y2 - 6], [x2 - 10, y2 + 6]], col);
+    if (moving) for (let k = 0; k < 2; k++) { const u = ((t * 0.6 + k / 2) % 1); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x1 + (x2 - x1) * u, y1 + (y2 - y1) * u, 3, 0, Math.PI * 2); ctx.fill(); }
+    if (label) text(label, (x1 + x2) / 2, y1 - 10, 9, '#cfd6dd');
+  };
+  // the warehouse of bars, far left, feeding every bench
+  const wh = whOf(b), whx = ax + 14, why = ay + 14, whh = ah - 28;
+  rrect(whx, why, 130, whh, 10, 'rgba(167,176,184,0.12)', '#a7b0b8', 2);
+  text('Magazzino barre', whx + 65, why + 18, 12, '#fff'); text(`${whTotal(b)}/${whCap(b)}`, whx + 65, why + 36, 11, whTotal(b) < whCap(b) * tune.autoBelow ? '#ff8a7a' : '#cfd6dd');
+  MATS.filter(matOpen).forEach((m, i) => { const y = why + 54 + i * 26; rrect(whx + 10, y, 18, 12, 2, m.col, '#1b1b1b', 1); text(`${m.name} ${wh.stock[m.id] || 0}`, whx + 34, y + 6, 11, '#e6e1d3', 'left'); });
+  if (onOrder(b)) text(`+${onOrder(b)} in arrivo`, whx + 65, why + whh - 40, 10, '#5bc7ff');
+  text('tocca: ufficio', whx + 65, why + whh - 18, 10, '#9aa4ad');
+  btn(whx, why, 130, whh, () => { openPanel('office'); state.officeTab = 'buy'; }, 'scWh');
+  const node = (x, y, w, h, fill, edge, draw, fn, name) => { rrect(x, y, w, h, 10, fill, edge, 2); draw(); btn(x, y, w, h, fn, name); };
+  const machineNode = (m, x, y, name) => {
+    const [st, col] = schemaStatus(m);
+    node(x, y, NW, nh, 'rgba(255,255,255,0.06)', col, () => {
+      machineIcon(m.type, x + 26, y + nh - 6, Math.min(0.42, nh / 150), { status: m.cur ? 'work' : m.op ? 'wait' : 'off', t, mk: m.mk });
+      text(MACH[m.type].short + MK_NAME[mkOf(m) - 1], x + 52, y + 16, 12, '#fff', 'left');
+      text(st, x + 52, y + 32, 10, col, 'left');
+      if (nh > 46) text(m.netPct != null ? `rete ${m.netPct}%` : `qualità ${Math.round(m.quality * 100)}%`, x + 52, y + 47, 9, m.netPct != null ? '#5bc7ff' : '#9aa4ad', 'left');
+      if (m.cur) { ctx.fillStyle = '#7ef0a0'; ctx.beginPath(); ctx.arc(x + NW - 10, y + 10, 4 + Math.sin(t * 8), 0, Math.PI * 2); ctx.fill(); }
+    }, () => { if (m.phase < 2) startBuild(m); else { state.mpMore = false; state.sel = m; state.panel = 'machine'; state.fromSchema = true; } sfx.click(); }, name);
+  };
+  const benchNode = (o, x, y, name, lineMat) => {
+    const M = matOf(o.mat || 'acc');
+    node(x, y, 120, nh, 'rgba(255,255,255,0.06)', M.col, () => { rrect(x + 10, y + nh / 2 - 8, 26, 16, 3, M.col, '#1b1b1b', 1.5); text('Banco barre', x + 44, y + 16, 11, '#fff', 'left'); text(M.name, x + 44, y + 32, 10, '#cfd6dd', 'left'); if (nh > 46) text(`${(o.stock || []).length} pronte`, x + 44, y + 47, 9, '#9aa4ad', 'left'); }, () => cycleBench(o), name);
+  };
+  // one row per line: bench > machines in order > crate
+  L.forEach((l, i) => {
+    const y = ay + 14 + i * rh, cy = y + nh / 2, ms = l.seq.split('').map((ch, k) => b.machines.find(m => m.line === l.id && m.input === l.seq.slice(0, k))).filter(Boolean);
+    const [st, col] = lineStatus(b, l), run = st === 'In produzione', bench = benches.find(o => (o.mat || 'acc') === l.mat);
+    arrow(whx + 130, cy, ax + 176, cy, '#59626b', run, '');
+    if (bench) benchNode(bench, ax + 176, y, 'scBench' + i); else node(ax + 176, y, 120, nh, 'rgba(216,67,58,0.15)', '#ff8a7a', () => text('manca il banco', ax + 236, cy, 11, '#ffb3a8'), () => { openPanel('shop'); state.shopTab = 1; }, 'scNoBench' + i);
+    let px = ax + 296;
+    ms.forEach((m, k) => { arrow(px, cy, colX(k), cy, run ? '#7ef0a0' : '#59626b', run, k ? partShort(l.seq.slice(0, k)) : 'barre'); machineNode(m, colX(k), y, `scM${i}_${k}`); px = colX(k) + NW; });
+    const cx = colX(Math.max(ms.length, 1)) + 10;
+    arrow(px, cy, cx, cy, run ? '#7ef0a0' : '#59626b', run, '');
+    const pn = pieceName(l.seq, l.mat); node(cx, y, 150, nh, 'rgba(240,146,58,0.15)', '#f0923a', () => { text((crates.length > 1 ? `Cassa ×${crates.length}` : 'Cassa') + ' · ' + fmt(recipeVal(l.seq, l.mat)), cx + 75, y + 15, 11, '#ffe08a'); text(pn.length > 22 ? pn.slice(0, 21) + '…' : pn, cx + 75, y + 31, 10, '#fff'); if (nh > 46) text(st, cx + 75, y + 47, 9, col); }, () => { state.panel = 'recipes'; state.recView = 'lines'; }, 'scCrate' + i);
+    button('✕', cx + 156, y + nh / 2 - 13, 26, 26, () => stopLine(b, l.id), { size: 12, color: '#ff8a7a', name: 'scStop' + i });
+  });
+  // what is not on a line: machines and spare benches, ready for the next line
+  const fy = ay + 14 + L.length * rh;
+  text(L.length ? 'Fuori linea' : 'Nessuna linea: avviane una da "Linee e ricette"', ax + 176, fy + 6, 12, '#ffe08a', 'left');
+  const items = spareBench.map(o => ['b', o]).concat(free.map(m => ['m', m]));
+  if (!items.length && L.length) text('tutto è su una linea', ax + 300, fy + 6, 11, '#9aa4ad', 'left');
+  items.forEach(([k, o], i) => { const x = ax + 176 + (i % 7) * 140, y = fy + 18 + Math.floor(i / 7) * (nh + 10); if (y + nh > ay + ah) return; if (k === 'b') benchNode(o, x, y, 'scFb' + i); else machineNode(o, x, y, 'scFm' + i); });
 }
 function updateMinigame(dt) {
   const mg = state.mg;
@@ -2048,6 +2141,11 @@ function badge(type, x, y, w = 58) {
 }
 
 // ---- HUD and panels -----------------------------------------------------------------------
+function schemaIcon(x, y) { // three boxes joined by arrows: the flow diagram
+  const bx = (cx, cy, col) => rrect(cx - 9, cy - 7, 18, 14, 3, col, '#2b2b2b', 1.5);
+  line([x - 13, y + 8], [x - 1, y - 6], '#3a4148', 2.5); line([x + 1, y - 6], [x + 13, y + 8], '#3a4148', 2.5);
+  bx(x, y - 10, '#5bc7ff'); bx(x - 15, y + 10, '#7ef0a0'); bx(x + 15, y + 10, '#f0923a');
+}
 function toolbarIcon(id, x, y) {
   ctx.save(); ctx.translate(x, y);
   if (id === 'op') {
@@ -2067,7 +2165,7 @@ function drawHUD(t) { // top: money · time · level and goal; bottom: one bar o
   text(`+${fmt(incomePerMin())} al minuto`, 66, 62, 15, '#9ce8b4', 'left');
   // crew: one more each level
   const needs = F ? jobNeeds(F) : [];
-  if (F && needs.length && !state.panel && !state.mg && !state.town) { ctx.font = `bold 16px ${FONT}`; const tw = ctx.measureText(needs[0]).width + 30; rrect(W / 2 - tw / 2, 578, tw, 32, 10, 'rgba(60,20,20,0.9)', '#ff8a7a', 2); text(needs[0], W / 2, 594, 16, '#ffd0c8'); }
+  // what is missing here is said by Noah and marked on the crew strip: no second banner
   drawClock(t); drawStatusStrip(needs);
   // level and XP, top right
   const LX = W - 284;
@@ -2111,13 +2209,12 @@ function drawBottomBar(t) {
     [['crew', 'Squadra', 'Q', (cx, cy) => { sprite('walk0', cx - 18, cy + 18, 2, false, OP_PAL); sprite('walk0', cx, cy + 18, 2, false, MAG_PAL); sprite('walk0', cx + 18, cy + 18, 2, false, IT_PAL); }, nd ? '!' : ''],
      ['office', 'Ufficio', 'U', (cx, cy) => officeIcon(cx, cy), low ? '!' : jobsOf().offers.some(o => !o.locked) && !jobsOf().seen ? String(jobsOf().offers.filter(o => !o.locked).length) : ''],
      ['recipes', 'Ricette', 'R', (cx, cy) => { rrect(cx - 17, cy - 20, 34, 38, 4, '#b0543c', '#5a2a1e', 2); rrect(cx - 13, cy - 17, 26, 32, 2, '#f4f1e8'); ctx.fillStyle = '#5a2a1e'; for (let k = 0; k < 4; k++) ctx.fillRect(cx - 9, cy - 11 + k * 6, 18, 2); }, ''],
-     ['skills', 'Abilità', 'K', (cx, cy) => perkIcon({ icon: 'core' }, cx, cy - 2, 1.1), state.tokens ? String(state.tokens) : ''],
-     ['tools', 'Attrezzi', 'T', (cx, cy) => toolIcon('W', cx, cy - 4, 0.95), '']].forEach(([id, lab, k, ic, badge]) => {
+     ['skills', 'Abilità', 'K', (cx, cy) => perkIcon({ icon: 'core' }, cx, cy - 2, 1.1), state.tokens ? String(state.tokens) : '']].forEach(([id, lab, k, ic, badge]) => {
       barButton(x, by, 100, bh, lab, k, ic, () => { sfx.click(); openPanel(id); }, id, { badge }); x += 106;
     });
     sep(x + 2); x += 12;
-    const on = state.tool === 'demo';
-    barButton(x, by, 100, bh, 'Demolisci', 'D', (cx, cy) => toolbarIcon('demo', cx, cy - 2), () => { sfx.click(); setTool(on ? null : 'demo'); }, 'tool_demo', { on }); x += 106;
+    const demo = state.tool === 'demo', bad = F.machines.some(m => m.broken) || F.netFault;
+    barButton(x, by, 100, bh, demo ? 'Fine demolisci' : 'Schema', 'S', (cx, cy) => schemaIcon(cx, cy), () => { sfx.click(); if (demo) setTool(null); else openPanel('schema'); }, 'schema', { on: demo, badge: bad ? '!' : '' }); x += 106;
     sep(x + 2); x += 12;
   }
   barButton(x, by, 100, bh, town ? 'Rientra' : 'Città', 'E', (cx, cy) => cityIcon(cx, cy, town), toggleTown, 'townBtn', { on: town }); x += 112;
@@ -2181,7 +2278,14 @@ function drawGoalChip(t, LX) { // a small button under the level; tap it to read
   wrapText(msg, bx + 15, y + 62, bw - 30, 16, '#fff', 22, 'left');
   btn(bx, y + 40, bw, 22 + lines * 22, () => { state.goalOpen = false; sfx.click(); });
 }
-function openPanel(id) { if (id === 'store' || id === 'office') state.whSite = F ? F.id : null; if (id === 'crew') { state.crewSite = F ? F.id : null; state.movePick = null; state.jobPick = null; } if (id === 'skills') { state.webView = 'map'; state.webPan = { x: 0, y: 0 }; } state.panel = id; state.placing = null; state.tool = null; state.demo = null; state.wtool = null; state.wplacing = null; }
+function openPanel(id) { state.fromSchema = false; if (id === 'store' || id === 'office') state.whSite = F ? F.id : null; if (id === 'crew') { state.crewSite = F ? F.id : null; state.movePick = null; state.jobPick = null; } if (id === 'skills') { state.webView = 'map'; state.webPan = { x: 0, y: 0 }; } state.panel = id; state.placing = null; state.tool = null; state.demo = null; state.wtool = null; state.wplacing = null; }
+const fitMemo = { k: null, v: {} };
+function fitsSomewhere(tp, mk) { // is there a free spot for this footprint in the site you are in? (worked out once per site layout)
+  const k = F.id + ':' + Object.keys(F.grid).length + ':' + F.machines.map(m => m.c + ',' + m.r + ',' + (m.mk || 1) + ',' + (m.dir || 0)).join(';');
+  if (fitMemo.k !== k) { fitMemo.k = k; fitMemo.v = {}; }
+  const id = tp + mk; if (id in fitMemo.v) return fitMemo.v[id];
+  return (fitMemo.v[id] = cellList(F).some(([c, r]) => fitsAt(c, r, mk, 0, null, tp) || fitsAt(c, r, mk, 1, null, tp)));
+}
 function drawShop(t) {
   const P = panelFrame('Negozio', 1060, 580, () => { state.panel = null; });
   ['Macchine CNC', 'Logistica', 'Sede'].forEach((lab, i) => {
@@ -2204,24 +2308,24 @@ function drawShop(t) {
       if (mk > 1) { rrect(x + w - 58, y + 18, 44, 22, 4, '#e0b84a', '#2b2410', 1.5); text(MK_NAME[mk - 1].trim(), x + w - 36, y + 29, 12, '#2b2410'); }
       text(`Lavora un pezzo in ${(timeOf(tp) * MK_T[mk - 1]).toFixed(1)} s`, x + w / 2, y + 240, 13, mk > 1 ? '#ffe08a' : '#b9c4ce');
       if (av > 1 && !locked) for (let k = 1; k <= av; k++) { const bx = x + w / 2 - av * 18 + (k - 1) * 36; button(['I', 'II', 'III', 'IV', 'V'][k - 1], bx, y + 280, 34, 28, () => { state.shopMk[tp] = k; sfx.click(); }, { size: 13, color: k === mk ? '#e0b84a' : '#e6e1d3', name: `mk${tp}${k}` }); }
-      const pw = powerOf(tp, mk), pwOk = powerUsed(F) + pw <= powerCap(F);
-      text(`${fpDims(mk, 0, tp)[0]}×${fpDims(mk, 0, tp)[1]} celle · ${pw} kW`, x + w / 2, y + 262, 13, pwOk ? '#b9c4ce' : '#ff8a7a');
+      const pw = powerOf(tp, mk), left = powerCap(F) - powerUsed(F), pwOk = pw <= left, fit = !locked && fitsSomewhere(tp, mk);
+      text(`${fpDims(mk, 0, tp)[0]}×${fpDims(mk, 0, tp)[1]} celle · ${pw} kW`, x + w / 2, y + 262, 13, pwOk && fit ? '#b9c4ce' : '#ff8a7a');
+      if (!locked) text(!fit ? 'Non c\'è spazio libero di questa misura' : `Corrente: ${left} kW liberi → ${left - pw}`, x + w / 2, y + 407, 11, !fit || !pwOk ? '#ff8a7a' : '#9ce8b4');
       if (owned(tp) && av < 2) text(`Ne possiedi ${owned(tp)}`, x + w / 2, y + 290, 14, '#7ef0a0');
       if (locked) { rrect(x + 30, y + 330, w - 60, 56, 10, '#1b2229', '#59626b', 2); text(`Livello ${lvl}`, x + w / 2, y + 358, 18, '#ffb35b'); }
       else {
         coinIcon(x + 34, y + 322, 0.9); text(fmt(mcost), x + 52, y + 322, 20, state.coins >= mcost ? '#ffe08a' : '#ff8a7a', 'left');
-        button(!pwOk ? 'Corrente insufficiente' : mk > 1 ? `Compra${MK_NAME[mk - 1]}` : 'Compra', x + 20, y + 342, w - 40, 54, () => buy(tp, mk), { enabled: state.coins >= mcost && pwOk, name: 'buy' + tp, size: pwOk ? 18 : 14 });
+        button(!fit ? 'Non c\'è spazio' : !pwOk ? 'Corrente insufficiente' : mk > 1 ? `Compra${MK_NAME[mk - 1]}` : 'Compra', x + 20, y + 342, w - 40, 54, () => buy(tp, mk), { enabled: state.coins >= mcost && pwOk && fit, name: 'buy' + tp, size: pwOk ? 18 : 14 });
       }
     });
   } else if (state.shopTab === 1) {
     const cards = [
       ['Banco barre', 'Prende le barre dalla zona magazzino: i magazzinieri le portano alle macchine.', `Ne hai ${countKind('src')}`, 'src'],
       ['Cassa vendita', 'I magazzinieri ci portano i pezzi finiti e qui si vendono.', `Ne hai ${countKind('crate')}`, 'crate'],
-      ['Rack di rete', 'Serve per collegare le macchine in rete: rendono di più.', `Ne hai ${countKind('rack')}`, 'rack'],
-      ['Postazione PC', 'Un Informatico qui tiene la rete attiva: senza, niente bonus.', `Ne hai ${countKind('pc')}`, 'pc'],
+      ['Rack di rete', 'Collega le macchine in rete: rendono di più. Un Informatico (facoltativo) tiene lontani i BUG.', `Ne hai ${countKind('rack')}`, 'rack'],
     ];
     cards.forEach(([name, desc, info, k], i) => {
-      const x = P.x + 26 + i * 254, y = P.y + 136, w = 240, h = 410;
+      const x = P.x + 70 + i * 320, y = P.y + 136, w = 280, h = 410;
       rrect(x, y, w, h, 14, HT().card, '#f0923a', 2);
       ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + 12, y + 12, w - 24, 140);
       ctx.save(); ctx.translate(x + w / 2, y + 96); ctx.scale(1.4, 1.4);
@@ -2263,7 +2367,7 @@ function crewNeedFor(b) { // the most useful job to bring into a site: operators
   const idle = b.machines.filter(m => m.phase >= 2 && !m.op && !m.broken).length - crewIn(b, 'mach').filter(cw => cw.m == null).length;
   if (idle > 0) return 'mach';
   if (b.machines.some(m => m.op) && !crewIn(b, 'mag').length) return 'mag';
-  if (b.machines.some(m => m.netPct != null) && !crewIn(b, 'it').length && hasKind(b, 'pc') && rackOf(b)) return 'it';
+
   return null;
 }
 function callCrew(b) { // fill a site: first those waiting, then the free people of other sites, then the spare ones; each gets the job the site needs
@@ -2297,7 +2401,7 @@ function drawCrew(t) { // the crew, site by site: tabs for every site, a job for
   text(needs.length ? needs[0] : 'Ogni lavoro ha qualcuno: tutto in ordine', P.x + 24, P.y + 160, 13, needs.length ? '#ff8a7a' : '#7ef0a0', 'left');
   const room = cap - list.length;
   const idleHere = list.some(cw => cw.job === 'none') && crewNeedFor(vb);
-  if (list.length) button('Organizza da sola', P.x + P.w - 476, P.y + 132, 180, 40, () => organizeCrew(vb), { color: '#f2c230', size: 14, name: 'organize' });
+  { const on = vb.autoCrew !== false; button(on ? 'Automatica: SÌ' : 'Automatica: NO', P.x + P.w - 476, P.y + 132, 180, 40, () => { vb.autoCrew = !on; if (!on) organizeCrew(vb); else toast(`Squadra di ${vb.name} a mano`, '#ffe08a'); sfx.click(); save(); }, { color: on ? '#7ef0a0' : '#e6e1d3', size: 14, name: 'organize' }); }
   if (state.buildings.length > 1 || wait.length || idleHere) button(room > 0 ? `Chiama personale qui (+${room})` : idleHere ? 'Metti al lavoro i liberi' : 'Sede al completo', P.x + P.w - 284, P.y + 132, 260, 40, () => callCrew(vb), { enabled: room > 0 || !!idleHere, size: 14, color: '#7ef0a0', name: 'callCrew' });
   if (wait.length) text(`${wait.length} ${wait.length === 1 ? 'persona aspetta' : 'persone aspettano'} un posto`, P.x + P.w - 284, P.y + 182, 12, '#ffe08a', 'left');
   const per = 10, pages = Math.max(1, Math.ceil(list.length / per)); state.crewPage = Math.min(state.crewPage || 0, pages - 1);
@@ -2313,8 +2417,7 @@ function drawCrew(t) { // the crew, site by site: tabs for every site, a job for
     text(cw.name, x + 58, y + 28, 17, '#fff', 'left');
     button(J.short, x + 150, y + 8, 150, 40, () => cycleJob(cw), { color: cw.job === 'mach' ? '#e07a2e' : cw.job === 'mag' ? '#7ed08a' : cw.job === 'it' ? '#5bc7ff' : '#9aa4ad', size: 15, name: 'job' + cw.id });
     const right = others.length ? 400 : 506;
-    if (cw.job === 'mag') button(cw.routes ? `Percorsi: ${cw.routes.length}` : 'Percorsi: tutti', x + 308, y + 8, right - 312, 40, () => { state.routeCw = cw.id; state.panel = 'routes'; sfx.click(); }, { color: '#e6e1d3', size: 12, name: 'routes' + cw.id });
-    else { const m = cw.job === 'mach' ? allMachines().find(x2 => x2.id === cw.m) : null; text(cw.job === 'mach' ? (m ? MACH[m.type].short + MK_NAME[mkOf(m) - 1] : 'aspetta una macchina') : cw.job === 'it' ? 'controlla la rete' : 'scegli un lavoro', x + 308 + (right - 308) / 2, y + 28, 12, m ? '#9ce8b4' : '#cfd6dd'); }
+    { const m = cw.job === 'mach' ? allMachines().find(x2 => x2.id === cw.m) : null; text(cw.job === 'mach' ? (m ? MACH[m.type].short + MK_NAME[mkOf(m) - 1] : 'aspetta una macchina') : cw.job === 'mag' ? 'porta barre e pezzi' : cw.job === 'it' ? 'tiene lontani i BUG' : 'scegli un lavoro', x + 308 + (right - 308) / 2, y + 28, 12, m ? '#9ce8b4' : '#cfd6dd'); }
     if (others.length) button('Sposta ▸', x + 406, y + 8, 100, 40, () => { state.movePick = cw.id; sfx.click(); }, { color: '#e6e1d3', size: 13, name: 'move' + cw.id });
   });
   // the job picker: four big choices, and for an operator the machine to sit at
@@ -2450,7 +2553,7 @@ function drawLines(P, t) { // the production page of the recipe book, for the fa
     const y = P.y + 172 + i * 54, { ops, mat } = keyParts(k), plan = linePlan(b, ops), ok = !plan.miss.length && matOpen(matOf(mat)), running = L.some(l => l.key === k);
     rrect(rx, y, rw, 48, 9, 'rgba(0,0,0,0.2)', running ? '#7ef0a0' : 'rgba(255,255,255,0.08)', 1);
     rrect(rx + 10, y + 14, 20, 20, 4, matOf(mat).col, '#1b1b1b', 1);
-    text(pieceName(ops, mat) + (state.found.includes(k) ? '' : ' · nuova'), rx + 40, y + 15, 14, state.found.includes(k) ? '#fff' : '#9ce8b4', 'left');
+    text(pieceName(ops, mat) + (state.found.includes(k) ? '' : ` · nuova: premio ${fmt(Math.round(recipeVal(ops, mat) * tune.newRecipePieces))}`), rx + 40, y + 15, 14, state.found.includes(k) ? '#fff' : '#9ce8b4', 'left');
     text(ok ? `${seqNames(ops)} · ${fmt(recipeVal(ops, mat))} al pezzo` : (m => m.length > 46 ? m.slice(0, 45) + '…' : m)(`Mancano: ${plan.miss.join(', ') || matOf(mat).name}`), rx + 40, y + 33, 11, ok ? '#b9c4ce' : '#ffb35b', 'left');
     button(running ? 'Un\'altra linea' : 'Avvia linea', rx + rw - 132, y + 9, 122, 30, () => startLine(b, k), { enabled: ok, size: 12, color: '#7ef0a0', name: 'startLine' + i });
   });
@@ -2478,7 +2581,7 @@ function drawRecipes(t) {
       coinIcon(x + 432, y + 24, 0.7); text(fmt(recipeVal(rc.seq, mat)), x + 446, y + 25, 16, '#ffe08a', 'left');
     } else if (seen) { // seen in a client's request: the drawing is known, the piece not made yet
       ctx.globalAlpha = 0.6; rc.seq.split('').forEach((ch, k) => badge(ch, x + 10 + k * 62, y + 11)); ctx.globalAlpha = 1;
-      text(rc.name, x + 330, y + 18, 15, '#cfd6dd'); text('da produrre: Ricette > Produzione', x + 330, y + 35, 10, '#5bc7ff');
+      text(rc.name, x + 330, y + 18, 15, '#cfd6dd'); text(`da produrre · premio ${fmt(Math.round(recipeVal(rc.seq, mat) * tune.newRecipePieces))} al primo pezzo`, x + 330, y + 35, 10, '#5bc7ff');
     } else {
       const can = rc.seq.split('').every(ch => state.level >= (mcfg('unlock', ch) || 1)) && (mat === 'acc' || matOpen(matOf(mat))); // every machine it needs is already unlocked: a hint
       const last = rc.seq.length - 1; // every piece starts from the cut-off saw, so the hint is the last machine
@@ -2489,7 +2592,8 @@ function drawRecipes(t) {
   });
 }
 function drawTools(t) {
-  const P = panelFrame('Attrezzi', 900, 520, () => { state.panel = null; });
+  const P = panelFrame('Abilità · Attrezzi', 900, 520, () => { state.panel = null; });
+  button('◀ Abilità', P.x + 20, P.y + 66, 140, 38, () => { openPanel('skills'); sfx.click(); }, { size: 14, name: 'toSkills' });
   text('Attrezzi migliori = minigiochi più veloci = percentuali più alte', P.x + P.w / 2, P.y + 90, 16, '#cfd6dd');
   TOOLS.forEach((tl, i) => {
     const x = P.x + 30, y = P.y + 120 + i * 128, l = state.tools[tl.key], max = l >= tune.toolMax;
@@ -2510,7 +2614,7 @@ function drawTools(t) {
 }
 function drawMachinePanel(t) {
   const m = state.sel; if (!m) { state.panel = null; return; }
-  const P = panelFrame(MACH[m.type].name + MK_NAME[mkOf(m) - 1], 720, 560, () => { state.panel = null; state.sel = null; });
+  const P = panelFrame(MACH[m.type].name + MK_NAME[mkOf(m) - 1], 720, m.broken ? 560 : 490, () => { state.panel = state.fromSchema ? 'schema' : null; state.sel = null; state.fromSchema = false; }); // opened from the schema: closing goes back to it
   rrect(P.x + 24, P.y + 80, 200, 200, 14, '#3a2416');
   machineIcon(m.type, P.x + 124, P.y + 220, 1.9, { t, busy: !!m.cur, status: m.cur ? 'work' : m.op ? 'wait' : 'off', mk: m.mk });
   text(`Qualità ${Math.round(m.quality * 100)}%`, P.x + 250, P.y + 100, 24, '#7ef0a0', 'left');
@@ -2518,16 +2622,15 @@ function drawMachinePanel(t) {
   [[0, 'Montaggio', m.pct[0]], [2, 'Configurazione', m.pct[2]], [1, 'Rete', m.netPct]].forEach(([ph, name, v], i) => {
     const y = P.y + 166 + i * 36; phaseIcon(ph, P.x + 264, y, 1);
     text(name, P.x + 284, y, 16, '#fff', 'left');
-    text(v == null ? (ph === 1 ? 'non collegata' : '-') : `${v}%${ph === 1 ? (netOk(F) ? `  (+${Math.round(netBonus(m) * 100)}% resa)` : '  (non attiva: serve PC e Informatico)') : ''}`, P.x + 690, y, 16, v == null ? '#8f9aa4' : ph === 1 ? '#5bc7ff' : '#ffe08a', 'right');
+    text(v == null ? (ph === 1 ? 'non collegata' : '-') : `${v}%${ph === 1 ? (netOk(F) ? `  (+${Math.round(netBonus(m) * 100)}% resa)` : '  (non attiva: serve il Rack di rete)') : ''}`, P.x + 690, y, 16, v == null ? '#8f9aa4' : ph === 1 ? '#5bc7ff' : '#ffe08a', 'right');
   });
   // what it works and what it makes
   const out = m.input + m.type, have = !!m.inbox;
   rrect(P.x + 24, P.y + 296, P.w - 48, 92, 12, '#3a2416', HT().card, 2);
-  text(`Lavora: ${partName(m.input)}`, P.x + 44, P.y + 320, 17, '#fff', 'left');
+  { const l = m.line != null && linesOf(F).find(x => x.id === m.line); text(l ? `Linea: ${pieceName(l.seq, l.mat)} · passo ${m.input.length + 1} di ${l.seq.length}` : `In automatico · lavora ${partName(m.input)}`, P.x + 44, P.y + 320, 17, l ? '#7ef0a0' : '#fff', 'left'); }
   text(`Produce: ${partName(out)}  ·  ${fmt(recipeVal(out) * mult(m))} al pezzo`, P.x + 44, P.y + 346, 16, recipeOf(out) ? '#ffd9a8' : '#c9c9c9', 'left');
-  text(!m.op ? 'Ferma: serve un Operatore macchina' : m.out ? 'Pezzo pronto: aspetta un magazziniere' : m.cur ? 'Al lavoro' : have ? 'In partenza' : crewIn(F, 'mag').length ? `In attesa che un magazziniere porti "${partShort(m.input)}"` : 'Ferma: nessun magazziniere porta i pezzi', P.x + 44, P.y + 372, 14, !m.op || m.out ? '#ffb35b' : '#9ce8b4', 'left');
-  if (!m.broken) button(m.op ? 'Togli operatore' : `Metti operatore (${opsFree()} liberi)`, P.x + 24, P.y + 402, 300, 58, () => toggleOp(m), { color: '#e07a2e', size: 17, name: 'opm', enabled: m.op || (opsFree() > 0 && m.phase >= 2) });
-  if (!m.broken) button('Cambia lavorazione', P.x + 340, P.y + 402, 356, 58, () => cycleInput(m), { color: '#f2c230', size: 17, name: 'inputm' });
+  text(!m.op ? 'Ferma: nessun operatore (la Squadra se ne occupa)' : m.out ? 'Pezzo pronto: aspetta un magazziniere' : m.cur ? 'Al lavoro' : have ? 'In partenza' : crewIn(F, 'mag').length ? `In attesa che un magazziniere porti "${partShort(m.input)}"` : 'Ferma: nessun magazziniere porta i pezzi', P.x + 44, P.y + 372, 14, !m.op || m.out ? '#ffb35b' : '#9ce8b4', 'left');
+  // operators come from the Squadra and what it makes from the Linee: the panel only shows them
   text(`Età: ${m.age || 0} ${(m.age || 0) === 1 ? 'giorno' : 'giorni'} · da sostituire a ${maxAgeE()}`, P.x + P.w - 30, P.y + 100, 13, (m.age || 0) > maxAgeE() * 0.8 ? '#ffb35b' : '#d8c8a8', 'right');
   if (m.broken) {
     rrect(P.x + 24, P.y + 402, P.w - 48, 58, 10, 'rgba(120,30,20,0.6)', '#ff8a7a', 2);
@@ -2536,13 +2639,16 @@ function drawMachinePanel(t) {
     else button(`Sostituisci · ${fmt(mcfg('cost', m.type) * tune.replaceCost)}`, P.x + P.w - 300, P.y + 408, 270, 46, () => replaceMachine(m), { color: '#f2c230', size: 17, name: 'replace' });
   }
   const netLab = state.level < tune.rackLvl ? `Rete: liv. ${tune.rackLvl}` : m.netPct == null ? 'Collega in rete' : 'Rifai la rete';
-  const B = [
+  const B = false ? [ // 'Migliora' opens the two ways to make it yield more
+    ['◀ Indietro', () => { state.mpMore = false; sfx.click(); }, '#e6e1d3', 'less'],
+    ['Ricalibra (minigioco)', () => { state.mpMore = false; startBuild(m, true); }, '#7ef0a0', 'recal'],
+    [netLab, () => { state.mpMore = false; if (state.level < tune.rackLvl) return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b'); if (F.netFault) return startBugs(F); openNetPick([m.id]); }, '#5bc7ff', 'net'],
+  ] : [
     ['Sposta', () => { state.panel = null; state.placing = { kind: 'mach', m, dir: m.dir, rotated: true }; toast('Tocca una cella libera', '#bfe3ff'); }, '#9ad0ff', 'move'],
     ['Ricalibra', () => startBuild(m, true), '#7ef0a0', 'recal'],
-    [netLab, () => { if (state.level < tune.rackLvl) return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b'); if (F.netFault) return startBugs(F); openNetPick([m.id]); }, '#5bc7ff', 'net'],
     [`Vendi +${fmt(Math.round(mcfg('cost', m.type) * MK_COST[mkOf(m) - 1] * tune.sellRefund))}`, () => sellMachine(m), '#ff8a7a', 'sell'],
   ];
-  B.forEach(([lab, fn, col, nm], i) => button(lab, P.x + 24 + i * 170, P.y + 474, 160, 58, fn, { color: col, name: nm, size: lab.length > 11 ? 15 : 17, enabled: !(nm === 'net' && state.level < tune.rackLvl) }));
+  B.forEach(([lab, fn, col, nm], i) => button(lab, P.x + 24 + i * 226, P.y + (m.broken ? 474 : 404), 216, 58, fn, { color: col, name: nm, size: lab.length > 14 ? 15 : 17, enabled: !(nm === 'net' && state.level < tune.rackLvl) }));
 }
 function drawMinigame(t) {
   if (state.mg.bug) return drawBugGame(t);
@@ -2702,25 +2808,25 @@ function drawTutorial(t) {
     } else if (!state.panel && !state.placing) at(N.shop, want.label);
   };
   if (g === 0) {
-    say = 'Ciao! Sono Noah, il ChiefTech: il capo di tutto qui. Ti guido io, dalla prima macchina al grande stabilimento. Questa fabbrica è piccola e vuota: comincia piazzando un Banco barre e una Cassa. Le barre arrivano dagli scaffali del magazzino: le ordini in Ufficio. Il primo di ognuno è gratis.';
+    say = 'Ciao, sono Noah, il capo! Per cominciare piazza un Banco barre e una Cassa: il primo di ognuno è gratis.';
     const miss = ['src', 'crate'].find(k => !countKind(k));
     if (miss) shopFor({ tab: 1, btn: 'buy_' + miss, label: 'Negozio > Logistica' });
   } else if (g === 1) { say = 'Ora la prima macchina: compra la Troncatrice nel Negozio e piazzala dove vuoi.'; shopFor({ tab: 0, btn: 'buyT', label: 'Compra la Troncatrice' }); }
   else if (g === 2) say = 'Tocca la Troncatrice per finire di costruirla: montaggio e configurazione.';
-  else if (g === 3) { say = 'Una macchina lavora solo con un operatore: chi fa l\'Operatore si siede da solo sulle macchine libere. Se nessuno è libero, apri la Squadra (Q) e tocca "Organizza da sola".'; if (!state.panel && !state.placing) at(N.crew, 'Squadra'); }
-  else if (g === 4) say = 'Guarda Luca, il magazziniere in verde: porta i pezzi. In alto c\'è il calendario: con x3 e x8 il tempo corre, ma le macchine si guastano più spesso!';
+  else if (g === 3) { say = 'Ogni macchina vuole un operatore: si siede da solo, la squadra si organizza in automatico.'; if (!state.panel && !state.placing) at(N.crew, 'Squadra'); }
+  else if (g === 4) say = 'Il magazziniere in verde porta i pezzi alla Cassa. Con x3 e x8 il tempo corre, ma i guasti aumentano.';
   else if (g === 5) {
     if (state.level < tune.unlockL) say = `Il Tornio si sblocca al livello ${tune.unlockL}: intanto vendi i pezzi della Troncatrice per fare esperienza (ora sei al livello ${state.level}).`;
-    else say = opsFree() > 0 ? 'Compra un Tornio: un operatore libero ci si siede da solo e lavora le Barre tagliate in Perni torniti, che valgono il triplo.' : 'Ti serve un Operatore macchina libero: salendo di livello arriva gente nuova, dalle quel lavoro nella Squadra (Q).';
+    else say = 'Compra un Tornio: trasforma le Barre tagliate in Perni torniti, che valgono il triplo.';
     if (state.level >= tune.unlockL && !state.placing && state.coins >= costOf('L') && !F.machines.some(m => m.type === 'L')) shopFor({ tab: 0, btn: 'buyL', label: 'Compra il Tornio' });
     else if (!state.panel && !state.placing && F.machines.some(m => m.type === 'L' && m.phase >= 2 && !m.op)) at(N.crew, 'Squadra');
   } else if (g === 6) {
-    say = state.level < tune.rackLvl ? `Al livello ${tune.rackLvl} si sbloccano Rack di rete e Postazione PC: intanto continua a vendere.` : 'Rack di rete e Postazione PC sbloccati! Piazzali entrambi: la rete fa rendere di più le macchine.';
-    if (state.level >= tune.rackLvl) { const miss = ['rack', 'pc'].find(k => !countKind(k)); if (miss) shopFor({ tab: 1, btn: 'buy_' + miss, label: 'Negozio > Logistica' }); }
-  } else if (g === 7) { say = 'La rete va tenuta in piedi: apri la Squadra e dai a qualcuno il lavoro di Informatico. Girerà a controllare i collegamenti.'; if (!state.panel) at(N.crew, 'Squadra'); }
-  else if (g === 8) say = 'Tocca il Rack di rete e scegli quali macchine collegare: un solo minigioco del cavo e rendono tutte +10%.';
+    say = state.level < tune.rackLvl ? `Al livello ${tune.rackLvl} si sblocca il Rack di rete: intanto continua a vendere.` : 'Rack di rete sbloccato! Piazzalo: in rete le macchine rendono di più.';
+    if (state.level >= tune.rackLvl && !countKind('rack')) shopFor({ tab: 1, btn: 'buy_rack', label: 'Negozio > Logistica' });
+  } else if (g === 7) { say = 'Niente più barre finite: in Ufficio > Acquisti metti "Auto" sui materiali che usi, li riordino io.'; if (!state.panel) at(N.office, 'Ufficio'); }
+  else if (g === 8) say = 'Tocca il Rack e scegli le macchine da collegare: un minigioco e rendono tutte +10%.';
   else if (g === 9 && state.level >= tune.unlockF && state.coins >= costOf('F')) shopFor({ tab: 0, btn: 'buyF', label: 'Compra la Fresa' });
-  else if (g === 11) { say = state.level < tune.shed1Lvl ? `Il capannone si fa stretto? Al livello ${tune.shed1Lvl} potremo comprare la vecchia officina di mattoni.` : 'L\'officina di mattoni è in vendita: Negozio > Sede. Questa sede resta tua e continua a produrre; la nuova parte vuota.'; if (state.level >= tune.shed1Lvl && state.coins >= tune.shed1Cost) shopFor({ tab: 2, btn: 'expand', label: 'Compra la sede' }); }
+  else if (g === 11) { say = state.level < tune.shed1Lvl ? `Il capannone si fa stretto? Al livello ${tune.shed1Lvl} potremo comprare la vecchia officina di mattoni.` : 'L\'officina di mattoni è in vendita: Negozio > Sede. Questa sede resta tua e continua a produrre.'; if (state.level >= tune.shed1Lvl && state.coins >= tune.shed1Cost) shopFor({ tab: 2, btn: 'expand', label: 'Compra la sede' }); }
   if (!say) say = noahAdvice(t); // past the first steps Noah keeps advising on what matters now
   if (say && !state.panel && !state.placing) drawNarrator(t, say);
   if (!target) return;
@@ -2985,10 +3091,10 @@ function noahAdvice(t) { // what the boss says once the first steps are done: th
   const br = F.machines.find(m => m.broken);
   if (br) return br.broken === 'old' ? `La ${MACH[br.type].name} è troppo vecchia: toccala e sostituiscila, sennò resta ferma.` : `La ${MACH[br.type].name} si è guastata! Toccala e riparala col minigioco.`;
   const wh = whOf(F), cap = whCap(F);
-  if (F.machines.some(m => m.op) && whTotal(F) < cap * tune.autoBelow && !onOrder(F) && !wh.auto) return 'Il magazzino è quasi vuoto: apri l\'Ufficio (U) e ordina barre, oppure accendi il riordino automatico.';
+  if (F.machines.some(m => m.op) && whTotal(F) < cap * tune.autoBelow && !onOrder(F) && !Object.values(autoMatsOf(F)).some(Boolean)) return 'Il magazzino è quasi vuoto: apri l\'Ufficio (U) e ordina barre, oppure accendi il riordino automatico.';
   const need = jobNeeds(F)[0]; if (need) return `Qui in ${F.name}: ${need}. Sistemalo nella Squadra (Q).`;
   const idle = F.machines.find(m => m.phase >= 2 && !m.op && !m.broken);
-  if (idle && crewIn(F, 'none').length) return `La ${MACH[idle.type].name} è ferma e qui c'è gente libera: nella Squadra (Q) tocca "Organizza da sola".`;
+  if (idle && crewIn(F, 'none').length) return `La ${MACH[idle.type].name} è ferma e qui c'è gente libera: nella Squadra (Q) accendi "Automatica".`;
   { const J = jobsOf(), n = J.offers.filter(o => !o.locked).length; if (n && !J.active.length && state.level >= 2) return `Ci sono ${n} ${n === 1 ? 'richiesta' : 'richieste'} di clienti in Ufficio (U) > Commesse: accettane una, pagano molto più della vendita normale e danno tanti XP.`; }
   if (F.machines.filter(m => m.phase >= 2).length >= 2 && !linesOf(F).length && state.level >= 3) return 'Decidi tu cosa produrre qui: apri il Ricettario (R) > Produzione e avvia una linea per ogni pezzo. Le macchine e i percorsi dei magazzinieri si sistemano da soli.';
   if (state.tokens > 0) return `Hai ${state.tokens} ${state.tokens === 1 ? 'token' : 'token'} da spendere: apri le Abilità (K) e scegli cosa potenziare.`;
@@ -3572,12 +3678,12 @@ function worldTap(sx, sy) {
   }
   if (state.tool) { const m = machineAt(sx, sy); if (m) toolTap(m.c, m.r); else toolTap(c, r); return; }
   const m = machineAt(sx, sy);
-  if (m) { if (m.phase < 2) startBuild(m); else { state.sel = m; state.panel = 'machine'; sfx.click(); } return; }
+  if (m) { if (m.phase < 2) startBuild(m); else { state.mpMore = false; state.sel = m; state.panel = 'machine'; state.fromSchema = false; sfx.click(); } return; }
   if (inAnnex(c, r)) { const o = cellAt(c, r), O = F.officeBox; openPanel(o && o.kind === 'office' || (O && r >= O.r0 && c >= O.c0 && c < O.c1) ? 'office' : 'store'); sfx.click(); return; }
   const o = inShed(c, r) ? cellAt(c, r) : null;
   if (false) { }
   else if (o && o.kind === 'crate') { state.panel = 'recipes'; sfx.click(); }
-  else if (o && o.kind === 'src') { const open = MATS.filter(matOpen), i = open.findIndex(m => m.id === (o.mat || 'acc')), nx = open[(i + 1) % open.length]; o.mat = nx.id; o.stock = []; sfx.click(); save(); toast(open.length > 1 ? `Banco barre: ora prende ${nx.name.toLowerCase()} (in magazzino ${whStock(F)[nx.id] || 0}). Tocca ancora per cambiare` : `Banco barre: prende acciaio (in magazzino ${whStock(F).acc || 0}). Altri materiali dal livello ${MATS[1].lvl}`, nx.col === '#9aa3ab' ? '#bfe3ff' : nx.col); }
+  else if (o && o.kind === 'src') { if (true) { toast(`Banco barre · ${matOf(o.mat || 'acc').name.toLowerCase()} (${(o.stock || []).length} pronte): il materiale lo decide la linea che lo usa`, '#bfe3ff'); return; } const open = MATS.filter(matOpen), i = open.findIndex(m => m.id === (o.mat || 'acc')), nx = open[(i + 1) % open.length]; o.mat = nx.id; o.stock = []; sfx.click(); save(); toast(open.length > 1 ? `Banco barre: ora prende ${nx.name.toLowerCase()} (in magazzino ${whStock(F)[nx.id] || 0}). Tocca ancora per cambiare` : `Banco barre: prende acciaio (in magazzino ${whStock(F).acc || 0}). Altri materiali dal livello ${MATS[1].lvl}`, nx.col === '#9aa3ab' ? '#bfe3ff' : nx.col); }
   else if (o && (o.kind === 'rack' || o.kind === 'pc')) { if (F.netFault) startBugs(F); else openNetPick(); }
 }
 
@@ -3595,12 +3701,13 @@ function updateWorld(dt) {
   F = view;
   for (const f of state.floats) { f.life -= dt; f.wy -= 22 * dt; }
   state.floats = state.floats.filter(f => f.life > 0);
-  for (const tt of state.toasts) tt.life -= dt;
+  if (!state.mg) for (const tt of state.toasts) tt.life -= dt; // during a minigame messages wait
   state.toasts = state.toasts.filter(tt => tt.life > 0);
   if (state.banner && !state.panel && !state.mg) { state.banner.life -= dt; if (state.banner.life <= 0) state.banner = null; } // a big banner waits while a panel is open
   state.welcome = Math.max(0, state.welcome - dt);
   checkGoals();
   state.score = state.earned;
+  state.crewT = (state.crewT || 0) + dt; if (state.crewT > 2) { state.crewT = 0; for (const b of state.buildings) if (b.autoCrew !== false && crewOf(b).length) organizeCrew(b, true); } // sites on automatic keep their crew sorted
   state.saveT += dt; if (!state.skip && state.saveT > 5) { state.saveT = 0; save(); }
 }
 function drawGhost(P, c, r, t) {
@@ -3793,7 +3900,13 @@ function orderBars(b, n, auto, mid = 'acc', si = cheapest(mid)) {
   if (!auto) { sfx.click(); toast(`Ordinate ${n} barre di ${matOf(mid).name.toLowerCase()} da ${SUPPLIERS[si].name}: -${fmt(cost)} monete, arrivano in ${hoursTxt(supHours(si))}`, '#bfe3ff'); }
   events.push({ type: 'order', n, auto: !!auto }); save();
 }
-function autoOrder(b) { const wh = whOf(b); if (wh.auto && whTotal(b) + onOrder(b) < whCap(b) * tune.autoBelow) { const mid = matOpen(matOf(wh.autoMat || 'acc')) ? (wh.autoMat || 'acc') : 'acc'; orderBars(b, whCap(b), true, mid, cheapest(mid)); } }
+function autoMatsOf(b) { const wh = whOf(b); if (!wh.autoMats) wh.autoMats = wh.auto ? { [wh.autoMat || 'acc']: true } : {}; return wh.autoMats; } // older saves had one material on automatic
+function autoOrder(b) { // each material on 'Auto' keeps its share of the shelves: when it drops below, the office orders it
+  const wh = whOf(b), mats = Object.keys(autoMatsOf(b)).filter(k => wh.autoMats[k] && matOpen(matOf(k))); if (!mats.length) return;
+  const share = whCap(b) / mats.length;
+  for (const k of mats) { const coming = wh.orders.filter(o => (o.mat || 'acc') === k).reduce((n, o) => n + o.n, 0) + (b.trucks || []).filter(x => x.ph !== 'out' && (x.mat || 'acc') === k).reduce((n, x) => n + x.n, 0);
+    if ((wh.stock[k] || 0) + coming < share * tune.autoBelow) orderBars(b, Math.floor(share - (wh.stock[k] || 0) - coming), true, k, supOf(k)); }
+}
 function updateStock(b) { // an order that is due sends a truck; the bars go on the shelves once it has unloaded
   const wh = whOf(b), come = wh.orders.filter(o => o.at <= state.t);
   if (!come.length) return;
@@ -4061,6 +4174,8 @@ function drawJobs(P, t) { // the jobs page of the office
     const bw = 220, bx = x0 + w - 430; rrect(bx, y + 18, bw, 14, 6, '#1b2229'); rrect(bx, y + 18, Math.max(6, bw * j.done / j.qty), 14, 6, '#7ef0a0'); text(`${j.done}/${j.qty}`, bx + bw / 2, y + 25, 11, j.done / j.qty > 0.5 ? '#14181c' : '#fff');
     coinIcon(x0 + w - 186, y + 25, 0.6); text(fmt(j.coins), x0 + w - 174, y + 25, 14, '#ffe08a', 'left'); text(`+${fmt(j.xp)} XP`, x0 + w - 104, y + 25, 13, '#5bc7ff', 'left');
     button('✕', x0 + w - 38, y + 11, 28, 28, () => dropJob(j), { color: '#ff8a7a', size: 13, name: 'drop' + j.id });
+    { const k = jobKey(j), running = linesOf(F).some(l => l.key === k), plan = linePlan(F, j.seq), ok = !plan.miss.length && matOpen(matOf(j.mat));
+      button(running ? 'Linea attiva qui' : ok ? 'Avvia linea qui' : 'Mancano macchine', x0 + w - 580, y + 10, 140, 30, () => { if (running) return; if (!ok) return toast(`In ${F.name} mancano macchine libere: ${plan.miss.join(', ') || matOf(j.mat).name}`, '#ffb35b'); startLine(F, k); }, { size: 12, color: running ? '#7ef0a0' : ok ? '#5bc7ff' : '#9aa4ad', name: 'jobLine' + j.id }); }
   });
   const oy = P.y + 146 + MAX_JOBS * 58 + 14, nextIn = Math.ceil((1 - (state.t / tune.dayLength) % 1) * 8 * (1 / WORK) * WORK);
   text('Richieste dei clienti', x0, oy, 17, '#ffe08a', 'left'); text('nuove richieste ogni mattina alle 08:00 · quelle non prese vanno ad altri', x0 + 210, oy, 12, '#cfd6dd', 'left');
@@ -4141,8 +4256,8 @@ function drawStorePanel(t) { // tapping the warehouse: what is set aside, what t
 function drawOfficePanel(t) { // the office PCs: stock by material, then buy: pick a material, a supplier (prices change every week) and how many bars
   const b = whSiteOf(); if (!b) { state.panel = null; return; }
   const tab = state.officeTab || 'buy', J = jobsOf(), many = state.buildings.length > 1;
-  const P = panelFrame(tab === 'jobs' ? 'Ufficio · Commesse' : `Ufficio · ${tab === 'cart' ? 'Ordine multiplo' : 'Acquisti'}${many ? ' · ' + b.name : ''}`, 1100, many && tab !== 'jobs' ? 640 : 600, () => { state.panel = null; }), wh = whOf(b), cap = whCap(b), tot = whTotal(b), ord = onOrder(b);
-  [['buy', 'Acquisti'], ['cart', 'Ordine multiplo'], ['jobs', (n => `Commesse${n ? ' · ' + n : ''}`)(J.offers.filter(o => !o.locked).length)]].forEach(([id, lab], i) => {
+  const P = panelFrame(tab === 'jobs' ? 'Ufficio · Commesse' : `Ufficio · Acquisti${many ? ' · ' + b.name : ''}`, 1100, many && tab !== 'jobs' ? 640 : 600, () => { state.panel = null; }), wh = whOf(b), cap = whCap(b), tot = whTotal(b), ord = onOrder(b);
+  [['buy', 'Acquisti'], ['jobs', (n => `Commesse${n ? ' · ' + n : ''}`)(J.offers.filter(o => !o.locked).length)]].forEach(([id, lab], i) => {
     const x = P.x + 24 + i * 200, on = tab === id;
     rrect(x, P.y + 70, 192, 34, 9, on ? '#f2c230' : 'rgba(255,255,255,0.08)', on ? '#7a5a10' : '#3a4148', on ? 2.5 : 1.5); text(lab, x + 96, P.y + 87, 15, on ? '#2b2410' : '#fff');
     if (id === 'jobs' && J.offers.length && !J.seen) { rrect(x + 174, P.y + 62, 22, 20, 10, '#d8433a', '#fff', 1.5); text('!', x + 185, P.y + 72, 12, '#fff'); }
@@ -4151,96 +4266,48 @@ function drawOfficePanel(t) { // the office PCs: stock by material, then buy: pi
   if (tab === 'jobs') { J.seen = true; return drawJobs(P, t); }
   button('Pezzi finiti ▸ Magazzino', P.x + P.w - 254, P.y + 68, 230, 38, () => { state.panel = 'store'; sfx.click(); }, { color: '#7ef0a0', size: 13, name: 'toStore' });
   if (many) { drawSiteTabs(P.x + 24, P.y + 112, P.w - 48, 30); P.y += 40; P.h -= 40; }
-  if (tab === 'cart') return drawCart(P, b, t);
-  P.y += 40; P.h -= 40; // the buying page sits under the tabs
-  state.buyMat = matOpen(matOf(state.buyMat || 'acc')) ? (state.buyMat || 'acc') : 'acc';
-  const mid = state.buyMat, M = matOf(mid), wk = weekNum(), dLeft = 7 - (dayNum() % 7);
-  // left: what is on the shelves
-  const lx = P.x + 24, lw = 330;
-  rrect(lx, P.y + 76, lw, P.h - 96, 12, HT().card, '#a7b0b8', 2);
-  text('Magazzino', lx + 16, P.y + 100, 18, '#fff', 'left');
-  text(`${tot} / ${cap}`, lx + lw - 16, P.y + 100, 15, tot < cap * tune.autoBelow ? '#ff8a7a' : '#cfd6dd', 'right');
-  rrect(lx + 16, P.y + 116, lw - 32, 14, 6, '#1b2229');
-  let acc = 0; for (const m of MATS) { const n = wh.stock[m.id] || 0; if (n > 0) rrect(lx + 16 + (lw - 32) * acc / cap, P.y + 116, Math.max(3, (lw - 32) * n / cap), 14, 4, m.col); acc += n; }
-  if (ord) rrect(lx + 16 + (lw - 32) * Math.min(1, acc / cap), P.y + 116, (lw - 32) * Math.min(ord, cap - acc) / cap, 14, 4, 'rgba(91,199,255,0.45)');
-  MATS.forEach((m, i) => {
-    const y = P.y + 146 + i * 46, open = matOpen(m), n = wh.stock[m.id] || 0, used = Object.values(b.grid).filter(o => o.kind === 'src' && (o.mat || 'acc') === m.id).length;
-    rrect(lx + 12, y, lw - 24, 40, 8, 'rgba(0,0,0,0.2)');
-    rrect(lx + 22, y + 10, 30, 20, 3, open ? m.col : '#3a3a3a', '#1b1b1b', 1.5); for (let k = 0; k < 3; k++) line([lx + 24, y + 14 + k * 6], [lx + 50, y + 14 + k * 6], 'rgba(0,0,0,0.25)', 1);
-    text(m.name, lx + 64, y + 13, 15, open ? '#fff' : '#7d8790', 'left');
-    text(open ? (used ? `${used} ${used === 1 ? 'banco lo usa' : 'banchi lo usano'}` : 'in scorta') : `si sblocca al livello ${m.lvl}`, lx + 64, y + 30, 11, open ? '#b9c4ce' : '#ffb35b', 'left');
-    if (open) text(String(n), lx + lw - 24, y + 20, 18, n ? '#fff' : '#7d8790', 'right');
-  });
-  button(wh.auto ? `Riordino automatico: SÌ (${matOf(wh.autoMat || 'acc').name})` : 'Riordino automatico: NO', lx + 12, P.y + P.h - 132, lw - 24, 44, () => { wh.auto = !wh.auto; wh.autoMat = mid; sfx.click(); autoOrder(b); save(); }, { color: wh.auto ? '#7ef0a0' : '#e6e1d3', size: 14, name: 'autoOrder' });
-  wrapText(`Sotto ${Math.round(cap * tune.autoBelow)} barre l'ufficio riordina da solo il materiale scelto dal fornitore più economico della settimana. Tocca un Banco barre per cambiare il materiale che usa.`, lx + 16, P.y + P.h - 74, lw - 32, 11, '#9aa4ad', 15, 'left');
-  // middle and right: buying
-  const bx = lx + lw + 16, bw = P.x + P.w - 24 - bx;
-  text(`Settimana ${wk + 1} · i prezzi cambiano tra ${daysTxt(dLeft)}`, bx, P.y + 92, 14, '#ffe08a', 'left');
-  MATS.forEach((m, i) => { // material tabs
-    const x = bx + i * ((bw + 8) / 5), w = (bw + 8) / 5 - 8, open = matOpen(m), on = m.id === mid;
-    rrect(x, P.y + 106, w, 38, 9, on ? m.col : open ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.25)', on ? '#fff' : '#3a4148', on ? 2.5 : 1.5);
-    text(m.name, x + w / 2, P.y + 125, 14, on ? '#1b1b1b' : open ? '#fff' : '#6b7178');
-    btn(x, P.y + 106, w, 38, () => { if (!open) return toast(`${m.name}: si sblocca al livello ${m.lvl}`, '#ffb35b'); state.buyMat = m.id; state.buySup = cheapest(m.id); sfx.click(); }, 'mat_' + m.id);
-  });
-  const sups = SUPPLIERS.map((s, i) => i).filter(i => SUPPLIERS[i].mats.includes(mid)).sort((a, q) => supPrice(a, mid) - supPrice(q, mid));
-  if (!sups.includes(state.buySup)) state.buySup = sups[0];
-  text('Fornitore', bx + 12, P.y + 162, 12, '#9aa4ad', 'left'); text('Prezzo a barra', bx + bw - 200, P.y + 162, 12, '#9aa4ad', 'right'); text('Consegna', bx + bw - 14, P.y + 162, 12, '#9aa4ad', 'right');
-  sups.forEach((si, k) => {
-    const y = P.y + 172 + k * 40, s = SUPPLIERS[si], pr = supPrice(si, mid), prev = supPrice(si, mid, wk - 1), on = si === state.buySup, best = k === 0;
-    rrect(bx, y, bw, 34, 8, on ? 'rgba(224,184,74,0.28)' : 'rgba(0,0,0,0.2)', on ? '#e0b84a' : 'rgba(255,255,255,0.08)', on ? 2 : 1);
-    text(s.name, bx + 12, y + 17, 15, '#fff', 'left');
-    if (best) { ctx.font = `bold ${phoneSize(15)}px ${FONT}`; const nx = bx + 12 + Math.min(240, ctx.measureText(s.name).width) + 10; ctx.font = `bold ${phoneSize(9)}px ${FONT}`; const lw = ctx.measureText('più conveniente').width + 12; rrect(nx, y + 8, lw, phoneSize(9) + 8, 5, '#4caf6a'); text('più conveniente', nx + lw / 2, y + 17, 9, '#fff'); }
-    const up = pr > prev + 0.004, down = pr < prev - 0.004;
-    text(String(pr.toFixed(2)).replace('.', ','), bx + bw - 214, y + 17, 15, '#ffe08a', 'right');
-    poly(up ? [[bx + bw - 206, y + 22], [bx + bw - 198, y + 22], [bx + bw - 202, y + 12]] : down ? [[bx + bw - 206, y + 12], [bx + bw - 198, y + 12], [bx + bw - 202, y + 22]] : [[bx + bw - 207, y + 16], [bx + bw - 197, y + 16], [bx + bw - 197, y + 18], [bx + bw - 207, y + 18]], up ? '#ff8a7a' : down ? '#7ef0a0' : '#9aa4ad');
-    text(hoursTxt(supHours(si)), bx + bw - 14, y + 17, 13, '#cfd6dd', 'right');
-    btn(bx, y, bw, 34, () => { state.buySup = si; sfx.click(); }, 'sup' + si);
-  });
-  const si = state.buySup, pr = supPrice(si, mid), room = Math.max(0, cap - tot - ord), qy = P.y + 182 + Math.max(sups.length, 3) * 40;
-  text(`Ordina ${M.name.toLowerCase()} da ${SUPPLIERS[si].name}`, bx, qy, 15, '#fff', 'left');
-  if (!room) { rrect(bx, qy + 14, bw, 48, 10, 'rgba(0,0,0,0.22)', '#59626b', 1.5); text(ord ? 'Ordine già in arrivo: il magazzino si riempirà' : 'Magazzino pieno: ordinerai quando le barre scendono', bx + bw / 2, qy + 38, 15, '#cfd6dd'); }
-  else [[10, '+'], [30, '+'], [room, 'Riempi +']].forEach(([n, lab], i) => {
-    const nn = Math.min(n, room), cost = Math.ceil(nn * pr);
-    button(nn ? `${lab}${nn} · ${fmt(cost)}` : (ord ? 'Già in arrivo' : 'Magazzino pieno'), bx + i * ((bw + 12) / 3), qy + 14, (bw - 24) / 3, 48, () => orderBars(b, n, false, mid, si), { enabled: nn > 0 && state.coins >= cost, size: 15, name: 'order' + i });
-  });
-  // what is on its way
-  const oy = qy + 80; text('In arrivo', bx, oy, 15, '#ffe08a', 'left');
-  const all = wh.orders.map(o => ({ n: o.n, mat: o.mat || 'acc', sup: o.sup, h: Math.max(0, (o.at - state.t) / hourSec()) })).concat((b.trucks || []).filter(k => k.ph !== 'out' && k.ph !== 'leave').map(k => ({ n: k.n, mat: k.mat || 'acc', sup: k.sup, h: 0 })));
-  if (!all.length) text('Nessun ordine in viaggio', bx + 90, oy, 13, '#9aa4ad', 'left');
-  all.slice(0, 3).forEach((o, i) => { const y = oy + 14 + i * 26; rrect(bx, y, bw, 22, 6, 'rgba(0,0,0,0.2)'); rrect(bx + 8, y + 6, 18, 10, 2, matOf(o.mat).col); text(`${o.n} barre di ${matOf(o.mat).name.toLowerCase()}${o.sup != null ? ' · ' + SUPPLIERS[o.sup].name : ''}`, bx + 34, y + 11, 12, '#fff', 'left'); text(o.h < 0.05 ? 'sta scaricando' : `tra ${hoursTxt(o.h)}`, bx + bw - 10, y + 11, 12, '#9ce8b4', 'right'); });
+  return drawCart(P, b, t); // one page: a row per material with how many to order, the supplier and automatic reordering
 }
 // ---- Ordine multiplo: several materials in one go; how many kinds grows with the site, how many bars with the warehouse
 const cartStep = b => Math.max(5, Math.round(whCap(b) / tune.cartSteps / 5) * 5);
 const cartKinds = b => tune['multiMat' + b.stage];
+function supOf(mid) { const k = (state.supPick || {})[mid]; return k != null && SUPPLIERS[k] && SUPPLIERS[k].mats.includes(mid) ? k : cheapest(mid); } // the week's cheapest, unless you picked one
 function drawCart(P, b, t) {
-  const C = state.cart = state.cart && state.cart.b === b.id ? state.cart : { b: b.id, n: {} };
+  const C = state.cart = state.cart && state.cart.b === b.id ? state.cart : { b: b.id, n: {} }, wh = whOf(b);
   const cap = whCap(b), tot = whTotal(b), ord = onOrder(b), room = Math.max(0, cap - tot - ord), step = cartStep(b), kinds = cartKinds(b);
   const sum = () => Object.values(C.n).reduce((a, n) => a + n, 0), chosen = () => Object.keys(C.n).filter(k => C.n[k] > 0);
-  const x0 = P.x + 24, w0 = P.w - 48;
-  text(`Fino a ${kinds} ${kinds === 1 ? 'materiale' : 'materiali'} per ordine in ${b.name} (cresce con la sede) · passo ${step} barre (cresce col magazzino)`, x0, P.y + 128, 14, '#ffe08a', 'left');
-  text('Ognuno arriva dal fornitore più conveniente della settimana', x0, P.y + 148, 12, '#cfd6dd', 'left');
+  const x0 = P.x + 24, w0 = P.w - 48, autos = autoMatsOf(b);
+  text(`Settimana ${weekNum() + 1}: i prezzi cambiano tra ${daysTxt(7 - (dayNum() % 7))} · fino a ${kinds} ${kinds === 1 ? 'materiale' : 'materiali'} per ordine`, x0, P.y + 128, 13, '#ffe08a', 'left');
+  text('"Auto" riordina da solo quel materiale quando scende · il fornitore è il più conveniente, tocca il nome per sceglierne un altro', x0, P.y + 148, 11, '#cfd6dd', 'left');
   let cost = 0;
   MATS.forEach((m, i) => {
-    const y = P.y + 166 + i * 62, open = matOpen(m), si = cheapest(m.id), pr = supPrice(si, m.id), n = C.n[m.id] || 0, have = (whOf(b).stock[m.id] || 0);
+    const y = P.y + 164 + i * 60, open = matOpen(m), si = supOf(m.id), pr = supPrice(si, m.id), n = C.n[m.id] || 0, have = wh.stock[m.id] || 0, on = !!autos[m.id];
     cost += Math.ceil(n * pr);
-    rrect(x0, y, w0, 54, 10, n ? 'rgba(91,199,255,0.16)' : HT().card, n ? '#5bc7ff' : 'rgba(255,255,255,0.1)', n ? 2 : 1);
-    rrect(x0 + 14, y + 17, 30, 20, 3, open ? m.col : '#3a3a3a', '#1b1b1b', 1.5);
-    text(m.name, x0 + 56, y + 18, 16, open ? '#fff' : '#7d8790', 'left');
-    text(open ? `in magazzino ${have} · ${SUPPLIERS[si].name} ${pr.toFixed(2).replace('.', ',')} a barra · ${hoursTxt(supHours(si))}` : `si sblocca al livello ${m.lvl}`, x0 + 56, y + 38, 11, open ? '#b9c4ce' : '#ffb35b', 'left');
-    if (!open) return;
-    const full = !n && chosen().length >= kinds, left = room - sum();
-    button('−', x0 + w0 - 330, y + 9, 52, 36, () => { C.n[m.id] = Math.max(0, n - step); if (!C.n[m.id]) delete C.n[m.id]; sfx.click(); }, { enabled: n > 0, size: 20, name: 'cm_' + m.id });
-    text(String(n), x0 + w0 - 240, y + 27, 20, n ? '#fff' : '#7d8790');
-    button('+', x0 + w0 - 200, y + 9, 52, 36, () => { if (left <= 0) return; if (full) return toast(`In ${b.name} un ordine può avere al massimo ${kinds} ${kinds === 1 ? 'materiale' : 'materiali'}`, '#ffb35b'); C.n[m.id] = n + Math.min(step, left); sfx.click(); }, { enabled: left > 0 && !full, size: 20, name: 'cp_' + m.id });
-    button('Riempi', x0 + w0 - 136, y + 9, 120, 36, () => { if (left <= 0) return; if (full) return toast(`In ${b.name} un ordine può avere al massimo ${kinds} ${kinds === 1 ? 'materiale' : 'materiali'}`, '#ffb35b'); C.n[m.id] = n + left; sfx.click(); }, { enabled: left > 0 && !full, size: 13, name: 'cf_' + m.id });
+    rrect(x0, y, w0, 52, 10, n ? 'rgba(91,199,255,0.16)' : HT().card, n ? '#5bc7ff' : 'rgba(255,255,255,0.1)', n ? 2 : 1);
+    rrect(x0 + 14, y + 16, 30, 20, 3, open ? m.col : '#3a3a3a', '#1b1b1b', 1.5);
+    text(m.name, x0 + 56, y + 17, 16, open ? '#fff' : '#7d8790', 'left');
+    if (!open) { text(`si sblocca al livello ${m.lvl}`, x0 + 56, y + 36, 11, '#ffb35b', 'left'); return; }
+    text(`in magazzino ${have}`, x0 + 56, y + 36, 11, have ? '#b9c4ce' : '#ff8a7a', 'left');
+    // supplier: tap to pick another
+    const sups = SUPPLIERS.map((s2, k) => k).filter(k => SUPPLIERS[k].mats.includes(m.id)).sort((a, c) => supPrice(a, m.id) - supPrice(c, m.id));
+    rrect(x0 + 200, y + 8, 300, 36, 8, 'rgba(0,0,0,0.2)', 'rgba(255,255,255,0.12)', 1);
+    text(`${SUPPLIERS[si].name}${si === sups[0] ? ' · più conveniente' : ''}`, x0 + 212, y + 19, 11, si === sups[0] ? '#9ce8b4' : '#ffe08a', 'left');
+    text(`${pr.toFixed(2).replace('.', ',')} a barra · arriva in ${hoursTxt(supHours(si))}`, x0 + 212, y + 34, 10, '#cfd6dd', 'left');
+    btn(x0 + 200, y + 8, 300, 36, () => { state.supPick = state.supPick || {}; state.supPick[m.id] = sups[(sups.indexOf(si) + 1) % sups.length]; sfx.click(); }, 'sup_' + m.id);
+    const full = !n && chosen().length >= kinds, left = room - sum(), lim = () => toast(`In ${b.name} un ordine può avere al massimo ${kinds} ${kinds === 1 ? 'materiale' : 'materiali'}`, '#ffb35b');
+    button('−', x0 + w0 - 470, y + 8, 48, 36, () => { C.n[m.id] = Math.max(0, n - step); if (!C.n[m.id]) delete C.n[m.id]; sfx.click(); }, { enabled: n > 0, size: 20, name: 'cm_' + m.id });
+    text(String(n), x0 + w0 - 392, y + 26, 19, n ? '#fff' : '#7d8790');
+    button('+', x0 + w0 - 362, y + 8, 48, 36, () => { if (left <= 0) return; if (full) return lim(); C.n[m.id] = n + Math.min(step, left); sfx.click(); }, { enabled: left > 0 && !full, size: 20, name: 'cp_' + m.id });
+    button('Riempi', x0 + w0 - 306, y + 8, 100, 36, () => { if (left <= 0) return; if (full) return lim(); C.n[m.id] = n + left; sfx.click(); }, { enabled: left > 0 && !full, size: 13, name: 'cf_' + m.id });
+    button(on ? 'Auto: SÌ' : 'Auto: NO', x0 + w0 - 196, y + 8, 180, 36, () => { wh.autoMats = { ...autos, [m.id]: !on }; if (!wh.autoMats[m.id]) delete wh.autoMats[m.id]; sfx.click(); autoOrder(b); save(); }, { color: on ? '#7ef0a0' : '#e6e1d3', size: 14, name: 'auto_' + m.id });
   });
-  const y = P.y + 166 + MATS.length * 62 + 8, s = sum(), ch = chosen();
+  const y = P.y + 164 + MATS.length * 60 + 6, s = sum(), ch = chosen();
   rrect(x0, y, 420, 16, 6, '#1b2229'); rrect(x0, y, 420 * Math.min(1, (tot + ord) / Math.max(1, cap)), 16, 6, '#a7b0b8'); if (s) rrect(x0 + 420 * Math.min(1, (tot + ord) / cap), y, 420 * Math.min(s, room) / cap, 16, 6, '#5bc7ff');
-  text(`Magazzino ${tot + ord}/${cap}${s ? ` · +${s} nel carrello` : ''} · ${ch.length}/${kinds} materiali`, x0, y + 34, 13, '#cfd6dd', 'left');
+  text(`Magazzino ${tot}/${cap}${ord ? ` · ${ord} in arrivo` : ''}${s ? ` · +${s} da ordinare` : ''}`, x0, y + 32, 13, '#cfd6dd', 'left');
   if (s) button('Svuota', x0 + w0 - 470, y - 4, 120, 46, () => { C.n = {}; sfx.click(); }, { color: '#9aa4ad', size: 14, name: 'cartClear' });
-  button(s ? `Ordina tutto · ${fmt(cost)}` : 'Aggiungi materiali', x0 + w0 - 330, y - 8, 330, 54, () => {
-    let got = 0; for (const k of ch) { const before = whOf(b).orders.length; orderBars(b, C.n[k], true, k, cheapest(k)); if (whOf(b).orders.length > before) got++; }
-    C.n = {}; sfx.click(); toast(got ? `Ordinati ${got} ${got === 1 ? 'materiale' : 'materiali'}: ${got === 1 ? 'arriva un camion' : 'arrivano ' + got + ' camion'}` : 'Monete insufficienti', got ? '#7ef0a0' : '#ffb35b'); save();
+  button(s ? `Ordina · ${fmt(cost)}` : room ? 'Scegli quanto ordinare' : 'Magazzino pieno', x0 + w0 - 330, y - 8, 330, 54, () => {
+    let got = 0; for (const k of ch) { const before = whOf(b).orders.length; orderBars(b, C.n[k], true, k, supOf(k)); if (whOf(b).orders.length > before) got++; }
+    C.n = {}; sfx.click(); toast(got ? `Ordinati ${got} ${got === 1 ? 'materiale' : 'materiali'}: ${got === 1 ? 'arriva un camion' : 'arrivano ' + got + ' camion'}` : whCap(b) - whTotal(b) - onOrder(b) <= 0 ? 'Magazzino pieno, contando gli ordini già in arrivo' : 'Monete insufficienti', got ? '#7ef0a0' : '#ffb35b'); save();
   }, { enabled: s > 0 && state.coins >= cost, color: '#7ef0a0', size: 18, name: 'cartGo' });
 }
 // ---- Calendar, speed and surprises ------------------------------------------------------------
@@ -4265,7 +4332,9 @@ function siteProgress() { // how far the next site's building work has got
 const hoursTxt = h => h < 1 ? `${Math.round(h * 60)} minuti` : `${String(Math.round(h * 10) / 10).replace('.', ',')} ${h === 1 ? 'ora' : 'ore'}`;
 const daysTxt = n => `${n} ${n === 1 ? 'giorno' : 'giorni'}`;
 const siteDaysLeft = () => { const st = TIER() + 1; if (st > 4) return 0; return Math.max(0, Math.ceil(tune['build' + st + 'Days'] * (1 - siteProgress()))); };
-function onWorkHour() { // each hour of the shift every running machine has a small chance to break, more when time runs fast or it is old
+function onWorkHour() {
+  for (const b of state.buildings) if (b.autoCrew !== false && crewOf(b).length) organizeCrew(b, true); // sites on automatic sort their crew every hour
+  for (const b of state.buildings) { const keep = F; F = b; autoOrder(b); F = keep; } // each hour of the shift every running machine has a small chance to break, more when time runs fast or it is old
   const fast = state.skip ? 0 : (state.speed - 1) / Math.max(1, tune.speedFast - 1), skip = state.skip ? tune.skipBreakMult : 1; // simulating to a day of the calendar: +50%
   for (const b of state.buildings) for (const m of b.machines) {
     if (m.phase < 2 || m.broken) continue;
@@ -4425,7 +4494,7 @@ function drawTopLayer(t, part = 'all') {
     text(b.title, W / 2, y + 26, 26, b.col); text(b.sub, W / 2, y + 56, 16, '#e6e1d3'); ctx.globalAlpha = 1;
   }
   if (part === 'banner') return;
-  state.toasts.forEach((tt, i) => {
+  if (!state.mg) state.toasts.slice(-3).forEach((tt, i) => { // at most three, and none over a minigame
     const y = 540 - i * 44; ctx.globalAlpha = Math.min(1, tt.life * 2);
     ctx.font = `bold 17px ${FONT}`; const tw = ctx.measureText(tt.msg).width + 30;
     rrect(W / 2 + 20 - tw / 2, y, tw, 36, 10, 'rgba(58,36,22,0.92)', tt.col, 1.5); text(tt.msg, W / 2 + 20, y + 19, 17, tt.col); ctx.globalAlpha = 1;
@@ -4549,6 +4618,7 @@ const scenes = {
         if (!state.panel) {
           if (F) {
             if (pressed('KeyD') || pressed('Digit2')) setTool(state.tool === 'demo' ? null : 'demo');
+            if (pressed('KeyS')) openPanel('schema');
           } else if (pressed('Digit1')) { if (state.wtool === 'draw') state.wtool = null; else setWTool('draw'); }
           const sp = tune.panSpeed * dt / cam.zoom;
           if (down.has('ArrowLeft')) cam.x -= sp; if (down.has('ArrowRight')) cam.x += sp;
@@ -4588,6 +4658,7 @@ const scenes = {
       else if (state.panel === 'crew') drawCrew(t);
       else if (state.panel === 'calendar') drawCalendar(t);
       else if (state.panel === 'netpick') drawNetPick(t);
+      else if (state.panel === 'schema') drawSchema(t);
       else if (state.panel === 'routes') drawRoutes(t);
       if (state.mg) drawMinigame(t);
       if (!state.town) drawTutorial(t);

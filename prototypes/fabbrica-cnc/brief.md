@@ -74,6 +74,11 @@ After play: Vorrei mettere la possibilità di selezionare il calendario e simula
 After play: Una volta posizionato il rack ed il pc puoi scegliere che macchinari collegare e fare una sola volta il mini gioco mentre per quanto riguarda i guasti crea anche un mini gioco del guasto della rete dove devi pulire uno schema di collegamenti di rete da letterali BUG
 After play: quando sblocco nuovi macchinari nel ricettacolo non si sbloccano le ricette inerenti a quei macchinari, dal magazzino mettimi la possibilità di switchare all'ufficio per acquistare i pezzi mancanti e da li metti la possibilità di comandare più materiali alla volta (graduale per fabbrica e ampiezza del magazzino), dal magazzino passare da un magazzino all'altro con più fabbriche; la lista operatori a volte assegna ruoli che non servono; togli il tasto 1 Operatore
 After play: togli il pulsante uno e riorganizza la sbarra sotto, poi circa 50 simulazioni dalla a alla z del gioco per trovare bug o migliorie
+After play: tutte le migliorie (dalle simulazioni: meno guasti di rete, linea dalla commessa, corrente e spazio nel negozio, premio per le ricette nuove)
+After play: al posto del tasto demolisci metti un menu a schema di rete con all'interno le macchine presenti in quella fabbrica e in base a che pezzo stanno producendo il flusso che va da una all'altra, con tutti gli oggetti della fabbrica, per gestirle da li
+After play: Pensa da programmatore di videogiochi valuta ogni opzione come si può semplificare e rendere più comprensibile fai un check di tutto (scelte tutte: produzione solo linee, acquisti in una pagina, attrezzi/rete/squadra, guida più chiara)
+After play: Togli i tasti togli operatore/aggiungi e cambia lavorazione dai menu delle macchine, si può fare dagli altri menu
+After play: Il tasto migliora nel menù macchina era meglio ricalibra poi puoi salvare
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 
