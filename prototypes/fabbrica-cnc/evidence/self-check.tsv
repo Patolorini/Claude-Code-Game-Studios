@@ -1,0 +1,67 @@
+time	2026-11-19 00:28:43
+keep	lines	0	pinned	0
+checklist	L1	unlisted	-	Look: fabbrica isometrica in stile base-builder mobile. Il capannone ha pavimento in cemento a piastrelle grigio-azzurre, strisce di sicurezza gialle e nere ai bordi delle celle, muri in mattoni rossi e lucernari. Le macchine CNC sono disegnate come blocchi isometrici con carenatura bianca/grigio chiaro, porta in vetro, pannello di controllo e una spia di stato (verde se lavora, gialla se attende, grigia se spenta). I cavi di rete blu corrono a terra fino al rack del server. Gli operai sono piccoli e in pixel art (sprite 16×16 ingranditi senza sfocatura), con tuta blu e casco giallo, e camminano tra le macchine. Palette: cemento grigio-azzurro (fondo), giallo sicurezza (selezione e accenti), verde (soldi e successo), blu rete (cavi e connessioni), arancione (pezzi in uscita). Dettaglio distintivo: ogni pezzo finito esce dalla macchina e scivola sul nastro fino alla successiva, e sopra l'ultima sale una moneta. Ogni figura è disegnata: niente emoji, niente cerchi semplici.	
+checklist	L2	unlisted	-	References: Clash of Clans (la visuale isometrica della base e gli edifici dettagliati da toccare); Hay Day (il ritmo calmo, le produzioni a catena, la soddisfazione del raccogliere).	
+checklist	L3	unlisted	-	View: 2.5D isometrica · Camera: isometrica dall'alto, trascinamento e zoom.	
+checklist	F1	unlisted	-	Capannone isometrico a griglia con trascinamento e zoom, piazzamento con anteprima	
+checklist	F2	unlisted	-	5 macchine CNC sbloccabili per livello: Troncatrice, Tornio, Fresa, Foratrice, Centro di lavoro 5 assi *(guessed)*	
+checklist	F3	unlisted	-	Linee di produzione: l'ordine delle macchine decide il pezzo (ricette), con un ricettario che si riempie scoprendole	
+checklist	F4	unlisted	-	3 minigiochi per macchina: Montaggio (bulloni in ordine), Rete (percorso del cavo su griglia), Configurazione (ago nella zona verde); la percentuale dipende dal tempo	
+checklist	F5	unlisted	-	Livelli/XP che sbloccano macchine e ampliamenti del capannone	
+checklist	F6	unlisted	-	Attrezzi potenziabili (Chiave, Crimpatrice, Tester) che danno più tempo nel loro minigioco	
+checklist	F7	unlisted	-	Monete che salgono dai pezzi, entrate al minuto visibili, prossimo obiettivo sempre a schermo	
+checklist	F8	unlisted	-	Operai in pixel art che camminano tra le macchine; salvataggio automatico	
+checklist	S1	unlisted	-	macchinari CNC da acquistare e costruire · in the slice	
+checklist	S2	unlisted	-	collegamento in rete con minigioco · in the slice	
+checklist	S3	unlisted	-	montaggio/costruzione con minigioco · in the slice	
+checklist	S4	unlisted	-	configurazione con minigioco · in the slice	
+checklist	S5	unlisted	-	ordine delle macchine che dà pezzi diversi (puzzle) · in the slice	
+checklist	S6	unlisted	-	sistema a livelli che sblocca le macchine · in the slice	
+checklist	S7	unlisted	-	attrezzi potenziabili che velocizzano i minigiochi · in the slice	
+checklist	S8	unlisted	-	fabbrica sempre più grande · thin stand-in *(guessed)*	
+checklist	M1	unlisted	-	Si apre su un capannone quasi vuoto, con un operaio pixel che saluta e 500 monete.	
+checklist	M2	unlisted	-	Una freccia indica il negozio: compri la Troncatrice CNC e la piazzi su una cella (il fantasma verde mostra dove va, si sente il "clack").	
+checklist	M3	unlisted	-	Parte il minigioco Montaggio: tocchi i bulloni nell'ordine indicato prima che il tempo finisca, e il risultato dà una percentuale, per esempio 92%.	
+checklist	M4	unlisted	-	Poi il minigioco Rete: trascini il cavo dal rack alla macchina su una griglia, girando intorno agli ostacoli.	
+checklist	M5	unlisted	-	Poi il minigioco Configurazione: fermi un ago su una zona verde per impostare velocità e avanzamento.	
+checklist	M6	unlisted	-	La macchina si accende, sforna barre tagliate e salgono le prime monete.	
+checklist	M7	unlisted	-	Con quei soldi compri il Tornio CNC, lo metti dopo la troncatrice sul nastro e il pezzo cambia in "Perno tornito", che vale il triplo: è qui che si capisce il gioco.	
+checklist	C1	unlisted	-	Nessun fallimento *(you said)*.	
+checklist	C2	unlisted	-	La sfida è di ottimizzazione: verso il 3°-5° minuto sblocchi la terza macchina (la Fresa) e scopri che l'ordine conta.	
+checklist	C3	unlisted	-	Troncatrice→Tornio→Fresa dà un pezzo diverso (e più prezioso) di Troncatrice→Fresa→Tornio, e alcune combinazioni producono scarti di poco valore.	
+checklist	C4	unlisted	-	La qualità della macchina (la media dei tre minigiochi) moltiplica quanto rende, quindi un minigioco fatto male si sente nei guadagni.	
+checklist	C5	unlisted	-	Più avanti gli attrezzi migliori danno più tempo nei minigiochi, le macchine nuove allungano le catene e servono celle e linee in più (ampliamento del capannone).	
+browser	HeadlessChrome/153.0.0.0
+scene	play	0	title
+scene	play	1	play
+digits	log	bold 10px "Trebuchet MS", Verdana, sans-serif	tabular	0
+digits	log	bold 28px "Trebuchet MS", Verdana, sans-serif	tabular	0
+digits	log	bold 15px "Trebuchet MS", Verdana, sans-serif	tabular	0
+digits	log	bold 17px "Trebuchet MS", Verdana, sans-serif	tabular	0
+digits	log	bold 13px "Trebuchet MS", Verdana, sans-serif	tabular	0
+measure	step-time	play	0.010	0.600	174
+lane	play	stop	2.9	82
+uncaught	play	0
+text	play	canvas	531,269,664,349	26.3	3.26	inside	FABBRICA CNC
+text	play	canvas	314,398,434,414	26.3	8.45	inside	Linea 2 · Liv. 4
+text	play	canvas	733,370,766,379	18.4	7.42	inside	RETE
+text	play	canvas	202,454,322,470	26.3	8.45	inside	Linea 3 · Liv. 8
+text	play	canvas	613,385,696,397	22.5	8.56	inside	Linea vuota
+text	play	canvas	314,315,546,332	24.0	14.16	inside	Benvenuto in fabbrica, capo!
+text	play	canvas	66,24,112,45	39.0	11.85	inside	500
+text	play	canvas	66,55,154,67	22.5	10.64	inside	+0 al minuto
+text	play	canvas	296,38,304,50	24.0	12.42	inside	1
+text	play	canvas	335,22,402,36	24.0	15.29	inside	Livello 1
+text	play	canvas	398,49,452,60	18.0	16.06	inside	0 / 50 XP
+text	play	canvas	562,24,632,35	18.0	10.82	inside	OBIETTIVO
+text	play	canvas	562,45,992,63	25.5	15.29	inside	Compra la Troncatrice CNC nel Negozio e piazzala
+text	play	canvas	925,684,986,698	24.0	11.80	inside	Attrezzi
+text	play	canvas	1053,684,1108,698	24.0	11.80	inside	Ricette
+text	play	canvas	1172,684,1237,701	24.0	9.20	inside	Negozio
+text	play	canvas	35,670,48,684	34.5	14.95	inside	+
+text	play	canvas	101,677,109,681	34.5	14.95	inside	-
+text	play	canvas	163,668,175,685	34.5	14.95	inside	II
+text	play	canvas	1068,529,1258,547	25.5	14.16	inside	Compra la Troncatrice
+screen	play	drawn
+shot	play	prototypes/fabbrica-cnc/evidence/play.png
+responds	changed	64

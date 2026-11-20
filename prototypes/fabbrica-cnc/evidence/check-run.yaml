@@ -1,0 +1,163 @@
+# The one-shot's small check (check-run/1).
+# Written by one-shot-check.sh --record: the results are /prototype's reading of
+# evidence/self-check.tsv; never edited by hand.
+kind: check-run/1
+engine: web
+browser: "HeadlessChrome/153.0.0.0"
+time: "2026-11-19 00:28:43"
+checks:
+  - id: boots
+    result: pass
+    evidence:
+      - "evidence/self-check.tsv"
+  - id: shot
+    result: pass
+    evidence:
+      - "evidence/play.png"
+  - id: outlines
+    result: pass
+    evidence:
+      - "evidence/figures.png"
+  - id: brief-words
+    result: pass
+    evidence:
+      - "evidence/brief-words.tsv"
+  - id: emoji
+    result: pass
+    evidence:
+      - "evidence/self-check.tsv"
+  - id: nearest-game
+    result: pass
+    evidence:
+      - "evidence/nearest-game.txt"
+brief_checklist:
+  - id: L1
+    result: pass
+    evidence: "evidence/running.png"
+    item: "Look: fabbrica isometrica in stile base-builder mobile. Il capannone ha pavimento in cemento a piastrelle grigio-azzurre, strisce di sicurezza gialle e nere ai bordi delle celle, muri in mattoni rossi e lucernari. Le macchine CNC sono disegnate come blocchi isometrici con carenatura bianca/grigio chiaro, porta in vetro, pannello di controllo e una spia di stato (verde se lavora, gialla se attende, grigia se spenta). I cavi di rete blu corrono a terra fino al rack del server. Gli operai sono piccoli e in pixel art (sprite 16×16 ingranditi senza sfocatura), con tuta blu e casco giallo, e camminano tra le macchine. Palette: cemento grigio-azzurro (fondo), giallo sicurezza (selezione e accenti), verde (soldi e successo), blu rete (cavi e connessioni), arancione (pezzi in uscita). Dettaglio distintivo: ogni pezzo finito esce dalla macchina e scivola sul nastro fino alla successiva, e sopra l'ultima sale una moneta. Ogni figura è disegnata: niente emoji, niente cerchi semplici."
+  - id: L2
+    result: pass
+    evidence: "evidence/play.png"
+    item: "References: Clash of Clans (la visuale isometrica della base e gli edifici dettagliati da toccare); Hay Day (il ritmo calmo, le produzioni a catena, la soddisfazione del raccogliere)."
+  - id: L3
+    result: pass
+    evidence: "evidence/play.png"
+    item: "View: 2.5D isometrica · Camera: isometrica dall'alto, trascinamento e zoom."
+  - id: F1
+    result: pass
+    evidence: "evidence/place.png"
+    item: "Capannone isometrico a griglia con trascinamento e zoom, piazzamento con anteprima"
+  - id: F2
+    result: pass
+    evidence: "evidence/shop.png"
+    item: "5 macchine CNC sbloccabili per livello: Troncatrice, Tornio, Fresa, Foratrice, Centro di lavoro 5 assi *(guessed)*"
+  - id: F3
+    result: pass
+    evidence: "evidence/lathe.png"
+    item: "Linee di produzione: l'ordine delle macchine decide il pezzo (ricette), con un ricettario che si riempie scoprendole"
+  - id: F4
+    result: pass
+    evidence: "evidence/mg-montaggio.png"
+    item: "3 minigiochi per macchina: Montaggio (bulloni in ordine), Rete (percorso del cavo su griglia), Configurazione (ago nella zona verde); la percentuale dipende dal tempo"
+  - id: F5
+    result: pass
+    evidence: "index.html:755"
+    item: "Livelli/XP che sbloccano macchine e ampliamenti del capannone"
+  - id: F6
+    result: pass
+    evidence: "evidence/tools.png"
+    item: "Attrezzi potenziabili (Chiave, Crimpatrice, Tester) che danno più tempo nel loro minigioco"
+  - id: F7
+    result: pass
+    evidence: "evidence/running.png"
+    item: "Monete che salgono dai pezzi, entrate al minuto visibili, prossimo obiettivo sempre a schermo"
+  - id: F8
+    result: pass
+    evidence: "evidence/running.png"
+    item: "Operai in pixel art che camminano tra le macchine; salvataggio automatico"
+  - id: S1
+    result: pass
+    evidence: "evidence/shop.png"
+    item: "macchinari CNC da acquistare e costruire · in the slice"
+  - id: S2
+    result: pass
+    evidence: "evidence/mg-rete.png"
+    item: "collegamento in rete con minigioco · in the slice"
+  - id: S3
+    result: pass
+    evidence: "evidence/mg-montaggio.png"
+    item: "montaggio/costruzione con minigioco · in the slice"
+  - id: S4
+    result: pass
+    evidence: "evidence/mg-config.png"
+    item: "configurazione con minigioco · in the slice"
+  - id: S5
+    result: pass
+    evidence: "evidence/lathe.png"
+    item: "ordine delle macchine che dà pezzi diversi (puzzle) · in the slice"
+  - id: S6
+    result: pass
+    evidence: "evidence/shop.png"
+    item: "sistema a livelli che sblocca le macchine · in the slice"
+  - id: S7
+    result: pass
+    evidence: "evidence/tools.png"
+    item: "attrezzi potenziabili che velocizzano i minigiochi · in the slice"
+  - id: S8
+    result: pass
+    evidence: "evidence/shop.png"
+    item: "fabbrica sempre più grande · thin stand-in *(guessed)*"
+  - id: M1
+    result: pass
+    evidence: "evidence/play.png"
+    item: "Si apre su un capannone quasi vuoto, con un operaio pixel che saluta e 500 monete."
+  - id: M2
+    result: pass
+    evidence: "evidence/place.png"
+    item: "Una freccia indica il negozio: compri la Troncatrice CNC e la piazzi su una cella (il fantasma verde mostra dove va, si sente il \"clack\")."
+  - id: M3
+    result: pass
+    evidence: "evidence/mg-montaggio.png"
+    item: "Parte il minigioco Montaggio: tocchi i bulloni nell'ordine indicato prima che il tempo finisca, e il risultato dà una percentuale, per esempio 92%."
+  - id: M4
+    result: pass
+    evidence: "evidence/mg-rete.png"
+    item: "Poi il minigioco Rete: trascini il cavo dal rack alla macchina su una griglia, girando intorno agli ostacoli."
+  - id: M5
+    result: pass
+    evidence: "evidence/mg-config.png"
+    item: "Poi il minigioco Configurazione: fermi un ago su una zona verde per impostare velocità e avanzamento."
+  - id: M6
+    result: pass
+    evidence: "evidence/running.png"
+    item: "La macchina si accende, sforna barre tagliate e salgono le prime monete."
+  - id: M7
+    result: pass
+    evidence: "evidence/lathe.png"
+    item: "Con quei soldi compri il Tornio CNC, lo metti dopo la troncatrice sul nastro e il pezzo cambia in \"Perno tornito\", che vale il triplo: è qui che si capisce il gioco."
+  - id: C1
+    result: pass
+    evidence: "index.html:851"
+    item: "Nessun fallimento *(you said)*."
+  - id: C2
+    result: pass
+    evidence: "evidence/shop.png"
+    item: "La sfida è di ottimizzazione: verso il 3°-5° minuto sblocchi la terza macchina (la Fresa) e scopri che l'ordine conta."
+  - id: C3
+    result: pass
+    evidence: "index.html:205"
+    item: "Troncatrice→Tornio→Fresa dà un pezzo diverso (e più prezioso) di Troncatrice→Fresa→Tornio, e alcune combinazioni producono scarti di poco valore."
+  - id: C4
+    result: pass
+    evidence: "index.html:708"
+    item: "La qualità della macchina (la media dei tre minigiochi) moltiplica quanto rende, quindi un minigioco fatto male si sente nei guadagni."
+  - id: C5
+    result: pass
+    evidence: "index.html:824"
+    item: "Più avanti gli attrezzi migliori danno più tempo nei minigiochi, le macchine nuove allungano le catene e servono celle e linee in più (ampliamento del capannone)."
+measures:
+  - id: step-time
+    value: 0.600
+    unit: ms
+    by: browser
+    detail: "mean 0.010 ms, slowest 0.600 ms, 174 steps"
