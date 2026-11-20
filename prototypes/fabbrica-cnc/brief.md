@@ -80,7 +80,8 @@ After play: Pensa da programmatore di videogiochi valuta ogni opzione come si pu
 After play: Togli i tasti togli operatore/aggiungi e cambia lavorazione dai menu delle macchine, si può fare dagli altri menu
 After play: Il tasto migliora nel menù macchina era meglio ricalibra poi puoi salvare
 After play: Con i crediti rimanenti runna più partite possibili con il bot; la scelta del fornitore è un po' complicata: ogni materiale cliccabile apre un menu dove scegliere il fornitore migliore di quel momento
-Prossimi (dalle 100 simulazioni del bot, da fare): 1) pulsante "Riordina macchine" nello Schema che ricompatta il pavimento tenendo vicine le linee; 2) Noah e la pagina Linee suggeriscono di migliorare una linea ("Ferma Barra tagliata e avvia Perno tornito") con un tasto unico; 3) obiettivi di fine gioco dopo il giorno 300 (più corrente con un acquisto costoso, grandi commesse finali); 4) l'acquisto da tastiera controlla lo spazio come il negozio.
+Prossimi (dalle 100 simulazioni del bot, da fare): 1) pulsante "Riordina macchine" nello Schema che ricompatta il pavimento (ora con 1 casella tra le macchine); 2) [fatto: Migliora linea] 3) obiettivi di fine gioco dopo il giorno 300 (più corrente con un acquisto costoso, grandi commesse finali); 4) l'acquisto da tastiera controlla lo spazio come il negozio.
+After play: Il migliora linea ci sta ma teniamo almeno 1 quadrato di distanza tra una macchina e l'altra così sembra più pulito (poi scelti: XP dal valore del pezzo, sedi più grandi)
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 

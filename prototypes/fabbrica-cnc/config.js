@@ -72,6 +72,8 @@ window.CONFIG = {
   cartSteps: { value: 20, min: 4, max: 100, step: 1 },          // il passo del carrello è il magazzino diviso per questo (più grande il magazzino, più grande il passo)
   newRecipePieces: { value: 25, min: 0, max: 200, step: 5 },   // la prima volta che produci una ricetta nuova: premio pari a tanti pezzi
   newRecipeXp: { value: 3, min: 1, max: 10, step: 0.5 },        // e l'esperienza della scoperta moltiplicata per questo
+  xpValueRef: { value: 10, min: 1, max: 200, step: 1 },        // esperienza per pezzo venduto = radice quadrata di (valore / questo), almeno 1
+  machGap: { value: 1, min: 0, max: 2, step: 1 },              // caselle libere obbligatorie tra una macchina e l'altra (anche in diagonale)
   opsPerMag: { value: 4, min: 1, max: 10, step: 1 },        // macchine servite da un magazziniere quando la Squadra si organizza da sola
   opsPerLvl: { value: 0.5, min: 0, max: 5, step: 0.25 }, // operatori in più per ogni livello (0,5 = uno ogni due livelli)
   qualityBase: { value: 0.5, min: 0, max: 1, step: 0.05 },   // resa = qualityBase + qualità% / 100
@@ -157,22 +159,22 @@ window.CONFIG = {
   netBonusPerLvl: { value: 0.05, min: 0, max: 1, step: 0.01 }, // in più per ogni livello della Crimpatrice oltre il primo
 
   // ---- Sedi della storia: misura (celle) di ogni sede, livello che la sblocca e costo del trasloco ----
-  shed0Cols: { value: 6, min: 3, max: 14, step: 1 },
-  shed0Rows: { value: 5, min: 3, max: 10, step: 1 },
-  shed1Cols: { value: 8, min: 3, max: 14, step: 1 },
-  shed1Rows: { value: 6, min: 3, max: 10, step: 1 },
+  shed0Cols: { value: 8, min: 3, max: 20, step: 1 },
+  shed0Rows: { value: 7, min: 3, max: 20, step: 1 },
+  shed1Cols: { value: 10, min: 3, max: 20, step: 1 },
+  shed1Rows: { value: 8, min: 3, max: 20, step: 1 },
   shed1Lvl: { value: 6, min: 1, max: 60, step: 1 },
   shed1Cost: { value: 1500, min: 0, max: 90000, step: 100 },
-  shed2Cols: { value: 10, min: 3, max: 14, step: 1 },
-  shed2Rows: { value: 8, min: 3, max: 16, step: 1 },
+  shed2Cols: { value: 12, min: 3, max: 22, step: 1 },
+  shed2Rows: { value: 10, min: 3, max: 22, step: 1 },
   shed2Lvl: { value: 14, min: 1, max: 60, step: 1 },
   shed2Cost: { value: 4000, min: 0, max: 90000, step: 100 },
-  shed3Cols: { value: 13, min: 3, max: 20, step: 1 },
-  shed3Rows: { value: 9, min: 3, max: 16, step: 1 },
+  shed3Cols: { value: 15, min: 3, max: 24, step: 1 },
+  shed3Rows: { value: 11, min: 3, max: 24, step: 1 },
   shed3Lvl: { value: 24, min: 1, max: 60, step: 1 },
   shed3Cost: { value: 9000, min: 0, max: 90000, step: 100 },
-  shed4Cols: { value: 16, min: 3, max: 20, step: 1 },
-  shed4Rows: { value: 12, min: 3, max: 16, step: 1 },
+  shed4Cols: { value: 18, min: 3, max: 26, step: 1 },
+  shed4Rows: { value: 14, min: 3, max: 26, step: 1 },
   shed4Lvl: { value: 34, min: 1, max: 60, step: 1 },
   shed4Cost: { value: 18000, min: 0, max: 90000, step: 100 },
 

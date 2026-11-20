@@ -430,7 +430,7 @@ function load() {
     const b = { id: bd.id, name: bd.name, cells: new Set(bd.tiles), stage: bd.stage || 0, grown: !!bd.grown, grid: {}, machines: [], workers: [], lastSale: -9 };
     state.buildings.push(b); F = b;
     for (const o of bd.cells) {
-      if (o.k === 'mach') { const m = makeMachine(o.type, o.c, o.r, o.dir, o.id, o.phase, o.pct, o.net ?? null); m.op = !!o.op; m.input = o.input || ''; m.age = o.age || 0; m.broken = o.broken || null; m.mk = o.mk || 1; m.line = o.line ?? null; m.mat = o.mat || null; m.lineLast = !!o.last; b.machines.push(m); if (!fitsAt(m.c, m.r, m.mk, m.dir, null, m.type)) m.mk = 1; placeMachineCells(m); }
+      if (o.k === 'mach') { const m = makeMachine(o.type, o.c, o.r, o.dir, o.id, o.phase, o.pct, o.net ?? null); m.op = !!o.op; m.input = o.input || ''; m.age = o.age || 0; m.broken = o.broken || null; m.mk = o.mk || 1; m.line = o.line ?? null; m.mat = o.mat || null; m.lineLast = !!o.last; b.machines.push(m); if (!fitsAt(m.c, m.r, m.mk, m.dir, null, m.type, 0)) m.mk = 1; placeMachineCells(m); }
       else if (o.k === 'src') setCell(o.c, o.r, { kind: 'src', dir: o.dir, t: 0.5, mat: o.mat || 'acc' });
       else if (o.k === 'crate') setCell(o.c, o.r, { kind: 'crate', last: null, bump: 0 });
       else setCell(o.c, o.r, { kind: o.k });
@@ -588,7 +588,17 @@ const fpOf = m => fpDims(m.mk || 1, m.dir || 0, m.type);
 function cellsOf(m, c = m.c, r = m.r, mk = m.mk || 1, dir = m.dir || 0, type = m.type) { const [w, h] = fpDims(mk, dir, type), out = []; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) out.push([c + i, r + j]); return out; }
 function placeMachineCells(m) { cellsOf(m).forEach(([c, r], i) => setCell(c, r, { kind: 'mach', m, main: i === 0 })); }
 function clearMachineCells(m) { for (const [c, r] of cellsOf(m)) { const o = cellAt(c, r); if (o && o.kind === 'mach' && o.m === m) clearCell(c, r); } }
-function fitsAt(c, r, mk, dir, self, type) { return cellsOf(null, c, r, mk, dir, type).every(([cc, rr]) => { if (!inShed(cc, rr)) return false; const o = cellAt(cc, rr); return !o || (self && o.kind === 'mach' && o.m === self); }); }
+function fitsAt(c, r, mk, dir, self, type, gap = tune.machGap) { // free cells for the footprint, and a clear gap around it from any other machine
+  const cells = cellsOf(null, c, r, mk, dir, type);
+  if (!cells.every(([cc, rr]) => { if (!inShed(cc, rr)) return false; const o = cellAt(cc, rr); return !o || (self && o.kind === 'mach' && o.m === self); })) return false;
+  if (!gap) return true;
+  const mine = new Set(cells.map(([cc, rr]) => cc + ',' + rr));
+  for (const [cc, rr] of cells) for (let dc = -gap; dc <= gap; dc++) for (let dr = -gap; dr <= gap; dr++) {
+    if (mine.has((cc + dc) + ',' + (rr + dr))) continue;
+    const o = cellAt(cc + dc, rr + dr); if (o && o.kind === 'mach' && o.m !== self) return false;
+  }
+  return true;
+}
 const machineTopV = (type, mk = 1) => mk === 1 ? 34 + (type === 'F' || type === 'D' ? 8 : 0) : ({ T: [36, 44, 50, 54], L: [34, 42, 48, 52], F: [52, 58, 66, 70], D: [50, 56, 66, 58], X: [50, 56, 64, 66] }[type] || [40, 46, 56, 66])[mk - 2];
 // ---- Machine sprites (SpriteCook pixel art, assets/mach_<type><mk>.png): drawn on the footprint, the vector drawing stays as a fallback ----
 const MACH_IMG = {};
@@ -1313,7 +1323,7 @@ function sell(it, crate) {
     F.lastSale = state.t; const bb = bboxOf(shellKeys(F)), [wx, wy] = iso((bb.c0 + bb.c1) / 2, (bb.r0 + bb.r1) / 2, 150);
     state.floats.push({ wx, wy, txt: '+' + fmt(v), col: '#7ef0a0', life: 1.2, coin: true, b: 'w' });
   }
-  addXp(tune.xpPerSale);
+  addXp(Math.max(tune.xpPerSale, Math.round(Math.sqrt(v / tune.xpValueRef)))); // pieces worth more give more experience, so better lines also level you up
   if (state.t - (state.lastCoinSfx || -9) > 0.18) { sfx.coin(); state.lastCoinSfx = state.t; }
   discover(rec, mat);
 }
@@ -1573,7 +1583,7 @@ function canPlaceAt(c, r, P) {
 function rotatePlacing() { if (!state.placing) return; state.placing.dir = (state.placing.dir + 1) % 4; state.placing.rotated = true; sfx.click(); }
 function placeAt(c, r) {
   const P = state.placing;
-  if (!canPlaceAt(c, r, P)) { sfx.wrong(); return toast(P.kind === 'mach' ? 'Qui non ci sta: la macchina occupa più celle, cerca uno spazio libero più grande' : 'Qui non c\'è spazio: scegli una cella libera', '#ffb35b'); }
+  if (!canPlaceAt(c, r, P)) { sfx.wrong(); return toast(P.kind === 'mach' ? `Qui non ci sta: serve lo spazio della macchina più ${tune.machGap === 1 ? 'una casella libera' : tune.machGap + ' caselle libere'} intorno, lontano dalle altre macchine` : 'Qui non c\'è spazio: scegli una cella libera', '#ffb35b'); }
   const old = cellAt(c, r);
   const dir = P.dir;
   if (P.m) { // moving a machine that is already built
@@ -2008,6 +2018,7 @@ function drawSchema(t) {
     arrow(px, cy, cx, cy, run ? '#7ef0a0' : '#59626b', run, '');
     const pn = pieceName(l.seq, l.mat); node(cx, y, 150, nh, 'rgba(240,146,58,0.15)', '#f0923a', () => { text((crates.length > 1 ? `Cassa ×${crates.length}` : 'Cassa') + ' · ' + fmt(recipeVal(l.seq, l.mat)), cx + 75, y + 15, 11, '#ffe08a'); text(pn.length > 22 ? pn.slice(0, 21) + '…' : pn, cx + 75, y + 31, 10, '#fff'); if (nh > 46) text(st, cx + 75, y + 47, 9, col); }, () => { state.panel = 'recipes'; state.recView = 'lines'; }, 'scCrate' + i);
     button('✕', cx + 156, y + nh / 2 - 13, 26, 26, () => stopLine(b, l.id), { size: 12, color: '#ff8a7a', name: 'scStop' + i });
+    { const k = betterLine(b, l); if (k) button('Migliora', cx + 188, y + nh / 2 - 15, 90, 30, () => upgradeLine(b, l), { size: 12, color: '#7ef0a0', name: 'scUp' + i }); }
   });
   // what is not on a line: machines and spare benches, ready for the next line
   const fy = ay + 14 + L.length * rh;
@@ -2519,6 +2530,25 @@ function startLine(b, key) {
   for (const cw of crewIn(b, 'mag')) cw.routes = null; // the warehouse workers take on the new trips
   sfx.ding(); toast(`Linea avviata: ${pieceName(seq, mat)} con ${plan.pick.length} ${plan.pick.length === 1 ? 'macchina' : 'macchine'}`, '#7ef0a0'); events.push({ type: 'line', key }); save();
 }
+function betterLine(b, l) { // a piece worth more that this line's machines (and the free ones) could make instead
+  const own = b.machines.filter(m => m.line === l.id), keepLines = b.lines;
+  for (const m of own) m.line = null; b.lines = linesOf(b).filter(x => x !== l);
+  let best = null, bv = recipeVal(l.seq, l.mat) * 1.2;
+  try {
+    const keys = state.found.concat((state.seenRec || []).filter(k => !state.found.includes(k)));
+    for (const k of keys) {
+      const { ops, mat } = keyParts(k), v = recipeVal(ops, mat);
+      if (v <= bv || !matOpen(matOf(mat)) || (mat !== l.mat && !(whOf(b).stock[mat] > 0)) || linePlan(b, ops).miss.length || !benchFor(b, mat)) continue; // another material only if it is on the shelves
+      best = k; bv = v;
+    }
+  } finally { for (const m of own) m.line = l.id; b.lines = keepLines; }
+  return best;
+}
+function upgradeLine(b, l) { // stop it and start the better piece in one tap
+  const k = betterLine(b, l); if (!k) return;
+  const before = recipeVal(l.seq, l.mat); stopLine(b, l.id); startLine(b, k);
+  toast(`Linea migliorata: ${pieceName(keyParts(k).ops, keyParts(k).mat)} · rende x${(recipeVal(keyParts(k).ops, keyParts(k).mat) / before).toFixed(1)}`, '#7ef0a0');
+}
 function stopLine(b, id) {
   for (const m of b.machines) if (m.line === id) { m.line = null; m.mat = null; m.lineLast = false; }
   b.lines = linesOf(b).filter(l => l.id !== id); for (const cw of crewIn(b, 'mag')) cw.routes = null; sfx.click(); save();
@@ -2543,6 +2573,7 @@ function drawLines(P, t) { // the production page of the recipe book, for the fa
     rrect(x0, y, lw, 54, 10, HT().card, col, 1.5); rrect(x0 + 10, y + 16, 20, 20, 4, matOf(l.mat).col, '#1b1b1b', 1);
     text(pieceName(l.seq, l.mat), x0 + 40, y + 16, 15, '#fff', 'left'); text(seqNames(l.seq), x0 + 40, y + 34, 11, '#b9c4ce', 'left'); text(st, x0 + lw - 50, y + 26, 11, col, 'right');
     button('✕', x0 + lw - 40, y + 13, 28, 28, () => stopLine(b, l.id), { color: '#ff8a7a', size: 13, name: 'stopLine' + i });
+    { const k = betterLine(b, l); if (k) { rrect(x0 + lw - 196, y + 8, 150, 38, 9, HT().card); button(`Migliora · x${(recipeVal(keyParts(k).ops, keyParts(k).mat) / recipeVal(l.seq, l.mat)).toFixed(1)}`, x0 + lw - 186, y + 11, 140, 32, () => upgradeLine(b, l), { color: '#7ef0a0', size: 13, name: 'upLine' + i }); } }
   });
   // the pieces you know, and whether this factory can make them now
   text('Pezzi che conosci', rx, P.y + 138, 17, '#ffe08a', 'left');
@@ -3097,6 +3128,7 @@ function noahAdvice(t) { // what the boss says once the first steps are done: th
   if (idle && crewIn(F, 'none').length) return `La ${MACH[idle.type].name} è ferma e qui c'è gente libera: nella Squadra (Q) accendi "Automatica".`;
   { const J = jobsOf(), n = J.offers.filter(o => !o.locked).length; if (n && !J.active.length && state.level >= 2) return `Ci sono ${n} ${n === 1 ? 'richiesta' : 'richieste'} di clienti in Ufficio (U) > Commesse: accettane una, pagano molto più della vendita normale e danno tanti XP.`; }
   if (F.machines.filter(m => m.phase >= 2).length >= 2 && !linesOf(F).length && state.level >= 3) return 'Decidi tu cosa produrre qui: apri il Ricettario (R) > Produzione e avvia una linea per ogni pezzo. Le macchine e i percorsi dei magazzinieri si sistemano da soli.';
+  { const l = linesOf(F).find(x => betterLine(F, x)); if (l) { const k = betterLine(F, l), kp = keyParts(k); return `La linea ${pieceName(l.seq, l.mat)} può fare ${pieceName(kp.ops, kp.mat)}, che vale x${(recipeVal(kp.ops, kp.mat) / recipeVal(l.seq, l.mat)).toFixed(1)}: Ricette > Produzione > Migliora.`; } }
   if (state.tokens > 0) return `Hai ${state.tokens} ${state.tokens === 1 ? 'token' : 'token'} da spendere: apri le Abilità (K) e scegli cosa potenziare.`;
   const st = TIER() + 1;
   if (st <= 4 && siteProgress() >= 1 && state.level >= tune['shed' + st + 'Lvl']) return state.coins >= tune['shed' + st + 'Cost'] ? `${TIERS[st].name} è pronta e te la puoi permettere: Negozio > Sede. Si comincia una nuova fabbrica!` : `${TIERS[st].name} è pronta: mettiti da parte ${fmt(tune['shed' + st + 'Cost'])} monete e comprala.`;
