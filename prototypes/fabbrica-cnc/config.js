@@ -56,9 +56,10 @@ window.CONFIG = {
   phoneTextGrow: { value: 1.45, min: 1, max: 2, step: 0.05 },   // di quanto cresce un testo piccolo sul telefono
   phoneTextRoom: { value: 1.2, min: 1, max: 1.6, step: 0.05 },  // quanto spazio in più può prendere (poi si stringe)
   phoneTouch: { value: 44, min: 30, max: 64, step: 2 },         // un pulsante piccolo prende i tocchi entro questa misura (pixel veri)
-  guideFullSec: { value: 7, min: 2, max: 30, step: 1 },         // secondi in cui un consiglio nuovo di Noah resta aperto, poi si accorcia
+  guideFullSec: { value: 18, min: 3, max: 60, step: 1 },        // secondi in cui un consiglio di Noah resta aperto intero, poi si chiude del tutto (tocca Noah per riaprirlo)
   skipBreakMult: { value: 1.5, min: 1, max: 5, step: 0.1 },   // simulando fino a un giorno del calendario i guasti sono così più probabili (1,5 = +50%)
-  skipMaxDays: { value: 60, min: 1, max: 365, step: 1 },        // quanti giorni avanti si possono simulare al massimo
+  skipMaxDays: { value: 15, min: 1, max: 365, step: 1 },        // quanti giorni avanti si possono simulare al massimo
+  skipEveryDays: { value: 60, min: 0, max: 365, step: 5 },      // giorni di attesa tra una simulazione e la successiva (60 = una ogni 2 mesi)
   skipSpeed: { value: 8, min: 1, max: 40, step: 1 },            // passo di tempo della simulazione (non cambia il risultato, solo la precisione)
   skipBudgetMs: { value: 12, min: 2, max: 40, step: 1 },        // millisecondi di calcolo per fotogramma mentre simula
   netBreakBase: { value: 0.004, min: 0, max: 0.3, step: 0.001 }, // probabilità ogni ora di lavoro che la rete di una sede si riempia di BUG (a x1)
@@ -73,8 +74,24 @@ window.CONFIG = {
   newRecipePieces: { value: 25, min: 0, max: 200, step: 5 },   // la prima volta che produci una ricetta nuova: premio pari a tanti pezzi
   newRecipeXp: { value: 3, min: 1, max: 10, step: 0.5 },        // e l'esperienza della scoperta moltiplicata per questo
   xpValueRef: { value: 10, min: 1, max: 200, step: 1 },        // esperienza per pezzo venduto = radice quadrata di (valore / questo), almeno 1
+  tipEverySec: { value: 70, min: 10, max: 600, step: 5 },      // dopo il tutorial Noah dà un consiglio ogni tanti secondi (gli avvisi urgenti subito)
+  noahSiteOdds: { value: 0.15, min: 0, max: 1, step: 0.05 },   // a ogni sosta, probabilità che Noah vada in un'altra sede
+  techLvl: { value: 8, min: 1, max: 50, step: 1 },             // livello che sblocca il lavoro di Tecnico
+  techChance: { value: 0.35, min: 0, max: 1, step: 0.05 },      // per ogni Tecnico nella sede: probabilità che installi da solo una macchina nuova (niente minigioco)
+  techMax: { value: 0.8, min: 0, max: 1, step: 0.05 },          // probabilità massima anche con tanti Tecnici
+  techPct: { value: 85, min: 40, max: 100, step: 1 },           // percentuale di montaggio e configurazione quando installa il Tecnico
+  wageBase: { value: 60, min: 0, max: 5000, step: 10 },          // stipendio mensile di una persona assunta, al livello 1
+  wagePerLvl: { value: 40, min: 0, max: 2000, step: 5 },         // in più per ogni livello del giocatore
+  rack1Cost: { value: 0, min: 0, max: 20000, step: 50 }, rack2Cost: { value: 2500, min: 0, max: 50000, step: 50 }, rack3Cost: { value: 9000, min: 0, max: 90000, step: 100 }, // mini, medio, grande (il primo mini di ogni sede è gratis, gli altri costano rackCost)
+  rack1Cap: { value: 3, min: 1, max: 20, step: 1 }, rack2Cap: { value: 6, min: 1, max: 30, step: 1 }, rack3Cap: { value: 10, min: 1, max: 40, step: 1 }, // macchine che ogni rack può collegare
+  rack2Lvl: { value: 12, min: 1, max: 50, step: 1 }, rack3Lvl: { value: 22, min: 1, max: 50, step: 1 }, // livelli che sbloccano il rack medio e quello grande (il mini: rackLvl)
+  pzLvl: { value: 35, min: 1, max: 50, step: 1 },              // livello da cui si apre la prima sezione della centrale
+  pzStep: { value: 4, min: 0, max: 10, step: 1 },              // livelli in più per ogni sezione successiva
+  pzCost: { value: 20000, min: 0, max: 500000, step: 1000 },   // costo base di una sezione (x sede, x numero della sezione)
+  pzPower: { value: 0.25, min: 0.05, max: 2, step: 0.05 },     // ogni sezione aggiunge questa quota della corrente base della sede
+  pzDays: { value: 2, min: 0, max: 30, step: 1 },              // giorni di lavori per costruire una sezione
   machGap: { value: 1, min: 0, max: 2, step: 1 },              // caselle libere obbligatorie tra una macchina e l'altra (anche in diagonale)
-  opsPerMag: { value: 4, min: 1, max: 10, step: 1 },        // macchine servite da un magazziniere quando la Squadra si organizza da sola
+  opsPerMag: { value: 2, min: 1, max: 10, step: 1 },        // macchine servite da un magazziniere quando la Squadra si organizza da sola
   opsPerLvl: { value: 0.5, min: 0, max: 5, step: 0.25 }, // operatori in più per ogni livello (0,5 = uno ogni due livelli)
   qualityBase: { value: 0.5, min: 0, max: 1, step: 0.05 },   // resa = qualityBase + qualità% / 100
 
@@ -148,7 +165,7 @@ window.CONFIG = {
   powD: { value: 5, min: 1, max: 100, step: 1 }, powX: { value: 12, min: 1, max: 100, step: 1 },
   rackLvl: { value: 5, min: 1, max: 50, step: 1 },           // livello che sblocca Rack di rete e Postazione PC
   pcCost: { value: 300, min: 0, max: 5000, step: 10 },        // Postazione PC in più (la prima di ogni capannone è gratis)
-  magSpeed: { value: 2.6, min: 0.3, max: 6, step: 0.1 },      // celle al secondo di un magazziniere
+  magSpeed: { value: 4, min: 0.3, max: 6, step: 0.1 },      // celle al secondo di un magazziniere
   handTime: { value: 0.2, min: 0, max: 3, step: 0.05 },      // s per prendere o posare un pezzo
   itSpeed: { value: 1.4, min: 0.3, max: 6, step: 0.1 },       // celle al secondo di un informatico
   itCheckMin: { value: 1.5, min: 0, max: 10, step: 0.1 },     // s minimi che passa a controllare una macchina, il rack o il PC

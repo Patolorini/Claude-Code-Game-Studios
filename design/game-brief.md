@@ -82,6 +82,23 @@ After play: Il tasto migliora nel menù macchina era meglio ricalibra poi puoi s
 After play: Con i crediti rimanenti runna più partite possibili con il bot; la scelta del fornitore è un po' complicata: ogni materiale cliccabile apre un menu dove scegliere il fornitore migliore di quel momento
 Prossimi (dalle 100 simulazioni del bot, da fare): 1) pulsante "Riordina macchine" nello Schema che ricompatta il pavimento (ora con 1 casella tra le macchine); 2) [fatto: Migliora linea] 3) obiettivi di fine gioco dopo il giorno 300 (più corrente con un acquisto costoso, grandi commesse finali); 4) l'acquisto da tastiera controlla lo spazio come il negozio.
 After play: Il migliora linea ci sta ma teniamo almeno 1 quadrato di distanza tra una macchina e l'altra così sembra più pulito (poi scelti: XP dal valore del pezzo, sedi più grandi)
+After play: Migliorare il linee e ricette nella sezione schema deve essere più comprensibile
+After play: Dividi le ricette di quel ricettario per materiale così é più pulito
+After play: Randomizzare la disposizione dei miglioramenti nelle sezioni dello skill tree.
+After play: Inserire ChiefTech Noah all'interno della fabbrica che gira per le varie fabbriche e si sposta randomicamente. Migliorare le hint: all'inizio per i primi livelli ti aiuta nel tutorial, poi ogni tanto ti dà degli aiuti.
+After play: La casella di testo di Noah rimane aperta per troppo poco ma dopo un po' si deve chiudere del tutto e si può riaprirla cliccando sopra l'icona del personaggio, non deve chiudersi a metà.
+After play: Nella casella abilità rimane il numero di token disponibili anche quando non ce ne sono più da spendere.
+After play: Aggiungere nuovi operatori sbloccabili tipo tecnico che ti aiuta nelle installazioni delle macchine, hai una percentuale di non fare il minigioco quando installi una nuova macchina.
+After play: il massimo di operatori nel grande stabilimento è 28 ma ne sblocchi solo 26: possibilità di assumere fino a riempire tutte le fabbriche, con uno stipendio mensile che va in base al livello del giocatore.
+After play: Creare un menu tabella dei guadagni e delle spese attuali e future di tutte le fabbriche di quel mese in modo che il giocatore possa tenere da parte soldi per pagare i materiali e gli stipendi.
+After play: Togliere il banco barre e la cassa di vendita: tutto il materiale (da lavorare, da vendere o per una commessa) viene stoccato nel magazzino e il giocatore decide se venderlo o usarlo per la commessa; il magazziniere prende i pezzi grezzi dal magazzino e riporta i pezzi lavorati in magazzino.
+After play: Aggiungere la sezione Rete nel negozio e creare un mini rack che collega massimo 3 macchinari, un rack medio che ne collega 6 e il rack grande che ne collega fino a 10.
+After play: Nelle zone vuote di fianco agli uffici aggiungere un'entrata dei lavoratori dove escono ed entrano a fine e inizio turno.
+After play: (ingresso) deve essere una stanza nuova di fianco agli uffici
+After play: non hai capito: al lato degli uffici c'è una piazza grigia libera, lì ci va l'entrata
+After play: Sempre di fianco agli uffici nelle zone grigie libere aggiungere una zona in costruzione che si sblocca a sezioni dopo il lvl 35: da quel livello si creano delle zone per aumentare la corrente massima consumabile in quella fabbrica.
+After play: Nella simulazione dei giorni quando accade un guasto il gioco si ferma automaticamente e ti porta diretto alla macchina guastata da riparare.
+After play: Limitare le simulazioni a massimo 15 giorni, utilizzabili solo 1 volta ogni 2 mesi; mettere nella sezione calendario sia i giorni massimi di simulazione sia l'utilizzo.
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 
