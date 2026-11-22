@@ -99,6 +99,7 @@ After play: non hai capito: al lato degli uffici c'è una piazza grigia libera, 
 After play: Sempre di fianco agli uffici nelle zone grigie libere aggiungere una zona in costruzione che si sblocca a sezioni dopo il lvl 35: da quel livello si creano delle zone per aumentare la corrente massima consumabile in quella fabbrica.
 After play: Nella simulazione dei giorni quando accade un guasto il gioco si ferma automaticamente e ti porta diretto alla macchina guastata da riparare.
 After play: Limitare le simulazioni a massimo 15 giorni, utilizzabili solo 1 volta ogni 2 mesi; mettere nella sezione calendario sia i giorni massimi di simulazione sia l'utilizzo.
+After play: bug di unione tra magazzino, fabbrica ed il resto (screenshot) fixalo; poi gli operatori trapassano i muri
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 

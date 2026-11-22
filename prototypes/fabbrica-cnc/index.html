@@ -434,7 +434,8 @@ function load() {
       else if (o.k === 'src' || o.k === 'crate') { } // older saves: benches and crates are no longer used
       else setCell(o.c, o.r, o.size ? { kind: o.k, size: o.size } : { kind: o.k });
     }
-    b.wh = bd.wh || null; b.store = bd.store || {}; b.keep = bd.keep || {}; b.lines = bd.lines || []; b.lineSeq = bd.lineSeq || 0; b.netFault = !!bd.netFault; b.pz = bd.pz || null; b.autoCrew = bd.autoCrew !== false; b.layoutV = bd.layoutV || null; b.notched = !!bd.notched; layoutZones(b);
+    b.wh = bd.wh || null; b.store = bd.store || {}; b.keep = bd.keep || {}; b.lines = bd.lines || []; b.lineSeq = bd.lineSeq || 0; b.netFault = !!bd.netFault; b.pz = bd.pz || null; b.autoCrew = bd.autoCrew !== false; b.layoutV = bd.layoutV || null; b.notched = !!bd.notched; { const [C, R] = shedSize(b.stage), ks = [...b.cells].map(k => k.split(',').map(Number)), w = Math.max(...ks.map(x => x[0])) + 1, h = Math.max(...ks.map(x => x[1])) + 1; if (w < C || h < R) { b.cells = rectCells(0, 0, C, R); b.notched = false; } } // sites grew: an older save gets the bigger hall, so warehouse, office and rooms join it again
+    layoutZones(b);
     for (let i = 0; i < (bd.workers || tune.workers); i++) addWorker(false);
   }
   crewSync(); state.cur = Math.min(state.buildings.length - 1, d.cur || 0); F = state.buildings[state.cur]; centerCam();
@@ -940,8 +941,9 @@ function shiftStartFor(b) { // everyone walks in from the street to their place;
   const D = doorOf(b), door = [D.cell[0] + 0.5, D.cell[1] + 0.5]; b.commute = [];
   let k = 0; const add = (pal, to, done) => { b.commute.push({ x: D.out[0], y: D.out[1], path: [door, ...pathFor(b, door, to)], end: done, pal, wait: 0.5 + k++ * 0.7, walkT: 0, dir: 1, fade: 0 }); };
   for (const m of b.machines) if (m.op) { m.present = false; const keep = F; F = b; const st = nearWalkable(m, D.cell); F = keep; add(OP_PAL, st, () => { m.present = true; }); }
-  for (const [id, w] of Object.entries(b.haul || {})) { w.hidden = true; add(MAG_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }); }
-  for (const [id, w] of Object.entries(b.itw || {})) { w.hidden = true; add(IT_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }); }
+  const floorNear = (x, y) => { const keep = F; F = b; const ok = walkable(Math.floor(x), Math.floor(y)), to = ok ? [x, y] : (walkCells().sort((a, q) => Math.hypot(a[0] + 0.5 - x, a[1] + 0.5 - y) - Math.hypot(q[0] + 0.5 - x, q[1] + 0.5 - y))[0] || [x, y]).map((v, i) => ok ? v : v + 0.5); F = keep; return to; };
+  for (const [id, w] of Object.entries(b.haul || {})) { w.hidden = true; [w.c, w.r] = floorNear(w.c, w.r); add(MAG_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; const keep = F; F = b; if (w.task) routeTo(w, w.carry ? w.task.to : w.task.from); else w.path = []; F = keep; }); } // back at work: the way to the job is worked out again from where they arrive
+  for (const [id, w] of Object.entries(b.itw || {})) { w.hidden = true; [w.c, w.r] = floorNear(w.c, w.r); add(IT_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }); }
   for (const w of b.workers) { w.hidden = true; add(null, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }); }
 }
 function shiftEndFor(b) { // the machines stop, everyone walks to the door and out to the street
@@ -1155,7 +1157,8 @@ function bfs(from, to) {
     if (c === to[0] && r === to[1]) break;
     for (const [dc, dr] of DIRS) {
       const nc = c + dc, nr = r + dr, k = key(nc, nr);
-      if ((!walkable(nc, nr) && !(nc === to[0] && nr === to[1])) || prev.has(k)) continue;
+      if ((!walkable(nc, nr) && !(nc === to[0] && nr === to[1] && (cellAt(nc, nr) || {}).kind === 'entry')) || prev.has(k)) continue; // only the staff room may be entered as a goal
+      if (dc && dr && (!walkable(c + dc, r) || !walkable(c, r + dr))) continue; // no cutting a corner past a pillar, a machine or a wall
       prev.set(k, [c, r]); q.push([nc, nr]);
     }
   }
@@ -1343,8 +1346,9 @@ function updateHaulers(dt) {
     for (const m of F.machines) { if (m.inRes && !tasks.some(t => t.to === m)) m.inRes = false; if (m.outRes && !tasks.some(t => t.from === m && !t.from.kind)) m.outRes = false; }
     for (const o of Object.values(F.grid)) if (o.kind === 'src' && o.res) o.res = Math.min(o.res, tasks.filter(t => t.from === o).length);
   }
+  const unstick = w => { const c = Math.floor(w.c), r = Math.floor(w.r); if (walkable(c, r)) return; const to = walkCells().sort((a, q) => Math.hypot(a[0] + 0.5 - w.c, a[1] + 0.5 - w.r) - Math.hypot(q[0] + 0.5 - w.c, q[1] + 0.5 - w.r))[0]; if (to) { w.c = to[0] + 0.5; w.r = to[1] + 0.5; if (w.task) routeTo(w, w.carry ? w.task.to : w.task.from); else w.path = []; } }; // and work out the way again from there // someone standing inside a pillar or a machine steps back onto the floor
   for (const cw of mine) {
-    let w = F.haul[cw.id];
+    let w = F.haul[cw.id]; if (w && !w.hidden) unstick(w);
     if (!w) { const cells = walkCells(), p = cells[Math.floor(rng() * cells.length)] || [0, 0]; w = F.haul[cw.id] = { c: p[0] + 0.5, r: p[1] + 0.5, path: [], dir: 1, walkT: 0, task: null, carry: null, wait: 0, name: cw.name }; }
     if (w.wait > 0) { w.wait -= dt; continue; }
     if (w.task && (!alive(w.task.from) && !w.carry || !alive(w.task.to))) { if (!w.carry) reserve(w.task, false); else if (!w.task.to.kind) w.task.to.inRes = false; w.task = null; w.carry = null; w.path = []; }
@@ -3460,7 +3464,7 @@ function updateNoah(dt) { // ChiefTech Noah walks about one of your sites, stops
   const spawn = site => { const keep = F; F = site; const cells = walkCells(); F = keep; const p = cells[Math.floor(rng() * cells.length)] || [0, 0]; state.noahW = { b: site.id, c: p[0] + 0.5, r: p[1] + 0.5, path: [], wait: 1 + rng() * 3, dir: 1, walkT: 0 }; };
   if (!b) { spawn(F || state.buildings[0]); return; }
   if (n.wait > 0) { n.wait -= dt; return; }
-  if (n.path.length) { const [tc, tr] = n.path[0], dx = tc + 0.5 - n.c, dy = tr + 0.5 - n.r, d = Math.hypot(dx, dy), sp = 1.1 * dt; n.walkT += dt; if (Math.abs(dx - dy) > 0.01) n.dir = dx - dy > 0 ? 1 : -1; if (d <= sp) { n.c = tc + 0.5; n.r = tr + 0.5; n.path.shift(); if (!n.path.length) n.wait = 2 + rng() * 5; } else { n.c += dx / d * sp; n.r += dy / d * sp; } return; }
+  if (n.path.length) { const [tc, tr] = n.path[0], dx = tc - n.c, dy = tr - n.r, d = Math.hypot(dx, dy), sp = 1.1 * dt; n.walkT += dt; if (Math.abs(dx - dy) > 0.01) n.dir = dx - dy > 0 ? 1 : -1; if (d <= sp) { n.c = tc; n.r = tr; n.path.shift(); if (!n.path.length) n.wait = 2 + rng() * 5; } else { n.c += dx / d * sp; n.r += dy / d * sp; } return; }
   if (state.buildings.length > 1 && rng() < tune.noahSiteOdds) { const others = state.buildings.filter(x => x !== b); spawn(others[Math.floor(rng() * others.length)]); return; }
   const keep = F; F = b; const cells = walkCells(), to = cells[Math.floor(rng() * cells.length)]; n.path = to ? bfs([Math.floor(n.c), Math.floor(n.r)], to) : []; F = keep; if (!n.path.length) n.wait = 2;
 }
@@ -3471,7 +3475,7 @@ function updateTechs(b, dt) { // technicians stroll from machine to machine, che
   for (const cw of mine) {
     let w = b.techw[cw.id]; if (!w) { const p = cells[Math.floor(rng() * cells.length)] || [0, 0]; w = b.techw[cw.id] = { c: p[0] + 0.5, r: p[1] + 0.5, path: [], wait: rng() * 2, dir: 1, walkT: 0 }; }
     if (w.wait > 0) { w.wait -= dt; continue; }
-    if (w.path.length) { const [tc, tr] = w.path[0], dx = tc + 0.5 - w.c, dy = tr + 0.5 - w.r, d = Math.hypot(dx, dy), sp = 1.3 * dt; w.walkT += dt; if (Math.abs(dx - dy) > 0.01) w.dir = dx - dy > 0 ? 1 : -1; if (d <= sp) { w.c = tc + 0.5; w.r = tr + 0.5; w.path.shift(); if (!w.path.length) w.wait = 1.5 + rng() * 3; } else { w.c += dx / d * sp; w.r += dy / d * sp; } continue; }
+    if (w.path.length) { const [tc, tr] = w.path[0], dx = tc - w.c, dy = tr - w.r, d = Math.hypot(dx, dy), sp = 1.3 * dt; w.walkT += dt; if (Math.abs(dx - dy) > 0.01) w.dir = dx - dy > 0 ? 1 : -1; if (d <= sp) { w.c = tc; w.r = tr; w.path.shift(); if (!w.path.length) w.wait = 1.5 + rng() * 3; } else { w.c += dx / d * sp; w.r += dy / d * sp; } continue; }
     const m = b.machines[Math.floor(rng() * Math.max(1, b.machines.length))], to = m ? nearWalkable(m, [Math.floor(w.c), Math.floor(w.r)]) : cells[Math.floor(rng() * cells.length)];
     w.path = to ? bfs([Math.floor(w.c), Math.floor(w.r)], to) : []; if (!w.path.length) w.wait = 2;
   }
