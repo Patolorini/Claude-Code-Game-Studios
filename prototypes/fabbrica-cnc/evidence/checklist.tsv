@@ -1,0 +1,31 @@
+L1	pass	evidence/running.png	isometric shed: blue-grey concrete tiles, yellow-black hazard strips, red brick walls with skylights, white CNC blocks with glass doors, panels and 3-lamp status lights; blue cables to the rack; pixel workers in blue overalls and yellow helmets; orange parts on the belt and coins rising over the crate (index.html:557, index.html:379)
+L2	pass	evidence/play.png	base seen like a mobile base-builder with tappable detailed machines; calm production with coins collected from crates, no failure
+L3	pass	evidence/play.png	2.5D isometric view with drag pan and wheel/pinch/+- zoom (index.html:328)
+F1	pass	evidence/place.png	grid shed with pan and zoom; placing highlights free slots in green and shows a ghost machine under the pointer (index.html:625)
+F2	pass	evidence/shop.png	five machines with unlock levels 1,2,3,5,7 in the shop; each drawn with its own silhouette (evidence/figures.png)
+F3	pass	evidence/lathe.png	the line's machine order is looked up in 15 recipes plus scrap; the recipe book fills as parts are sold (index.html:205, index.html:736, evidence/recipes.png)
+F4	pass	evidence/mg-montaggio.png	assembly (bolts in order), network (cable path on a grid, evidence/mg-rete.png), configuration (needle in the green, evidence/mg-config.png); percentage from time against the best time (index.html:848)
+F5	pass	index.html:755	XP from minigames, sales and recipes raises the level; level-ups unlock machines, expansions and tool levels with a banner
+F6	pass	evidence/tools.png	wrench, crimper and tester each upgrade 4 levels; they cut bolt turns and crimp taps and widen/slow the dial, so each minigame finishes faster (index.html:218)
+F7	pass	evidence/running.png	coins rise from the crate on every sale; income per minute under the money; goal always shown top right (index.html:742, index.html:1068)
+F8	pass	evidence/running.png	pixel workers wander the walkways and walk to machines being built; autosave every 5 s and on events, Continua on the title (index.html:668, index.html:295)
+S1	pass	evidence/shop.png	machines bought in the shop, placed on a slot, then built through the three phases (index.html:796)
+S2	pass	evidence/mg-rete.png	network minigame: drag the cable from the rack around pillars, pallets and oil to the machine, then crimp
+S3	pass	evidence/mg-montaggio.png	assembly minigame: tap the numbered bolts in order, several turns each
+S4	pass	evidence/mg-config.png	configuration minigame: stop the needle in the green zone of each parameter; Ricalibra replays it later
+S5	pass	evidence/lathe.png	T then L on the line shows a new part worth 45 at this quality; swapping or moving machines changes the recipe (index.html:710)
+S6	pass	evidence/shop.png	machines locked behind levels show Livello N until reached
+S7	pass	evidence/tools.png	tools upgraded with coins, gated by player level, make minigames faster
+S8	pass	evidence/shop.png	stand-in: three expansions (Linea 2, linee lunghe, Linea 3) open new floor bays, a new line and a worker; the shed grows on screen (index.html:824, index.html:534)
+M1	pass	evidence/play.png	opens on a near-empty shed, 500 coins, a pixel worker waving with a welcome bubble
+M2	pass	evidence/place.png	the arrow points to Negozio, then to Compra, then to the slot; free slots glow green with a ghost; placing plays a clack (index.html:811)
+M3	pass	evidence/mg-montaggio.png	assembly starts right after placing; tap bolts in numbered order; result shows a percentage (evidence/mg-result.png)
+M4	pass	evidence/mg-rete.png	drag the cable from the rack across the grid around obstacles
+M5	pass	evidence/mg-config.png	stop the needle in the green for spindle speed, feed and depth
+M6	pass	evidence/running.png	the saw lights green, cut bars go down the belt and coins rise; Barra tagliata recipe banner
+M7	pass	evidence/lathe.png	after the build rewards the player can afford the lathe; the arrow asks to put it right after the saw; the line label turns to a new part worth 3x (val_TL 30 vs val_T 10)
+C1	pass	index.html:851	no failure anywhere: minigames floor at 40%, money never runs out into a loss, no game over screen
+C2	pass	evidence/shop.png	the Fresa unlocks at level 3, reached in the first minutes from sales and goals; the goal asks for a 3-machine recipe
+C3	pass	index.html:205	TLF Albero scanalato 85 vs TFL Mozzo 60; any order not in the book sells as Scarto for 3 (index.html:216)
+C4	pass	index.html:708	machine quality is the average of its three phases; the line's value is multiplied by qualityBase + quality
+C5	pass	index.html:824	tools speed up minigames; later machines lengthen the chains (up to 5); expansions add lines and a fifth slot
