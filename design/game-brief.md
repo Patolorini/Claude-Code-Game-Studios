@@ -100,6 +100,13 @@ After play: Sempre di fianco agli uffici nelle zone grigie libere aggiungere una
 After play: Nella simulazione dei giorni quando accade un guasto il gioco si ferma automaticamente e ti porta diretto alla macchina guastata da riparare.
 After play: Limitare le simulazioni a massimo 15 giorni, utilizzabili solo 1 volta ogni 2 mesi; mettere nella sezione calendario sia i giorni massimi di simulazione sia l'utilizzo.
 After play: bug di unione tra magazzino, fabbrica ed il resto (screenshot) fixalo; poi gli operatori trapassano i muri
+After play: rifare il menu principale (con CoDesign se possibile) cambiando il titolo in Workline Factory; stile cartoon colorato con Noah sul menu
+After play: cambiare la grafica di tutto il gioco con SpriteCook; dopo una prova 3D: tenere lo stile pixelato ma realistico come le macchine CNC. Personaggi con facce diverse; mondo esterno rifatto correggendo strade bloccate, case metà nell'acqua e auto che passano nella fontana; interni della fabbrica e dintorni rifatti
+After play: migliorare strade, pavimentazione, campi ed erba sia nel mondo esterno che nei dintorni della fabbrica
+After play: (screenshot) togliere gli alberi dentro le piccole fabbriche nei dintorni; check di tutta la mappa e del gioco per bug visivi; rifare i ponti e le strutture rimaste nello stile nuovo
+After play: (foto) la strada passa nell'acqua sotto il ponte: ispirarsi alle città reali; nella piazza la strada delle auto passa in mezzo alla fontana e le altre stradine si bloccano senza senso; rifare il treno con una galleria vera
+After play: (immagine di una pianta di città vista dall'alto) riproporre la stessa disposizione con i modelli disegnati; scelta: prima un'anteprima, poi eventualmente nel gioco
+After play: la galleria non piace: prolungare i binari fino alla fine della mappa; creare diversi quartieri come quello dell'anteprima, variando un po' la disposizione
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 

@@ -236,6 +236,11 @@ window.CONFIG = {
   backdropScale: { value: 2.5, min: 1, max: 6, step: 0.1 }, // celle di fabbrica per ogni cella della mappa: quanto è ingrandito il quartiere intorno
   perkSpeed: { value: 0.8, min: 0.3, max: 1, step: 0.05 },   // abilità 'più veloce': tempo per pezzo moltiplicato per questo
   perkQuality: { value: 0.15, min: 0, max: 1, step: 0.05 },  // abilità 'precisione': qualità aggiunta ai pezzi
+  hdArt: { value: 1, min: 0, max: 1, step: 1 },             // personaggi e alberi in pixel art realistica (1) o disegnati come prima (0)
+  hdWorkerH: { value: 50, min: 24, max: 80, step: 1 },       // altezza degli operatori 3D sullo schermo
+  hdTreeH: { value: 78, min: 30, max: 140, step: 1 },        // altezza degli alberi 3D
+  hdTexCells: { value: 2, min: 1, max: 8, step: 1 },
+  texInside: { value: 0.75, min: 0.25, max: 3, step: 0.05 },   // scala delle texture del terreno intorno alla fabbrica rispetto alla città         // caselle coperte da una ripetizione di pavimento e prato
   pixelInside: { value: 1, min: 1, max: 5, step: 1 },        // grandezza del pixel dentro la fabbrica (1 = nitido)
   pixelTown: { value: 2, min: 1, max: 5, step: 1 },          // grandezza del pixel nella vista della città
   townZoomMin: { value: 0.35, min: 0.2, max: 1, step: 0.05 }, townZoomMax: { value: 2.4, min: 1, max: 4, step: 0.1 },

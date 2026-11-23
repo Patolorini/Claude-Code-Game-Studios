@@ -184,3 +184,696 @@
   source: {vendor: "SpriteCook", product: "Centro di lavoro 5 assi Mk V", url: "https://spritecook.ai"}
   date: 2026-11-19
   ships: true
+- path: assets/hd/mach_L3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (HD, pixel false), trimmed and resized with Pillow (asset 997c58fb-20dd-4d07-a277-ef46857cdec2)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Tornio Mk III, soft 3D render (style test)", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/hd/worker.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (HD, pixel false), trimmed and resized with Pillow (asset c7f9073c-6e8d-4b1e-9a15-04707c22f69c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "factory worker, soft 3D render (style test)", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/hd/tree.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (HD, pixel false), trimmed and resized with Pillow (asset f563581e-cd24-4b03-a560-fc37bee6f11f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "leafy tree, soft 3D render (style test)", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/hd/floor.jpg
+  origin: ai
+  tool: "SpriteCook generate_game_art (HD, pixel false), trimmed and resized with Pillow (asset eb85e62e-19fc-46fe-8254-6f43c5a64c1a)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "concrete floor texture (style test)", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/hd/grass.jpg
+  origin: ai
+  tool: "SpriteCook generate_game_art (HD, pixel false), trimmed and resized with Pillow (asset d71969ae-22de-433e-aac9-a3829e0df97e)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "lawn texture (style test)", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/worker.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent, machine sheet 8e056762 as style guide), trimmed with Pillow (asset 2922de93-f2f6-4415-add5-b036d37e2139)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "machine operator, realistic pixel art (example)", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/tree.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent, machine sheet 8e056762 as style guide), trimmed with Pillow (asset 8c75844e-4d92-48b9-99be-6624f09ef075)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "oak tree, realistic pixel art (example), cut from a tree and hedge sheet", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/hedge.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent, machine sheet 8e056762 as style guide), trimmed with Pillow (asset 8c75844e-4d92-48b9-99be-6624f09ef075)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "hedge, realistic pixel art (example), cut from a tree and hedge sheet", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/office.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (pixel art, transparent, machine sheet 8e056762 as style guide), trimmed with Pillow (asset ff5b8c36-6759-441c-8bde-60184ee26f91)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "brick office building, realistic pixel art (example)", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/op0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 59d3df90-360e-407a-8a35-da9a1cd08d8b)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "op0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/op1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 59d3df90-360e-407a-8a35-da9a1cd08d8b)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "op1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/op2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 59d3df90-360e-407a-8a35-da9a1cd08d8b)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "op2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/op3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 59d3df90-360e-407a-8a35-da9a1cd08d8b)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "op3", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/mag0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset f3e1b39e-875f-4ffa-9a14-d29347c7def2)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "mag0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/mag1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset f3e1b39e-875f-4ffa-9a14-d29347c7def2)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "mag1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/mag2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset f3e1b39e-875f-4ffa-9a14-d29347c7def2)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "mag2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/mag3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset f3e1b39e-875f-4ffa-9a14-d29347c7def2)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "mag3", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/it0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset e498d4df-5d80-4958-b74d-1cf57b97a1ea)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "it0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/it1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset e498d4df-5d80-4958-b74d-1cf57b97a1ea)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "it1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/it2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset e498d4df-5d80-4958-b74d-1cf57b97a1ea)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "it2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/it3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset e498d4df-5d80-4958-b74d-1cf57b97a1ea)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "it3", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/tech0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 53e6495a-d27b-4074-991a-721ccf6e7d3c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "tech0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/tech1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 53e6495a-d27b-4074-991a-721ccf6e7d3c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "tech1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/tech2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 53e6495a-d27b-4074-991a-721ccf6e7d3c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "tech2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/tech3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 53e6495a-d27b-4074-991a-721ccf6e7d3c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "tech3", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/build0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 7e66e08a-6aa5-44ac-9ecf-c154bdc7c7bf)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "build0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/build1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 7e66e08a-6aa5-44ac-9ecf-c154bdc7c7bf)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "build1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/build2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 7e66e08a-6aa5-44ac-9ecf-c154bdc7c7bf)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "build2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/build3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 7e66e08a-6aa5-44ac-9ecf-c154bdc7c7bf)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "build3", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/noah0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 33678a88-04c6-496d-b729-a1b6be8e89ce)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "noah0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/noah1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 33678a88-04c6-496d-b729-a1b6be8e89ce)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "noah1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/clerk0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b529e12d-47cb-482f-b447-693b4849c867)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "clerk0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/clerk1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b529e12d-47cb-482f-b447-693b4849c867)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "clerk1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/clerk2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b529e12d-47cb-482f-b447-693b4849c867)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "clerk2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/clerk3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b529e12d-47cb-482f-b447-693b4849c867)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "clerk3", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/hA0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b500cf93-d5ea-42cf-9c89-58a7f78799b5)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "hA0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/hA1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b500cf93-d5ea-42cf-9c89-58a7f78799b5)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "hA1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/hA2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b500cf93-d5ea-42cf-9c89-58a7f78799b5)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "hA2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/hA3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b500cf93-d5ea-42cf-9c89-58a7f78799b5)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "hA3", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/hB0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset f4a4082d-e2ce-45a8-89ee-6c25ca41391c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "hB0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/hB1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset f4a4082d-e2ce-45a8-89ee-6c25ca41391c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "hB1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/hB2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset f4a4082d-e2ce-45a8-89ee-6c25ca41391c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "hB2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/hB3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset f4a4082d-e2ce-45a8-89ee-6c25ca41391c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "hB3", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/church.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 00dcf8c9-95fc-46ba-87e7-29b2d13f1935)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "church", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/hall.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 00dcf8c9-95fc-46ba-87e7-29b2d13f1935)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "hall", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/school.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 00dcf8c9-95fc-46ba-87e7-29b2d13f1935)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "school", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/market.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 00dcf8c9-95fc-46ba-87e7-29b2d13f1935)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "market", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/shed.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 24f5b5e4-07d3-468f-83da-98dc27ccf3f6)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "shed", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/brick.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 24f5b5e4-07d3-468f-83da-98dc27ccf3f6)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "brick", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/silos.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 24f5b5e4-07d3-468f-83da-98dc27ccf3f6)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "silos", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/tower.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 24f5b5e4-07d3-468f-83da-98dc27ccf3f6)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "tower", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/containers.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 56fbdd1b-ec10-4cfb-bc59-fbe6ed419fbb)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "containers", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/workshop.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 56fbdd1b-ec10-4cfb-bc59-fbe6ed419fbb)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "workshop", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/lot.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 56fbdd1b-ec10-4cfb-bc59-fbe6ed419fbb)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "lot", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/station.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 56fbdd1b-ec10-4cfb-bc59-fbe6ed419fbb)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "station", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/site0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset d8a9e397-877a-4841-b6fc-0b02eb0cb558)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "site0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/site1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset d8a9e397-877a-4841-b6fc-0b02eb0cb558)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "site1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/site2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset d8a9e397-877a-4841-b6fc-0b02eb0cb558)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "site2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/site3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset d8a9e397-877a-4841-b6fc-0b02eb0cb558)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "site3", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/site4.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 1ff24481-07d8-49a3-9281-cb079c8b4579)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "site4", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/car0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 1ff24481-07d8-49a3-9281-cb079c8b4579)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "car0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/car1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 1ff24481-07d8-49a3-9281-cb079c8b4579)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "car1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/car2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 1ff24481-07d8-49a3-9281-cb079c8b4579)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "car2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/van.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 1ff24481-07d8-49a3-9281-cb079c8b4579)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "van", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/shelf0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 598677b6-14ac-4a22-bfeb-5099118d01a4)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "shelf0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/shelf1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 598677b6-14ac-4a22-bfeb-5099118d01a4)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "shelf1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/shelf2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 598677b6-14ac-4a22-bfeb-5099118d01a4)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "shelf2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/forklift.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 598677b6-14ac-4a22-bfeb-5099118d01a4)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "forklift", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/pil0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 834c429f-a471-481f-b61b-e6f9af99ac6f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "pil0", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/pil1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 834c429f-a471-481f-b61b-e6f9af99ac6f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "pil1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/pil2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 834c429f-a471-481f-b61b-e6f9af99ac6f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "pil2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/desk.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 834c429f-a471-481f-b61b-e6f9af99ac6f)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "desk", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/rack1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset fc6c7196-23e4-403c-ad48-30283885a4d5)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "rack1", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/rack2.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset fc6c7196-23e4-403c-ad48-30283885a4d5)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "rack2", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/rack3.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset fc6c7196-23e4-403c-ad48-30283885a4d5)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "rack3", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/power.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset fc6c7196-23e4-403c-ad48-30283885a4d5)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "power", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_grass.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset 51c97f38-8a58-43bd-bcbc-760a4e39630e)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "grass ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_asphalt.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset 010b52e1-6265-4b72-b7e8-f510aadd1f3e)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "asphalt ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_cobble.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset c8cbc2f3-f550-4c0b-bc8b-42688d985724)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "cobble ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_concrete.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset 311b12d3-fa89-4c18-b81a-bf2d81babd14)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "concrete ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_dirt.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset ed68309f-7981-4842-a5ca-713e9c2018bb)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "dirt ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_wheat.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset 10e8db5f-caa1-4768-9da2-d9644007bdaa)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "wheat ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_plough.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset 22a60ca8-c524-4cf3-8da5-f1cfca04b7ae)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "plough ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_veg.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset a4b1fa97-2617-4f1b-9340-29442501c239)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "veg ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_lavender.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset 03a8c4e6-7c96-4956-b21c-b7baace11626)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "lavender ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_water.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset ed43c23f-8251-49e9-a2cd-44266e7ba90c)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "water ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/t_pave.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (texture mode, pixel art; raw render resized to 128 px, made seamless with a half-offset cross-fade and reduced to 48 colours with Pillow; asset b58b52c0-b70a-4928-b68e-a3da5d8a974d)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "pave ground texture", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/bridge.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b86009a2-d55a-4dc7-8cdc-d7221545b3c9)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "bridge", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/fountain.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b86009a2-d55a-4dc7-8cdc-d7221545b3c9)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "fountain", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/barn.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b86009a2-d55a-4dc7-8cdc-d7221545b3c9)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "barn", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/tunnel.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b86009a2-d55a-4dc7-8cdc-d7221545b3c9)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "tunnel", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/stadium.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 4688480c-3734-47c5-9775-9448e8362903)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "stadium", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/loco.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 4688480c-3734-47c5-9775-9448e8362903)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "loco", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/boxcar.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 4688480c-3734-47c5-9775-9448e8362903)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "boxcar", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/flatcar.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 4688480c-3734-47c5-9775-9448e8362903)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "flatcar", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/crane.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 79ff3736-2f65-4c08-a418-3f294916339d)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "crane", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/worksite.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 79ff3736-2f65-4c08-a418-3f294916339d)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "worksite", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/bench.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 79ff3736-2f65-4c08-a418-3f294916339d)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "bench", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true
+- path: assets/px/substation.png
+  origin: ai
+  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 79ff3736-2f65-4c08-a418-3f294916339d)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "substation", url: "https://spritecook.ai"}
+  date: 2026-11-22
+  ships: true

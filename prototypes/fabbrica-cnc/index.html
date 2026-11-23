@@ -7,7 +7,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Fabbrica CNC</title>
+<title>Workline Factory</title>
 <style>
   html, body { margin: 0; height: 100%; background: #141b22; overflow: hidden; }
   body { font-variant-numeric: tabular-nums; -webkit-user-select: none; user-select: none; }
@@ -30,7 +30,7 @@ const STEP = 1 / 60;            // simulation step in seconds; motion is per sec
 const W = 1280, H = 720;        // logical size
 const PIXEL = false;            // the canvas stays smooth; the workers are drawn as pixel sprites
 const FONT = '"Trebuchet MS", Verdana, sans-serif';
-const TITLE = 'Fabbrica CNC';
+const TITLE = 'Workline Factory';
 const CONTROLS = [
   'Tocca o clicca: compra, piazza, costruisci e assegna i lavori',
   'Trascina: sposta la visuale  ·  Rotella o pizzico: zoom',
@@ -615,10 +615,77 @@ function fitsAt(c, r, mk, dir, self, type, gap = tune.machGap) { // free cells f
   return true;
 }
 const machineTopV = (type, mk = 1) => mk === 1 ? 34 + (type === 'F' || type === 'D' ? 8 : 0) : ({ T: [36, 44, 50, 54], L: [34, 42, 48, 52], F: [52, 58, 66, 70], D: [50, 56, 66, 58], X: [50, 56, 64, 66] }[type] || [40, 46, 56, 66])[mk - 2];
+// ---- Realistic pixel art (SpriteCook, assets/px/): sprites for people and things, in the style of the machine sprites; the drawn look stays as the fallback ----
+const HD_IMG = {};
+const hdOn = () => tune.hdArt >= 1;
+function hdImg(name) { // the loaded HD image, or null while it loads, if it failed or with the drawn look chosen
+  if (!hdOn()) return null;
+  let im = HD_IMG[name];
+  if (!im) { im = HD_IMG[name] = new Image(); im.onerror = () => { im.bad = true; }; im.src = 'assets/px/' + name; }
+  return !im.bad && im.complete && im.naturalWidth ? im : null;
+}
+const HD_PAT = {};
+function hdPattern(name, cells = tune.hdTexCells) { // a texture repeated along the iso grid: one repeat covers that many cells each way
+  const im = hdImg(name); if (!im) return null;
+  let p = HD_PAT[name];
+  if (!p) p = HD_PAT[name] = ctx.createPattern(im, 'repeat');
+  const k = cells / im.naturalWidth;
+  p.setTransform(new DOMMatrix([k * TW / 2, k * TH / 2, -k * TW / 2, k * TH / 2, 0, 0]));
+  return p;
+}
+function fillCellsWith(cells, fill) { // every cell in one path, so neighbouring cells meet without seams
+  ctx.beginPath();
+  for (const [c, r] of cells) { const a = iso(c, r), b = iso(c + 1, r), d = iso(c + 1, r + 1), e = iso(c, r + 1); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(d[0], d[1]); ctx.lineTo(e[0], e[1]); ctx.closePath(); }
+  ctx.fillStyle = fill; ctx.fill();
+}
+function drawHdSprite(im, x, y, h, flip, footFrac = 1) { // stands the image on (x, y), h pixels tall, mirrored if asked
+  const w = im.naturalWidth * h / im.naturalHeight;
+  ctx.save(); ctx.translate(x, y); if (flip) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = Math.abs(ctx.getTransform().a) * h / im.naturalHeight < 1; // crisp pixels when enlarged, smoothed when shrunk
+  ctx.drawImage(im, -w / 2, -h * footFrac, w, h); ctx.restore();
+}
+const PEOPLE = { mach: 'op', mag: 'mag', it: 'it', tech: 'tech', build: 'build', clerk: 'clerk', noah: 'noah' }; // the sprite files for each job: four faces each (Noah: standing, pointing)
+const idSeed = v => { let h = 7; for (const ch of String(v)) h = (h * 31 + ch.charCodeAt(0)) | 0; return h >>> 0; }; // the same person always gets the same face
+function palRole(pal) { return pal === OP_PAL ? 'mach' : pal === MAG_PAL ? 'mag' : pal === IT_PAL ? 'it' : pal === TECH_PAL ? 'tech' : pal === NOAH_PAL ? 'noah' : 'build'; }
+function drawPerson(role, seed, x, y, o = {}) { // one of the realistic people, standing on (x, y): o.flip faces right, o.moving/o.walkT walk, o.work sways, o.sit shows them from the waist up behind a desk; false when the sprite is not there
+  const pre = PEOPLE[role]; if (!pre) return false;
+  const im = hdImg(pre + (role === 'noah' ? (o.pose || 0) : idSeed(seed) % 4) + '.png'); if (!im) return false;
+  const h = tune.hdWorkerH * (role === 'noah' ? 1.06 : 1) * (o.scale || 1);
+  if (!o.sit) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(x, y, 9, 4, 0, 0, Math.PI * 2); ctx.fill(); }
+  const ph = o.walkT || 0, step = o.moving ? Math.abs(Math.sin(ph * 9)) * 2 : 0, tilt = o.moving ? Math.sin(ph * 9) * 0.05 : o.work ? Math.sin((o.t || 0) * 9) * 0.03 : 0;
+  ctx.save(); ctx.translate(x, y - step); ctx.rotate(tilt);
+  if (o.sit) { ctx.beginPath(); ctx.rect(-40, -h - 4, 80, h * 0.6 + 4); ctx.clip(); ctx.translate(0, h * 0.38); }
+  drawHdSprite(im, 0, 0, h, !!o.flip); ctx.restore(); return true;
+}
+// where each building sprite's front corner sits across its width (0..1): over a half, the art is longer along c; it is mirrored when the footprint runs the other way
+const PX_FOOT = { hA0: 0.48, hA1: 0.52, hA2: 0.52, hA3: 0.43, hB0: 0.73, hB1: 0.71, hB2: 0.72, hB3: 0.71, church: 0.42, hall: 0.69, school: 0.55, market: 0.62, shed: 0.38, brick: 0.31, silos: 0.67, tower: 0.49, containers: 0.49, workshop: 0.53, lot: 0.40, station: 0.56, site0: 0.49, site1: 0.45, site2: 0.57, site3: 0.46, site4: 0.40, car0: 0.43, car1: 0.32, car2: 0.44, van: 0.38, office: 0.31, hedge: 0.49, shelf0: 0.28, shelf1: 0.28, shelf2: 0.28, forklift: 0.16, pil0: 0.50, pil1: 0.50, pil2: 0.51, desk: 0.69, rack1: 0.54, rack2: 0.51, rack3: 0.54, power: 0.42, bridge: 0.66, fountain: 0.50, barn: 0.39, tunnel: 0.19, stadium: 0.59, loco: 0.80, boxcar: 0.75, flatcar: 0.77, crane: 0.26, worksite: 0.46, bench: 0.53, substation: 0.53 };
+function drawBld(name, c, r, w, h, fit = 1) { // a building sprite standing on its footprint, its front corner on the footprint's front corner; false when it is not there
+  const im = hdImg(name + '.png'); if (!im) return false;
+  let f = PX_FOOT[name] ?? 0.5; const want = w / (w + h), flip = Math.abs(f - 0.5) > 0.04 && Math.abs(want - 0.5) > 0.04 && (f - 0.5) * (want - 0.5) < 0;
+  if (flip) f = 1 - f;
+  const dw = (w + h) * TW / 2 * fit, dh = im.naturalHeight * dw / im.naturalWidth, [bx, by] = iso(c + w, r + h);
+  ctx.save(); ctx.translate(bx, by + 1); if (flip) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = Math.abs(ctx.getTransform().a) * dw / im.naturalWidth < 1;
+  ctx.drawImage(im, -(flip ? 1 - f : f) * dw, -dh, dw, dh); ctx.restore(); return true;
+}
+// ---- Ground textures (SpriteCook pixel art, assets/px/t_*.png): grass, roads, paving, fields, water laid on the iso grid ----
+const TEX_CELLS = { grass: 2, asphalt: 1.5, cobble: 1.4, concrete: 3, dirt: 2, wheat: 2, plough: 2, veg: 2, lavender: 2, water: 2.5, pave: 1.5 }; // how many cells one repeat covers
+const tex = n => hdPattern('t_' + n + '.png', TEX_CELLS[n] * (state && state.town ? 1 : tune.texInside));
+function vnoise(x, y) { // smooth value noise in 0..1: patches of ground that run together instead of a checkerboard
+  const xi = Math.floor(x), yi = Math.floor(y), sm = v => v * v * (3 - 2 * v), u = sm(x - xi), v = sm(y - yi), h = (a, b) => hash(a + 1000, b + 1000) / 999;
+  const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function groundKind(tc, tr, ik) { // concrete where it is industrial, worn dirt at the edges, grass elsewhere (town coordinates)
+  const n = vnoise(tc * 0.3, tr * 0.3) * 0.7 + vnoise(tc * 0.9 + 7, tr * 0.9 + 3) * 0.3;
+  return n < ik * 0.72 ? 'concrete' : n < ik * 1.05 ? 'dirt' : 'grass';
+}
+const blobPx = (c, r, R, fill) => { const p = iso(c, r, 0); ctx.beginPath(); ctx.ellipse(p[0], p[1], R * 45.25, R * 22.63, 0, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill(); }; // a disc of radius R tiles on the ground
+const FIELD_TEX = { '#d8c070': 'wheat', '#cdb460': 'wheat', '#e8c84a': 'wheat', '#7ab84a': 'veg', '#8cc45a': 'veg', '#9a7a52': 'plough', '#8a6a44': 'plough', '#a890c8': 'lavender', '#6aad3d': 'grass' };
+const HD_MACH = new Set(); // machines with a newer sprite in assets/px/ (none yet: the machine sprites in assets/ already have this look)
 // ---- Machine sprites (SpriteCook pixel art, assets/mach_<type><mk>.png): drawn on the footprint, the vector drawing stays as a fallback ----
 const MACH_IMG = {};
 function machImg(type, mk) { // the loaded sprite, or null while it loads or if it failed
   const k = type + mk; let im = MACH_IMG[k];
+  if (HD_MACH.has(k)) { const hd = hdImg('mach_' + k + '.png'); if (hd) return hd; }
   if (!im) { im = MACH_IMG[k] = new Image(); im.onerror = () => { im.bad = true; }; im.src = 'assets/mach_' + k + '.png'; }
   return !im.bad && im.complete && im.naturalWidth ? im : null;
 }
@@ -793,6 +860,7 @@ function drawPiece(ops, c, r, mat = 'acc') {
 
 // ---- Factory: floor, walls, fixtures ------------------------------------------------------
 // ---- Around the factory: invented close up, but following the map: same ground, river, streets, railway and kind of buildings
+function fromTown(tc, tr) { const s = TIERS[F.stage].site, bb = bboxOf([...F.cells]), K = tune.backdropScale; return [(tc - s.c - s.w / 2) * K + (bb.c0 + bb.c1) / 2, (tr - s.r - s.h / 2) * K + (bb.r0 + bb.r1) / 2]; } // the inverse: a point of the map, in the site's cells
 function toTown(c, r) { const s = TIERS[F.stage].site, bb = bboxOf([...F.cells]), K = tune.backdropScale; return [s.c + s.w / 2 + (c - (bb.c0 + bb.c1) / 2) / K, s.r + s.h / 2 + (r - (bb.r0 + bb.r1) / 2) / K]; }
 function fromTown(tc, tr) { const s = TIERS[F.stage].site, bb = bboxOf([...F.cells]), K = tune.backdropScale; return [(bb.c0 + bb.c1) / 2 + (tc - s.c - s.w / 2) * K, (bb.r0 + bb.r1) / 2 + (tr - s.r - s.h / 2) * K]; }
 function surroundings() { // worked out once per site: ground colour of every cell, water, streets, the railway, and lots with buildings
@@ -817,7 +885,8 @@ function surroundings() { // worked out once per site: ground colour of every ce
     const kindOf = ik > 0.55 ? ['shed', 'containers', 'workshop', 'shed', 'lot', 'silos'][roll] : ik > 0.25 ? ['workshop', 'brick', 'trees', 'house', 'containers', 'trees'][roll] : ['house', 'house', 'trees', 'house2', 'trees', 'house'][roll];
     lots.push({ c, r, w, h: hh, k: kindOf, s: h });
   }
-  const trees = cells.filter(([c, r, , k]) => k === 'land' && !taken.has(K(c, r)) && hash(c + 77, r + 33) % 9 === 0).map(([c, r]) => [c + 0.5, r + 0.5]);
+  const built = lots.filter(o => o.k !== 'trees'), clearOf = (x, y, list, back, front) => !list.some(o => x > o.c - back && x < o.c + o.w + front && y > o.r - back && y < o.r + o.h + front); // the sprites reach over their lots: keep trees off the walls and out from behind the roofs
+  const trees = cells.filter(([c, r, , k]) => k === 'land' && !taken.has(K(c, r)) && hash(c + 77, r + 33) % 9 === 0).map(([c, r]) => [c + 0.5, r + 0.5]).filter(([x, y]) => clearOf(x, y, built, 2.2, 0.9));
   const railR = fromTown(0, RAIL_R)[1], railC = [fromTown(RAIL_W - 0.4, 0)[0], fromTown(RAIL_E() + 1.5, 0)[0]];
   F._sur = { key, cells, lots, trees, railR, railC }; return F._sur;
 }
@@ -825,18 +894,31 @@ function drawGround() { // the ground round the factory (like the map, but close
   const g = ctx.createLinearGradient(0, -600, 0, 900); g.addColorStop(0, '#22303d'); g.addColorStop(1, '#3a4652');
   ctx.fillStyle = g; ctx.fillRect(-5000, -5000, 10000, 10000);
   const S = surroundings(), bb = bboxOf(shellKeys(F)), A = F.annexBox;
-  for (const [c, r, col, k] of S.cells) { poly(qT(c, r, c + 1, r + 1, 0), k === 'plot' ? '#8a8478' : col); if (k === 'water' && !CHEAP && hash(c, r) % 5 === 0) { const p = iso(c + 0.5, r + 0.5, 0); ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(p[0] - 6, p[1], 12, 1); } }
-  if (S.railR > bb.r0 - 14 && S.railR < bb.r1 + 14) { // the railway, where the map has it
+  if (tex('grass')) { // textured: patches of concrete, dirt and grass, then the river and the streets laid over them as smooth bands
+    const grp = { concrete: [], dirt: [], grass: [] }, K = tune.backdropScale, L = townLayout();
+    for (const [c, r, col, k] of S.cells) { if (k === 'plot' || k === 'rail') { grp.concrete.push([c, r]); continue; } const [tc, tr] = toTown(c + 0.5, r + 0.5); grp[groundKind(tc, tr, indK(tc, tr))].push([c, r]); }
+    fillCellsWith(grp.grass, tex('grass')); fillCellsWith(grp.dirt, tex('dirt')); fillCellsWith(grp.concrete, tex('concrete'));
+    const inView = (c, r) => c > bb.c0 - 16 && c < bb.c1 + 16 && r > bb.r0 - 16 && r < bb.r1 + 16;
+    const band = (pts, R, fill) => { for (const [tc, tr] of pts) { const [c, r] = fromTown(tc, tr); if (inView(c, r)) blobPx(c, r, R, fill); } };
+    band(L.river, (RIVER_W + 0.25) * K, '#8c8574'); band(L.river, RIVER_W * K, tex('water'));
+    for (const st of L.streets) band(st.pts, (st.w * 0.62 + 0.2) * K, tex('pave'));
+    band(L.access[F.stage], (0.42 + 0.2) * K, tex('pave'));
+    for (const st of L.streets) band(st.pts, st.w * 0.62 * K, tex('asphalt'));
+    band(L.access[F.stage], 0.42 * K, tex('asphalt'));
+  } else for (const [c, r, col, k] of S.cells) { poly(qT(c, r, c + 1, r + 1, 0), k === 'plot' ? '#8a8478' : col); if (k === 'water' && !CHEAP && hash(c, r) % 5 === 0) { const p = iso(c + 0.5, r + 0.5, 0); ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(p[0] - 6, p[1], 12, 1); } }
+  if (tex('grass')) drawRailLine((c, r) => fromTown(c, r), tune.backdropScale); // the railway, where the map has it
+  else if (S.railR > bb.r0 - 14 && S.railR < bb.r1 + 14) {
     const r = S.railR, c0 = Math.max(bb.c0 - 14, S.railC[0]), c1 = Math.min(bb.c1 + 14, S.railC[1]);
-    for (let c = c0; c < c1; c += 0.35) poly(qT(c, r - 0.35, c + 0.12, r + 0.35, 0.3), '#6b4a2a');
-    for (const d of [-0.2, 0.2]) line(iso(c0, r + d, 0.8), iso(c1, r + d, 0.8), '#8a8f96', 1.5);
+    poly(qT(c0, r - 0.5, c1, r + 0.5, 0.1), '#7d756a', 'rgba(60,54,46,0.6)', 1);
+    for (let c = c0; c < c1; c += 0.3) poly(qT(c, r - 0.36, c + 0.12, r + 0.36, 0.3), '#4e3824');
+    for (const d of [-0.2, 0.2]) { line(iso(c0, r + d, 0.8), iso(c1, r + d, 0.8), '#3a3c40', 2.5); line(iso(c0, r + d, 1.2), iso(c1, r + d, 1.2), '#c4c8cc', 1); }
   }
-  poly(qT(bb.c0 - 0.6, bb.r0 - 0.6, bb.c1 + 0.6, bb.r1 + 0.6, 0.1), '#8a8478', 'rgba(60,56,50,0.6)', 1);
+  poly(qT(bb.c0 - 0.6, bb.r0 - 0.6, bb.c1 + 0.6, bb.r1 + 0.6, 0.1), tex('pave') || '#8a8478', 'rgba(60,56,50,0.6)', 1);
   if (!A) return;
   const sw = F.swap, cb = sw ? { c0: bb.r0, c1: bb.r1, r0: bb.c0, r1: bb.c1 } : bb, qT2 = (c0, r0, c1, r1, z) => sw ? qT(r0, c0, r1, c1, z) : qT(c0, r0, c1, r1, z), iso2 = (c, r, z) => sw ? iso(r, c, z) : iso(c, r, z);
   const Y = yardOf(F), lane0 = cb.r0 - 3, lane1 = cb.r1 + 3, rx = Y.lane - 0.85;
-  poly(qT2(rx - 0.12, lane0, rx + 1.82, lane1, 0.2), '#8f8370'); poly(qT2(rx, lane0, rx + 1.7, lane1, 0.3), '#a89c86');
-  for (let r = lane0; r < lane1; r += 0.5) for (let c = rx + 0.1; c < rx + 1.6; c += 0.5) if (hash(Math.round(c * 4), Math.round(r * 4)) % 3 === 0) poly(qT2(c, r, c + 0.35, r + 0.3, 0.35), 'rgba(80,66,50,0.25)'); // cobbles
+  poly(qT2(rx - 0.12, lane0, rx + 1.82, lane1, 0.2), '#8f8370'); poly(qT2(rx, lane0, rx + 1.7, lane1, 0.3), tex('asphalt') || '#a89c86');
+  if (!tex('asphalt')) for (let r = lane0; r < lane1; r += 0.5) for (let c = rx + 0.1; c < rx + 1.6; c += 0.5) if (hash(Math.round(c * 4), Math.round(r * 4)) % 3 === 0) poly(qT2(c, r, c + 0.35, r + 0.3, 0.35), 'rgba(80,66,50,0.25)'); // cobbles
   poly(qT2(Y.c0, Y.r0 - 0.15, Y.c1 + 0.2, Y.r1 + 0.15, 0.32), '#a8a49a');
   poly(qT2(Y.c0, Y.r0, Y.c1 + 0.2, Y.r1, 0.36), '#55524e');
   for (const v of [Y.r0 + 0.08, Y.r1 - 0.08]) poly(qT2(Y.c0 + 0.1, v - 0.03, Y.c1 - 0.2, v + 0.03, 0.4), '#e8e2c8');
@@ -860,7 +942,10 @@ function neighbourObjs(t) { // the buildings and trees of the lots, in depth ord
   const S = surroundings(), out = [], pal = ['#e8c88a', '#f0dcb8', '#c8d8e8', '#e8b8a8'];
   for (const o of S.lots) {
     const { c, r, w, h, s } = o, d = c + r + w + h;
-    const f = o.k === 'shed' ? () => drawShedBig(c, r, w, h, t, s) : o.k === 'containers' ? () => drawContainers({ c, r, w, h, k: s }, t) : o.k === 'workshop' ? () => drawWorkshop({ c, r, w, h, k: s }, t)
+    const px = { shed: 'shed', containers: 'containers', workshop: 'workshop', lot: 'lot', silos: 'silos', brick: 'brick' }[o.k];
+    const tall = px === 'silos', q = tall ? Math.min(w, h, 2.2) : 0; // silos are tall: a modest pair in the middle of their lot, not a wall of them
+    const f = px && hdImg(px + '.png') ? (tall ? () => drawBld(px, c + (w - q) / 2, r + (h - q) / 2, q, q, 0.8) : () => drawBld(px, c, r, w, h))
+      : o.k === 'shed' ? () => drawShedBig(c, r, w, h, t, s) : o.k === 'containers' ? () => drawContainers({ c, r, w, h, k: s }, t) : o.k === 'workshop' ? () => drawWorkshop({ c, r, w, h, k: s }, t)
       : o.k === 'lot' ? () => drawTruckLot({ c, r, w, h, k: s }, t) : o.k === 'silos' ? () => drawSilos({ c, r, w, h, k: s }, t) : o.k === 'brick' ? () => drawBrickFactory({ c, r, w, h, k: 0 }, t)
       : o.k === 'trees' ? () => { for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) drawTree(c + i + 0.5, r + j + 0.5); }
       : () => drawHouse(c, r, Math.min(w, 3), h, pal[s % 4], ['#b0543c', '#8a3a2e', '#7a4a3a'][s % 3], t, s % 2 === 0, o.k === 'house2' ? 2 : 1);
@@ -939,20 +1024,20 @@ function opSpot(m) { const [fw, fh] = fpOf(m); return [m.c + fw - 0.14, m.r + fh
 function pathFor(b, from, to) { const keep = F; F = b; const p = bfs([Math.floor(from[0]), Math.floor(from[1])], [Math.floor(to[0]), Math.floor(to[1])]); F = keep; return p; }
 function shiftStartFor(b) { // everyone walks in from the street to their place; operators start their machine when they get there
   const D = doorOf(b), door = [D.cell[0] + 0.5, D.cell[1] + 0.5]; b.commute = [];
-  let k = 0; const add = (pal, to, done) => { b.commute.push({ x: D.out[0], y: D.out[1], path: [door, ...pathFor(b, door, to)], end: done, pal, wait: 0.5 + k++ * 0.7, walkT: 0, dir: 1, fade: 0 }); };
-  for (const m of b.machines) if (m.op) { m.present = false; const keep = F; F = b; const st = nearWalkable(m, D.cell); F = keep; add(OP_PAL, st, () => { m.present = true; }); }
+  let k = 0; const add = (pal, to, done, seed) => { b.commute.push({ x: D.out[0], y: D.out[1], path: [door, ...pathFor(b, door, to)], end: done, pal, seed, wait: 0.5 + k++ * 0.7, walkT: 0, dir: 1, fade: 0 }); };
+  for (const m of b.machines) if (m.op) { m.present = false; const keep = F; F = b; const st = nearWalkable(m, D.cell); F = keep; add(OP_PAL, st, () => { m.present = true; }, m.id); }
   const floorNear = (x, y) => { const keep = F; F = b; const ok = walkable(Math.floor(x), Math.floor(y)), to = ok ? [x, y] : (walkCells().sort((a, q) => Math.hypot(a[0] + 0.5 - x, a[1] + 0.5 - y) - Math.hypot(q[0] + 0.5 - x, q[1] + 0.5 - y))[0] || [x, y]).map((v, i) => ok ? v : v + 0.5); F = keep; return to; };
-  for (const [id, w] of Object.entries(b.haul || {})) { w.hidden = true; [w.c, w.r] = floorNear(w.c, w.r); add(MAG_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; const keep = F; F = b; if (w.task) routeTo(w, w.carry ? w.task.to : w.task.from); else w.path = []; F = keep; }); } // back at work: the way to the job is worked out again from where they arrive
-  for (const [id, w] of Object.entries(b.itw || {})) { w.hidden = true; [w.c, w.r] = floorNear(w.c, w.r); add(IT_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }); }
-  for (const w of b.workers) { w.hidden = true; add(null, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }); }
+  for (const [id, w] of Object.entries(b.haul || {})) { w.hidden = true; [w.c, w.r] = floorNear(w.c, w.r); add(MAG_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; const keep = F; F = b; if (w.task) routeTo(w, w.carry ? w.task.to : w.task.from); else w.path = []; F = keep; }, id); } // back at work: the way to the job is worked out again from where they arrive
+  for (const [id, w] of Object.entries(b.itw || {})) { w.hidden = true; [w.c, w.r] = floorNear(w.c, w.r); add(IT_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }, id); }
+  b.workers.forEach((w, i) => { w.hidden = true; add(null, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }, i); });
 }
 function shiftEndFor(b) { // the machines stop, everyone walks to the door and out to the street
   const D = doorOf(b), door = [D.cell[0] + 0.5, D.cell[1] + 0.5]; b.commute = [];
-  let k = 0; const add = (pal, from) => { b.commute.push({ x: from[0], y: from[1], path: [...pathFor(b, from, door), door, D.out], pal, wait: k++ * 0.5, walkT: 0, dir: 1, leaving: true, fade: 1 }); };
-  for (const m of b.machines) if (m.op) { m.present = false; add(OP_PAL, opSpot(m)); }
-  for (const w of Object.values(b.haul || {})) { w.hidden = true; add(MAG_PAL, [w.c, w.r]); }
-  for (const w of Object.values(b.itw || {})) { w.hidden = true; add(IT_PAL, [w.c, w.r]); }
-  for (const w of b.workers) { w.hidden = true; add(null, [w.c, w.r]); }
+  let k = 0; const add = (pal, from, seed) => { b.commute.push({ x: from[0], y: from[1], path: [...pathFor(b, from, door), door, D.out], pal, seed, wait: k++ * 0.5, walkT: 0, dir: 1, leaving: true, fade: 1 }); };
+  for (const m of b.machines) if (m.op) { m.present = false; add(OP_PAL, opSpot(m), m.id); }
+  for (const [id, w] of Object.entries(b.haul || {})) { w.hidden = true; add(MAG_PAL, [w.c, w.r], id); }
+  for (const [id, w] of Object.entries(b.itw || {})) { w.hidden = true; add(IT_PAL, [w.c, w.r], id); }
+  b.workers.forEach((w, i) => { w.hidden = true; add(null, [w.c, w.r], i); });
 }
 function updateCommute(b, dt) {
   if (!b.commute || !b.commute.length) return;
@@ -970,8 +1055,7 @@ function drawCommuter(k, t) {
   if (k.wait > 0) return;
   const p = iso(k.x, k.y, 0), step = Math.floor(k.walkT * 6) % 2;
   ctx.globalAlpha = Math.max(0, Math.min(1, k.fade));
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
-  sprite(step ? 'walk1' : 'walk0', p[0], p[1] - step, 2, k.dir < 0, k.pal || undefined);
+  if (!drawPerson(palRole(k.pal), k.seed ?? 0, p[0], p[1], { flip: k.dir > 0, moving: true, walkT: k.walkT })) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4); sprite(step ? 'walk1' : 'walk0', p[0], p[1] - step, 2, k.dir < 0, k.pal || undefined); }
   ctx.globalAlpha = 1;
 }
 // ---- Office clerks: they walk about the office and sit at a PC now and then to do their tasks ----
@@ -1000,6 +1084,7 @@ function updateClerks(b, dt) {
 }
 function drawClerk(k, t) {
   const p = iso(k.x, k.y, k.mode === 'sit' ? 6 : 0), pal = CLERK_PALS[k.pal % CLERK_PALS.length];
+  if (drawPerson('clerk', k.pal, p[0], p[1], { flip: k.mode === 'sit' ? false : k.dir > 0, moving: k.mode === 'walk', walkT: k.walkT, sit: k.mode === 'sit', work: k.mode === 'sit', t })) { if (k.mode === 'sit' && Math.sin(t * 9 + k.pal) > 0) { const q = iso(k.desk.c + 0.55, k.desk.r + 0.42, 29); ctx.fillStyle = 'rgba(126,240,160,0.85)'; ctx.fillRect(q[0] - 1, q[1], 3, 1); } return; }
   if (k.mode !== 'sit') { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 8, p[1] - 2, 16, 4); }
   if (k.mode === 'sit') {
     const type = Math.sin(t * 9 + k.pal) > 0;
@@ -1012,7 +1097,9 @@ function drawFloor() {
     if (!inShed(c, r + 1)) poly([iso(c, r + 1, 0), iso(c + 1, r + 1, 0), iso(c + 1, r + 1, -9), iso(c, r + 1, -9)], '#7d756a', EDGE);
     if (!inShed(c + 1, r)) poly([iso(c + 1, r, 0), iso(c + 1, r + 1, 0), iso(c + 1, r + 1, -9), iso(c + 1, r, -9)], '#625b52', EDGE);
   }
-  if (F.stage >= 2) { // concrete slabs in the works, resin with painted walkways in the modern factories
+  const hdFloor = null; // the floor stays drawn: its planks and slabs already match the pixel look
+  if (hdFloor) fillCellsWith(cellList(F), hdFloor);
+  else if (F.stage >= 2) { // concrete slabs in the works, resin with painted walkways in the modern factories
     const modern = F.stage >= 3;
     for (const [c, r] of cellList(F)) {
       const h = hash(c, r);
@@ -1114,6 +1201,7 @@ function drawPC(col, row, t) { // a desk with a monitor showing the network, and
 }
 function drawRack(col, row, t, size = 2) {
   const c = col + 0.5, r = row + 0.5, H = [0, 34, 60, 84][size], hw = [0, 0.22, 0.3, 0.36][size], rows = [0, 4, 8, 12][size];
+  if (drawBld('rack' + size, c - hw - 0.06, r - hw - 0.06, hw * 2 + 0.12, hw * 2 + 0.12)) { const p = iso(c + hw, r + hw, H * 0.55); if (Math.sin(t * 6 + col) > 0) { ctx.fillStyle = '#4fdc7a'; ctx.fillRect(p[0] - 6, p[1], 2, 2); } return; } // a blink over the sprite's own lights
   box(c - hw, r - hw, c + hw, r + hw, 0, H, size === 3 ? '#1e252c' : '#262c33');
   poly(qL(c - hw + 0.04, c + hw - 0.04, r + hw, 6, H - 4), '#1a1f24', '#3a434c');
   for (let k = 0; k < rows; k++) for (let j = 0; j < 4; j++) {
@@ -1197,12 +1285,12 @@ function updateWorkers(dt) {
 }
 function drawWorker(w, t) {
   const p = iso(w.c, w.r, 0);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
+  if (!hdOn()) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4); }
   let spr = 'walk0', bob = 0;
   if (w.wave > 0) spr = Math.sin(t * 10) > 0 ? 'wave' : 'walk0';
   else if (w.path.length) { spr = Math.floor(w.walkT * 6) % 2 ? 'walk1' : 'walk0'; bob = Math.floor(w.walkT * 6) % 2; }
   else if (w.task) spr = Math.sin(t * 9) > 0 ? 'work' : 'walk0';
-  sprite(spr, p[0], p[1] - bob, 2, w.dir < 0);
+  if (!drawPerson('build', F.workers.indexOf(w), p[0], p[1], { flip: w.dir > 0, moving: !!w.path.length, walkT: w.walkT, work: !!w.task, t })) sprite(spr, p[0], p[1] - bob, 2, w.dir < 0);
   if (w.task && !w.path.length && Math.sin(t * 9) > 0.7) { ctx.fillStyle = '#ffd36a'; ctx.fillRect(p[0] + 12 * w.dir, p[1] - 22, 2, 2); ctx.fillRect(p[0] + 15 * w.dir, p[1] - 26, 2, 2); }
 }
 
@@ -2249,7 +2337,8 @@ function pzTick() { // a section under construction is finished when its time is
 }
 function drawPzCell(o, t) { // locked: a fenced building site; being built: scaffolding; built: a transformer with its fence and warning sign
   const b = F, P = pzOf(b), k = o.k, c = o.c, r = o.r, built = k < P.built, building = P.building && P.building.k === k, open = state.level >= pzLvl(k);
-  if (built) {
+  if (built && hdImg('power.png')) { poly(qT(c + 0.04, r + 0.04, c + 0.96, r + 0.96, 0.5), '#a9adb0', '#7d8287', 1); drawBld('power', c + 0.12, r + 0.12, 0.76, 0.76); const l = iso(c + 0.5, r + 0.5, 50); ctx.fillStyle = Math.sin(t * 4 + k) > 0 ? '#7ef0a0' : '#2f6b44'; ctx.beginPath(); ctx.arc(l[0], l[1], 3, 0, Math.PI * 2); ctx.fill(); }
+  else if (built) {
     poly(qT(c + 0.04, r + 0.04, c + 0.96, r + 0.96, 0.5), '#a9adb0', '#7d8287', 1);
     box(c + 0.22, r + 0.2, c + 0.78, r + 0.8, 0, 34, '#7b8c96');
     for (let i = 0; i < 4; i++) { const p0 = iso(c + 0.78, r + 0.28 + i * 0.14, 6), p1 = iso(c + 0.78, r + 0.28 + i * 0.14, 30); line(p0, p1, '#5a6a74', 2); }
@@ -3266,10 +3355,11 @@ function exitBuilding() {
 }
 let WSEED = 0; // the world of this game: 0 keeps the classic town (older saves)
 const hash = (c, r) => { let h = Math.imul(c * 374761393 + r * 668265263 + WSEED * 2654435761, 1274126177); h ^= h >>> 13; return (h >>> 0) % 1000; };
-function setWorld(seed) { WSEED = seed | 0; TOWN_L = null; COUNTRY = null; bgKey = ''; if (state) for (const b of state.buildings || []) b._sur = null; }
+function setWorld(seed) { WSEED = seed | 0; TOWN_L = null; COUNTRY = null; BRIDGES = null; bgKey = ''; if (state) for (const b of state.buildings || []) b._sur = null; }
 const jitter = (pts, k, amp) => WSEED ? pts.map((p, i) => i === 0 || i === pts.length - 1 ? p : [p[0] + ((hash(i * 7 + k, 11) / 999) - 0.5) * 2 * amp, p[1] + ((hash(i * 13 + k, 29) / 999) - 0.5) * 2 * amp]) : pts; // streets and river bend differently in every game
 function drawTree(c, r) { // a rounded canopy of shaded clumps over a trunk
   const p = iso(c, r, 0), h = hash(Math.round(c * 10), Math.round(r * 10)), sc = 0.85 + (h % 30) / 100;
+  const hd = hdImg('tree.png'); if (hd) return drawHdSprite(hd, p[0], p[1] + 6 * sc, tune.hdTreeH * sc, h % 2 === 0);
   const tg = ctx.createLinearGradient(p[0] - 4, 0, p[0] + 4, 0); tg.addColorStop(0, '#7a5634'); tg.addColorStop(1, '#4e3520');
   ctx.fillStyle = tg; ctx.fillRect(p[0] - 4, p[1] - 22 * sc, 8, 22 * sc);
   const blobs = [[-10, -30, 14, '#2f6b34'], [10, -30, 14, '#2c6431'], [0, -38, 16, '#3b8040'], [-7, -46, 12, '#468d47'], [7, -47, 11, '#4c9a4c'], [0, -54, 10, '#5aa857']];
@@ -3283,10 +3373,12 @@ function drawMeadow(t) {
   const D = WORLD();
   const g = ctx.createLinearGradient(0, -500, 0, 900); g.addColorStop(0, '#3f6f2c'); g.addColorStop(1, '#4f8a33');
   ctx.fillStyle = g; ctx.fillRect(-5000, -5000, 10000, 10000);
-  poly([iso(-4, -4), iso(D.c + 4, -4), iso(D.c + 4, D.r + 4), iso(-4, D.r + 4)], '#4f8a33');
+  poly([iso(-4, -4), iso(D.c + 4, -4), iso(D.c + 4, D.r + 4), iso(-4, D.r + 4)], tex('grass') || '#4f8a33');
   poly([iso(0, D.r, 0), iso(D.c, D.r, 0), iso(D.c, D.r, -10), iso(0, D.r, -10)], '#8a6440', EDGE);
   poly([iso(D.c, 0, 0), iso(D.c, D.r, 0), iso(D.c, D.r, -10), iso(D.c, 0, -10)], '#6e4e30', EDGE);
-  for (let r = 0; r < D.r; r++) for (let c = 0; c < D.c; c++) {
+  const hdGrass = tex('grass');
+  if (hdGrass) { const all = []; for (let r = 0; r < D.r; r++) for (let c = 0; c < D.c; c++) all.push([c, r]); fillCellsWith(all, hdGrass); }
+  else for (let r = 0; r < D.r; r++) for (let c = 0; c < D.c; c++) {
     const h = hash(c, r);
     poly(qT(c, r, c + 1, r + 1, 0), ['#6aad3d', '#64a637', '#72b745', '#5e9f33', '#6db23f'][h % 5]);
     if (!CHEAP) for (let k = 0; k < 4; k++) { const hk = hash(c * 5 + k, r * 9 + k), p = iso(c + 0.15 + (hk % 70) / 100, r + 0.15 + ((hk >> 4) % 70) / 100, 0); ctx.fillStyle = hk % 2 ? '#4e8a2a' : '#94d45e'; ctx.fillRect(p[0], p[1] - 3, 1, 3); ctx.fillRect(p[0] + 2, p[1] - 2, 1, 2); }
@@ -3296,7 +3388,7 @@ function drawMeadow(t) {
   for (const b of state.buildings) { // a worn dirt path from the door to the bottom edge
     const fr = [...b.cells].map(k => k.split(',').map(Number)).filter(([c, r]) => !b.cells.has(K(c, r + 1)));
     const d = fr[Math.floor(fr.length / 2)]; if (!d) continue;
-    for (let r = d[1] + 1; r < D.r; r++) { if (buildingAt(d[0], r)) break; poly(qT(d[0] + 0.15, r, d[0] + 0.85, r + 1, 0.2), ['#a07a50', '#9a744a', '#a88258'][hash(d[0], r) % 3]); if (!CHEAP) { const pp = iso(d[0] + 0.4, r + 0.5, 0); ctx.fillStyle = '#7a5a38'; ctx.fillRect(pp[0], pp[1], 3, 2); } }
+    for (let r = d[1] + 1; r < D.r; r++) { if (buildingAt(d[0], r)) break; poly(qT(d[0] + 0.15, r, d[0] + 0.85, r + 1, 0.2), tex('dirt') || ['#a07a50', '#9a744a', '#a88258'][hash(d[0], r) % 3]); if (!CHEAP) { const pp = iso(d[0] + 0.4, r + 0.5, 0); ctx.fillStyle = '#7a5a38'; ctx.fillRect(pp[0], pp[1], 3, 2); } }
   }
   if (!CHEAP) for (let r = 0; r < D.r; r++) for (let c = 0; c < D.c; c++) { // bushes, stones and flower clumps on free grass
     const h = hash(c * 3, r * 7); if (buildingAt(c, r) || h % 17) continue;
@@ -3486,7 +3578,7 @@ function drawNarrator(t, msg, quiet) { // ChiefTech Noah, bottom left: his advic
   if (fresh && !quiet && !state.guideHidden) { state.guideSeen = msg; state.noahOpenUntil = now + tune.guideFullSec; } // something new: open it whole
   const open = now < (state.noahOpenUntil || 0), unseen = fresh; // a new tip not read yet while closed: the ! bubble
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x, y + 2, 22, 5, 0, 0, Math.PI * 2); ctx.fill();
-  sprite(open && Math.sin(t * 2.5) > 0.3 ? 'noahPoint' : 'noahTab', x, y, 4, false, NOAH_PAL);
+  if (!drawPerson('noah', 0, x, y, { flip: true, scale: 1.3, pose: open && Math.sin(t * 2.5) > 0.3 ? 1 : 0 })) sprite(open && Math.sin(t * 2.5) > 0.3 ? 'noahPoint' : 'noahTab', x, y, 4, false, NOAH_PAL);
   if (open && Math.sin(t * 3) > 0) { ctx.fillStyle = '#7ef0a0'; ctx.fillRect(x + 22, y - 26, 3, 2); } // the tablet blinks
   btn(x - 34, y - 72, 68, 76, () => { if (open) state.noahOpenUntil = 0; else { state.noahOpenUntil = clock.now() + tune.guideFullSec; state.guideSeen = msg; state.guideHidden = false; } sfx.click(); }, 'guide'); // tap Noah: open or close
   if (!open) { // closed: a small bubble, ! when he has something new
@@ -3513,6 +3605,7 @@ function drawNarrator(t, msg, quiet) { // ChiefTech Noah, bottom left: his advic
 // ---- Intro: a flight over the town, into the industrial zone, down to the little factory ----------
 const TOWN = { c: 44, r: 30 }, HOME = { c: 36, r: 14, w: 4, h: 3 };
 function drawHouse(c, r, w, h, wall, roof, t, alongR, floors = 1) { // walls, a gabled roof (along c or r), a door, windows lit at night
+  { const k = hash(Math.round(c * 3) + 5, Math.round(r * 7) + 11) % 4; if (drawBld((w === h ? 'hA' : 'hB') + k, c, r, w, h, w === h && w > 1 ? 0.72 : 1)) return; } // a big square lot gets a house that does not tower over the street
   const Hh = 18 * floors + 4, R = 13, nk = nightK();
   box(c + 0.08, r + 0.08, c + w - 0.08, r + h - 0.08, 0, Hh, wall);
   const win = q => poly(q, nk > 0.2 ? `rgba(255,214,120,${0.5 + nk * 0.45})` : '#a9d8ee', '#3a2416', 1);
@@ -3546,15 +3639,34 @@ function drawShedBig(c, r, w, h, t, k) { // a warehouse of the industrial zone, 
 // The town: an old European centre round a piazza with a church and a town hall, winding cobbled
 // streets out from it, terraced houses along them, a river with a stone bridge, the industrial zone east.
 const PIAZZA = { c: 14, r: 13, rad: 3.4 };
-const STREETS = [ // control points in tiles, smoothed into curves
-  [[-1, 17], [5, 16], [10, 14.5], [14, 13], [19, 12.5], [24, 12], [29, 12.5], [34, 13], [46, 13]],
-  [[11, -1], [12, 3], [11, 7], [13.5, 10.5]],
-  [[16, 15.5], [17.5, 19], [17, 23], [19, 27], [20, 31]],
-  [[4, 5], [8, 7], [11, 9.5], [13, 11]],
-  [[22, 3], [19.5, 6], [18.5, 9], [16.5, 11.5]],
-  [[3, 24], [7, 21], [11, 18.5], [13.5, 15.5]],
-  [[24, 12], [25, 17], [27, 21], [29, 24]],
+const STREETS = [ // districts laid out like a real town: blocks between straight streets with rounded corners (corner points in tiles)
+  [[-1, 16], [9.5, 16], [11.8, 14.4]], // the Corso, from the west into the piazza
+  [[16.2, 12], [20, 12], [34, 12], [46, 12]], // the avenue east to the industrial zone
+  [[13.6, -1], [13.6, 10.9]], // north from the piazza
+  [[-1, 4.5], [20, 4.5], [20, 12]], // the northern district, then down across the railway to the avenue
+  [[3, 4.5], [3, 16]], // west district: the long street
+  [[3, 8.2], [13.6, 8.2]], // west district: the cross street past the church
+  [[20, -1], [20, 4.5]], // north edge
+  [[2, 16], [2, 21], [12, 21], [12, 16]], // south-west district: a loop round the school and the park
+  [[15.2, 15], [16.5, 18], [18, 21], [18, 31]], // south from the piazza, over the river
+  [[8, 31], [8, 27], [18, 27]], // south of the river: the riverside street
+  [[18, 29.5], [46, 29.5]], // south of the river: the long street east
+  [[26, 12], [26, 19.5], [34, 19.5], [34, 12]], // the industrial block
 ];
+const PARKS = [ // parks and gardens of the districts: what each holds varies
+  { c: 8.6, r: 16.8, w: 3, h: 3.4, kind: 'fountain' }, { c: 5, r: 5.4, w: 5, h: 2.2, kind: 'pond' }, { c: 9.5, r: 27.8, w: 7, h: 1.4, kind: 'pond' }, { c: 21, r: 8, w: 4, h: 3, kind: 'fountain' },
+];
+function roundPath(pts, R, step) { // a polyline with each corner turned in a curve of radius R, sampled every step tiles
+  const out = [], put = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L / step)); for (let k = out.length ? 1 : 0; k <= n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]); };
+  let from = pts[0];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p = pts[i], a = pts[i - 1], b = pts[i + 1], la = Math.hypot(p[0] - a[0], p[1] - a[1]), lb = Math.hypot(b[0] - p[0], b[1] - p[1]), t = Math.min(R, la / 2, lb / 2);
+    const p0 = [p[0] + (a[0] - p[0]) / la * t, p[1] + (a[1] - p[1]) / la * t], p1 = [p[0] + (b[0] - p[0]) / lb * t, p[1] + (b[1] - p[1]) / lb * t];
+    put(from, p0); const n = Math.max(2, Math.ceil(t * 1.6 / step)); for (let k = 1; k <= n; k++) { const u = k / n, v = 1 - u; out.push([v * v * p0[0] + 2 * v * u * p[0] + u * u * p1[0], v * v * p0[1] + 2 * v * u * p[1] + u * u * p1[1]]); }
+    from = p1;
+  }
+  put(from, pts[pts.length - 1]); return out;
+}
 const RIVER = [[-20, 31], [-10, 27], [-2, 26], [6, 25], [12, 23.5], [18, 22.5], [24, 21.5], [30, 23], [38, 26], [47, 27], [56, 31], [64, 36]];
 function spline(pts, step) { // Catmull-Rom through the points
   const out = [];
@@ -3623,13 +3735,34 @@ function drawTruckLot(o, t) { // asphalt with painted bays and a couple of lorri
 const RAIL_W = 19.6, RAIL_E = () => TOWN.c + OUT - 7; // the goods terminus, and the tunnel mouth at the edge of the map
 function drawRail(t) { // sleepers and rails from the buffer stop to the tunnel
   const E = RAIL_E() + 1.5;
-  for (let c = RAIL_W - 0.4; c < E; c += 0.35) poly(qT(c, RAIL_R - 0.35, c + 0.12, RAIL_R + 0.35, 0.3), '#6b4a2a');
-  poly(qT(RAIL_W - 0.5, RAIL_R - 0.5, E, RAIL_R + 0.5, 0.1), 'rgba(120,110,96,0.35)'); // ballast
-  for (const d of [-0.2, 0.2]) line(iso(RAIL_W - 0.4, RAIL_R + d, 0.8), iso(E, RAIL_R + d, 0.8), '#8a8f96', 1.5);
+  if (hdImg('tunnel.png')) { drawRailLine((c, r) => [c, r], 1); box(RAIL_W - 0.6, RAIL_R - 0.4, RAIL_W - 0.35, RAIL_R + 0.4, 0, 9, '#d8433a'); poly(qL(RAIL_W - 0.6, RAIL_W - 0.35, RAIL_R + 0.4, 3, 6), '#fff'); return; }
+  poly(qT(RAIL_W - 0.5, RAIL_R - 0.5, E, RAIL_R + 0.5, 0.1), '#7d756a', 'rgba(60,54,46,0.6)', 1); // a bed of grey ballast
+  for (let c = RAIL_W - 0.4; c < E; c += 0.3) poly(qT(c, RAIL_R - 0.36, c + 0.12, RAIL_R + 0.36, 0.3), '#4e3824'); // sleepers
+  for (const d of [-0.2, 0.2]) { line(iso(RAIL_W - 0.4, RAIL_R + d, 0.8), iso(E, RAIL_R + d, 0.8), '#3a3c40', 2.5); line(iso(RAIL_W - 0.4, RAIL_R + d, 1.2), iso(E, RAIL_R + d, 1.2), '#c4c8cc', 1); } // steel rails with a shine
   box(RAIL_W - 0.6, RAIL_R - 0.4, RAIL_W - 0.35, RAIL_R + 0.4, 0, 9, '#d8433a'); poly(qL(RAIL_W - 0.6, RAIL_W - 0.35, RAIL_R + 0.4, 3, 6), '#fff'); // buffer stop
 }
+const RAIL_TURN = 2.2; // radius of the bend before the tunnel, in map tiles
+const railStraightEnd = () => RAIL_E() - RAIL_TURN;
+const RAIL_RUN_N = 1.6; // the straight piece after the bend, up to the portal
+const PORTAL = () => [railStraightEnd() + RAIL_TURN, RAIL_R - RAIL_TURN - RAIL_RUN_N]; // where the rails go into the hill
+const RAIL_OUT = () => TOWN.c + OUT + 8; // the line runs straight on past the edge of the map
+const RAIL_END_S = () => RAIL_OUT();
+function railAt(s) { // the point of the line at distance s along it (the map column: the line is straight, east to the edge of the map)
+  const E0 = railStraightEnd(), R = RAIL_TURN;
+  if (s <= E0 || true) return { c: s, r: RAIL_R, tc: 1, tr: 0 };
+  const a = (s - E0) / R;
+  if (a < Math.PI / 2) return { c: E0 + R * Math.sin(a), r: RAIL_R - R * (1 - Math.cos(a)), tc: Math.cos(a), tr: -Math.sin(a) };
+  return { c: E0 + R, r: RAIL_R - R - (s - E0 - R * Math.PI / 2), tc: 0, tr: -1 };
+}
+function drawRailLine(map, k) { // ballast, sleepers and rails along the whole line; map turns map tiles into the tiles being drawn, k is how many of those a map tile is
+  const s0 = RAIL_W - 0.4, s1 = RAIL_END_S() + 0.2, step = 0.3 / k, pts = [];
+  for (let s = s0; s <= s1; s += step) { const q = railAt(s), [c, r] = map(q.c, q.r); pts.push({ c, r, tc: q.tc, tr: q.tr }); }
+  for (const q of pts) blobPx(q.c, q.r, 0.42, '#7d756a');
+  for (const q of pts) { const nc = -q.tr, nr = q.tc, a = 0.36, b = 0.06; poly([iso(q.c + nc * a - q.tc * b, q.r + nr * a - q.tr * b, 0.3), iso(q.c + nc * a + q.tc * b, q.r + nr * a + q.tr * b, 0.3), iso(q.c - nc * a + q.tc * b, q.r - nr * a + q.tr * b, 0.3), iso(q.c - nc * a - q.tc * b, q.r - nr * a - q.tr * b, 0.3)], '#4e3824'); }
+  for (const d of [-0.2, 0.2]) for (const [z, col, w] of [[0.8, '#3a3c40', 2.5], [1.2, '#c4c8cc', 1]]) { ctx.beginPath(); pts.forEach((q, i) => { const p = iso(q.c - q.tr * d, q.r + q.tc * d, z); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(); }
+}
 function trainAt(t) { // a goods train: it waits at the terminus, runs east into the tunnel, stays out of sight, comes back out and returns
-  const L = 5, gap = 1.3, x0 = RAIL_W + 0.4, x1 = RAIL_E() + 1.2, run = (x1 - x0) / 2.2, wait = 8, hide = 9, P = wait + run + hide + run;
+  const L = 5, gap = 1.3, x0 = RAIL_W + 0.4, x1 = RAIL_END_S() + 1, run = (x1 - x0) / 2.2, wait = 8, hide = 9, P = wait + run + hide + run;
   const u = ((t % P) + P) % P;
   if (u < wait) return { x: x0, dir: 1, gap, L };
   if (u < wait + run) return { x: x0 + (x1 - x0) * ease((u - wait) / run), dir: 1, gap, L };
@@ -3637,17 +3770,29 @@ function trainAt(t) { // a goods train: it waits at the terminus, runs east into
   return { x: x1 - (x1 - x0) * ease((u - wait - run - hide) / run), dir: -1, gap, L };
 }
 const ease = x => x < 0.12 ? (x / 0.12) * (x / 0.12) * 0.06 : x > 0.88 ? 1 - ((1 - x) / 0.12) * ((1 - x) / 0.12) * 0.06 : 0.06 + (x - 0.12) / 0.76 * 0.88;
+function trainObjs(t) { // each car on its own, in depth order with the town: on the bend they turn, past the portal they are in the hill
+  const T = trainAt(t), out = []; if (!T) return out;
+  if (!hdImg('loco.png')) return [{ d: 30 + RAIL_R, f: () => drawTrain(t) }];
+  for (let i = 0; i < T.L; i++) {
+    const sc = T.x + i * T.gap, eng = T.dir > 0 ? i === T.L - 1 : i === 0; if (sc - 0.5 > RAIL_END_S()) continue;
+    const q = railAt(sc), along = Math.abs(q.tc) >= Math.abs(q.tr), n = eng ? 'loco' : ['boxcar', 'flatcar'][i % 2];
+    out.push({ d: q.c + q.r + 0.6, f: () => drawBld(n, along ? q.c - 0.6 : q.c - 0.3, along ? q.r - 0.3 : q.r - 0.6, along ? 1.2 : 0.6, along ? 0.6 : 1.2) });
+  }
+  return out;
+}
 function drawTrain(t) { // the cars that are not inside the tunnel; the engine leads whichever way it goes
   const T = trainAt(t); if (!T) return;
   const E = RAIL_E();
   for (let i = 0; i < T.L; i++) {
     const c = T.x + i * T.gap, eng = T.dir > 0 ? i === T.L - 1 : i === 0;
+    if (hdImg('loco.png')) { if (c - 0.55 < E) drawBld(eng ? 'loco' : ['boxcar', 'flatcar'][i % 2], c - 0.6, RAIL_R - 0.3, 1.2, 0.6); continue; } // the hill drawn after hides what is in the tunnel
     const a = c - 0.55, b = Math.min(c + 0.55, E); if (b <= a + 0.05) continue;
     box(a, RAIL_R - 0.28, b, RAIL_R + 0.28, 2, eng ? 22 : 16, eng ? '#3a4a3a' : ['#8a3a2e', '#5a6a7a', '#7a5a2a'][i % 3]);
     if (eng && c + 0.1 < E) box(c - 0.1, RAIL_R - 0.1, c + 0.1, RAIL_R + 0.1, 22, 30, '#2b2b2b');
   }
 }
 function drawTunnelHill(t) { // a wooded hill at the edge of the map; the rails go in through a stone portal
+  { const im = hdImg('tunnel.png'); if (im) { const [pc, pr] = PORTAL(), dw = 200, k = dw / im.naturalWidth, dh = im.naturalHeight * k, a = iso(pc, pr); ctx.save(); ctx.imageSmoothingEnabled = Math.abs(ctx.getTransform().a) * k < 1; ctx.drawImage(im, a[0] - 0.417 * dw, a[1] - 0.732 * dh, dw, dh); /* the mouth of the portal (42% across, 73% down the art) on the end of the line */ ctx.restore(); return; } } // the portal faces the line coming up from the bend
   const E = RAIL_E(), cc = E + 3.2, rr = RAIL_R;
   for (let k = 0; k < 7; k++) { // stacked rings, a little smaller and higher each time
     const R = 4.4 - k * 0.58, z = k * 12, p = iso(cc + k * 0.15, rr, z);
@@ -3673,7 +3818,7 @@ function countryLayout() {
   const crops = ['#d8c070', '#cdb460', '#7ab84a', '#8cc45a', '#9a7a52', '#8a6a44', '#e8c84a', '#a890c8'];
   for (let gc = -OUT; gc < TOWN.c + OUT; gc += 6) for (let gr = -OUT; gr < TOWN.r + OUT; gr += 5) {
     const h = hash(gc + 100, gr + 100), c = gc + (h % 2), r = gr + ((h >> 2) % 2), w = 4 + (h >> 4) % 3, hh = 3 + (h >> 6) % 2;
-    if (inTown(c, r, w, hh) || blocks({ c, r, w, h: hh }, RESERVED()) || blocks({ c, r, w, h: hh }, [{ c: TOWN.c - 2, r: RAIL_R - 1, w: OUT + 4, h: 2 }, { c: RAIL_E() - 2, r: RAIL_R - 5, w: 10, h: 10 }])) continue;
+    if (inTown(c, r, w, hh) || blocks({ c, r, w, h: hh }, RESERVED()) || blocks({ c, r, w, h: hh }, [{ c: TOWN.c - 2, r: RAIL_R - 1.5, w: OUT + 14, h: 3 }, { c: RAIL_E() - 4, r: RAIL_R - 3, w: 20, h: 6 }])) continue;
     const roll = (h >> 3) % 10;
     if (roll < 6) fields.push({ c, r, w, h: hh, col: crops[h % crops.length], rows: (h >> 5) % 2 });
     else if (roll < 8) for (let k = 0; k < 9; k++) { const hk = hash(gc * 3 + k, gr * 5 + k); woods.push([c + (hk % 50) / 10, r + ((hk >> 3) % 40) / 10]); }
@@ -3681,7 +3826,7 @@ function countryLayout() {
     else fields.push({ c, r, w, h: hh, col: '#6aad3d', rows: 2 }); // pasture
   }
   // country roads carrying the town's streets on to the edge of the world
-  for (const s of STREETS.map((s0, i) => jitter(s0, i * 31 + 1, 1.3))) {
+  for (const s of STREETS.map((s0, i) => jitter(s0, i * 31 + 1, 0.35))) {
     for (const end of [[s[0], s[1]], [s[s.length - 1], s[s.length - 2]]]) {
       const [a, b] = end, dx = a[0] - b[0], dy = a[1] - b[1], L = Math.hypot(dx, dy) || 1;
       if (a[0] > 0 && a[0] < TOWN.c && a[1] > 0 && a[1] < TOWN.r) continue;
@@ -3689,18 +3834,30 @@ function countryLayout() {
       for (let k = 4; k < OUT - 2; k += 5) { const hk = hash(Math.round(a[0] * 3 + k), Math.round(a[1] * 3)), hc = a[0] + dx / L * k + (hk % 2 ? 1.6 : -2.6), hr = a[1] + dy / L * k + ((hk >> 2) % 2 ? 1.4 : -2.4); if (hk % 2 && !blocks({ c: hc, r: hr, w: 2, h: 2 }, RESERVED())) hamlets.push({ c: a[0] + dx / L * k + (hk % 2 ? 1.6 : -2.6), r: a[1] + dy / L * k + ((hk >> 2) % 2 ? 1.4 : -2.4), k: hk }); }
     }
   }
-  COUNTRY = { fields, farms, woods, hamlets, roads }; return COUNTRY;
+  // nothing in the river or on a road: farms, hamlets, fields and woods that would stand in them are left out
+  const L = townLayout(), roadPts = [];
+  for (const rd of roads) for (let k = 0; k < OUT + 2; k += 0.5) roadPts.push([rd.from[0] + rd.dir[0] * k, rd.from[1] + rd.dir[1] * k]);
+  const clear = x => !L.river.some(q => rectDist(q, x) < RIVER_W + 0.4) && !roadPts.some(q => rectDist(q, x) < 0.8) && !(x.c + x.w > RAIL_W - 1 && x.r < RAIL_R + 1.2 && x.r + x.h > RAIL_R - 1.2); // nothing on the railway either
+  const keep = (arr, rect) => { const ok = arr.filter(o => clear(rect(o))); arr.length = 0; arr.push(...ok); };
+  keep(fields, f => f); keep(farms, f => ({ c: f.c - 1, r: f.r, w: 5.6, h: 4.2 })); keep(hamlets, h => ({ c: h.c, r: h.r, w: 2, h: 2 })); keep(woods, ([c, r]) => ({ c: c - 0.3, r: r - 0.3, w: 0.6, h: 0.6 }));
+  { const homes = farms.map(f => ({ c: f.c - 1, r: f.r, w: 5.6, h: 4.2 })).concat(hamlets.map(h => ({ c: h.c, r: h.r, w: 2, h: 2 }))); const ok = woods.filter(([x, y]) => !homes.concat(RESERVED()).some(o => x > o.c - 1.4 && x < o.c + o.w + 0.5 && y > o.r - 1.4 && y < o.r + o.h + 0.5)); woods.length = 0; woods.push(...ok); } // no wood growing through a farmhouse
+  for (let i = hamlets.length - 1; i >= 0; i--) { const a = hamlets[i]; if (hamlets.some((b, j) => j < i && Math.abs(a.c - b.c) < 2.6 && Math.abs(a.r - b.r) < 2.6) || farms.some(f => a.c > f.c - 3 && a.c < f.c + 5.6 && a.r > f.r - 3 && a.r < f.r + 4.2) || fields.some(f => a.c + 2 > f.c && a.c < f.c + f.w && a.r + 2 > f.r && a.r < f.r + f.h)) hamlets.splice(i, 1); } // houses never on top of each other, a farm or a field
+  COUNTRY = { fields, farms, woods, hamlets, roads, roadPts }; return COUNTRY;
 }
 function drawTreeFlat(c, r) { // a cheap tree for the far distance
   const p = iso(c, r, 0), h = hash(Math.round(c * 10), Math.round(r * 10));
+  { const im = hdImg('tree.png'); if (im) return drawHdSprite(im, p[0], p[1] + 4, tune.hdTreeH * (0.6 + (h % 20) / 100), h % 2 === 0); }
   ctx.fillStyle = '#5a3a20'; ctx.fillRect(p[0] - 2, p[1] - 12, 4, 12);
   ctx.beginPath(); ctx.ellipse(p[0], p[1] - 20, 11, 10, 0, 0, Math.PI * 2); ctx.fillStyle = ['#2f6b34', '#3b8040', '#356f30'][h % 3]; ctx.fill();
   ctx.beginPath(); ctx.ellipse(p[0] - 3, p[1] - 24, 6, 5, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fill();
 }
 function drawCountryGround(t) {
   const C = countryLayout();
-  for (const rd of C.roads) for (let k = 0; k < OUT + 2; k += 0.5) { const c = rd.from[0] + rd.dir[0] * k, r = rd.from[1] + rd.dir[1] * k, p = iso(c, r, 0); ctx.beginPath(); ctx.ellipse(p[0], p[1], 22, 11, 0, 0, Math.PI * 2); ctx.fillStyle = '#a07a50'; ctx.fill(); }
+  const dT = tex('dirt');
+  for (const f of C.fields) { const ft = FIELD_TEX[f.col] && tex(FIELD_TEX[f.col]); if (ft) { poly(qT(f.c, f.r, f.c + f.w, f.r + f.h, 0.1), ft, '#4a6a30', 3); poly(qT(f.c - 0.06, f.r - 0.06, f.c + f.w + 0.06, f.r + f.h + 0.06, 0.05), null, 'rgba(40,70,30,0.6)', 1.5); } } // fields with their crops, edged by a hedge line
+  for (const rd of C.roads) for (let k = 0; k < OUT + 2; k += 0.5) { const c = rd.from[0] + rd.dir[0] * k, r = rd.from[1] + rd.dir[1] * k, p = iso(c, r, 0); if (dT && townLayout().river.some(q => Math.abs(q[0] - c) < 1.6 && Math.hypot(q[0] - c, q[1] - r) < 1.2)) continue; ctx.beginPath(); ctx.ellipse(p[0], p[1], 22, 11, 0, 0, Math.PI * 2); ctx.fillStyle = dT || '#a07a50'; ctx.fill(); }
   for (const f of C.fields) {
+    if (FIELD_TEX[f.col] && tex(FIELD_TEX[f.col])) continue;
     poly(qT(f.c, f.r, f.c + f.w, f.r + f.h, 0.1), f.col, '#3f6a2a', 2);
     if (f.rows < 2 && !CHEAP) for (let u = 0.3; u < (f.rows ? f.w : f.h); u += 0.4) { if (f.rows) line(iso(f.c + u, f.r + 0.1, 0.2), iso(f.c + u, f.r + f.h - 0.1, 0.2), 'rgba(60,40,20,0.25)', 1); else line(iso(f.c + 0.1, f.r + u, 0.2), iso(f.c + f.w - 0.1, f.r + u, 0.2), 'rgba(60,40,20,0.25)', 1); }
   }
@@ -3711,8 +3868,9 @@ function countryObjects(t, objs) {
   for (const fm of C.farms) { // a farmhouse, a barn and a haystack
     const k = fm.k;
     objs.push({ d: fm.c + fm.r + 4, f: () => drawHouse(fm.c, fm.r, 2, 2, '#e8dcc0', '#a04a34', t, false, 2) });
-    objs.push({ d: fm.c + fm.r + 6, f: () => { const c = fm.c + 2.6, r = fm.r + 0.2; box(c, r, c + 2, r + 1.6, 0, 26, '#9a3a2e'); poly(qL(c + 0.6, c + 1.4, r + 1.6, 0, 18), '#5a2a22', '#e8dcc0', 1.5); poly([iso(c, r, 26), iso(c + 2, r, 26), iso(c + 2, r + 0.8, 36), iso(c, r + 0.8, 36)], '#6e4a2a', EDGE); poly([iso(c, r + 0.8, 36), iso(c + 2, r + 0.8, 36), iso(c + 2, r + 1.6, 26), iso(c, r + 1.6, 26)], '#8a5a3a', EDGE); } });
-    objs.push({ d: fm.c + fm.r + 3, f: () => { const p = iso(fm.c + 0.6, fm.r + 2.8, 0); ctx.beginPath(); ctx.ellipse(p[0], p[1] - 6, 9, 8, 0, Math.PI, 0); ctx.lineTo(p[0] + 9, p[1]); ctx.lineTo(p[0] - 9, p[1]); ctx.fillStyle = '#e0c060'; ctx.fill(); ctx.strokeStyle = EDGE; ctx.stroke(); } });
+    if (hdImg('barn.png')) objs.push({ d: fm.c + fm.r + 6, f: () => drawBld('barn', fm.c + 2.4, fm.r + 0.1, 2.4, 2) });
+    else objs.push({ d: fm.c + fm.r + 6, f: () => { const c = fm.c + 2.6, r = fm.r + 0.2; box(c, r, c + 2, r + 1.6, 0, 26, '#9a3a2e'); poly(qL(c + 0.6, c + 1.4, r + 1.6, 0, 18), '#5a2a22', '#e8dcc0', 1.5); poly([iso(c, r, 26), iso(c + 2, r, 26), iso(c + 2, r + 0.8, 36), iso(c, r + 0.8, 36)], '#6e4a2a', EDGE); poly([iso(c, r + 0.8, 36), iso(c + 2, r + 0.8, 36), iso(c + 2, r + 1.6, 26), iso(c, r + 1.6, 26)], '#8a5a3a', EDGE); } });
+    if (!hdImg('barn.png')) objs.push({ d: fm.c + fm.r + 3, f: () => { const p = iso(fm.c + 0.6, fm.r + 2.8, 0); ctx.beginPath(); ctx.ellipse(p[0], p[1] - 6, 9, 8, 0, Math.PI, 0); ctx.lineTo(p[0] + 9, p[1]); ctx.lineTo(p[0] - 9, p[1]); ctx.fillStyle = '#e0c060'; ctx.fill(); ctx.strokeStyle = EDGE; ctx.stroke(); } });
     for (let i = 0; i < 3; i++) { const hk = hash(k + i, 3), c = fm.c - 1 + (hk % 40) / 10, r = fm.r + 2 + ((hk >> 3) % 20) / 10; objs.push({ d: c + r, f: () => drawTreeFlat(c, r) }); }
   }
   const pal = ['#e8c88a', '#f0dcb8', '#e8b8a8', '#c8d0a8', '#f2e2a8'], roofs = ['#b0543c', '#8a3a2e', '#9a5a3a'];
@@ -3730,21 +3888,56 @@ function accessRoad(st, streets) { // in map cells: a road along the warehouse s
   if (best && best.d > 0.3) { const n = Math.ceil(best.d / 0.25); for (let i = 1; i <= n; i++) pts.push([best.e[0] + (best.q[0] - best.e[0]) * i / n, best.e[1] + (best.q[1] - best.e[1]) * i / n]); }
   return pts;
 }
+const BIG = [{ kind: 'church', c: 6, r: 10.5, w: 4, h: 2 }, { kind: 'hall', c: 17, r: 14, w: 3, h: 2 }]; // the church and the town hall
+const RIVER_W = 1.1; // half the river's drawn width, in tiles
+const rectDist = (q, x) => Math.hypot(Math.max(x.c - q[0], 0, q[0] - (x.c + x.w)), Math.max(x.r - q[1], 0, q[1] - (x.r + x.h))); // from a point to a rectangle of tiles
+const fixedRects = () => RESERVED().concat(BIG, PARKS); // what stands where it stands whatever the world: the sites, the town's new buildings, church and town hall
+function keepClear(pts, rects, m) { // pushes a street or the river out of the fixed buildings, then smooths the bend
+  const push = ps => { // each run of points inside a building goes round one side of it, the side nearest the whole run
+    ps = ps.map(p => p.slice());
+    for (const x of rects) {
+      const c0 = x.c - m, c1 = x.c + x.w + m, r0 = x.r - m, r1 = x.r + x.h + m, inR = ([c, r]) => c > c0 && c < c1 && r > r0 && r < r1;
+      for (let i = 0; i < ps.length; i++) {
+        if (!inR(ps[i])) continue;
+        let j = i; while (j < ps.length && inR(ps[j])) j++;
+        const run = ps.slice(i, j), cost = [run.reduce((s, p) => s + p[0] - c0, 0), run.reduce((s, p) => s + c1 - p[0], 0), run.reduce((s, p) => s + p[1] - r0, 0), run.reduce((s, p) => s + r1 - p[1], 0)];
+        const side = cost.indexOf(Math.min(...cost));
+        for (let k = i; k < j; k++) { if (side === 0) ps[k][0] = c0 - 0.01; else if (side === 1) ps[k][0] = c1 + 0.01; else if (side === 2) ps[k][1] = r0 - 0.01; else ps[k][1] = r1 + 0.01; }
+        i = j - 1;
+      }
+    }
+    return ps;
+  };
+  const dense = ps => { const o = [ps[0]]; for (let i = 1; i < ps.length; i++) { const a = o[o.length - 1], b = ps[i], n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.3); for (let k = 1; k <= n; k++) o.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]); } return o; }; // no gaps where a bend was pushed out
+  let out = push(pts);
+  for (let k = 0; k < 3; k++) out = push(out.map((p, i) => i === 0 || i === out.length - 1 ? p : [(out[i - 1][0] + p[0] * 2 + out[i + 1][0]) / 4, (out[i - 1][1] + p[1] * 2 + out[i + 1][1]) / 4]));
+  return push(dense(out));
+}
 function townLayout() { // worked out once: what stands where
   if (TOWN_L) return TOWN_L;
-  const occ = new Set(), mark = (c, r) => occ.add(K(c, r)), free = (c, r, w, h) => { for (let i = -0; i < w; i++) for (let j = 0; j < h; j++) if (occ.has(K(c + i, r + j)) || c + i < 0 || r + j < 0 || c + i >= TOWN.c || r + j >= TOWN.r) return false; return true; };
-  const streets = STREETS.map((s, i) => ({ pts: spline(jitter(s, i * 31 + 1, 1.3), 0.25), w: i === 0 ? 0.95 : 0.7 })), river = spline(jitter(RIVER, 97, 1.6), 0.25);
-  for (const s of streets) for (const [c, r] of s.pts) for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) if (Math.hypot(dc, dr) <= s.w + 0.2) mark(Math.floor(c + dc * 0.6), Math.floor(r + dr * 0.6));
-  for (const [c, r] of river) for (let dc = -2; dc <= 2; dc++) for (let dr = -2; dr <= 2; dr++) if (Math.hypot(dc, dr) <= 1.6) mark(Math.floor(c + dc * 0.7), Math.floor(r + dr * 0.7));
+  const occ = new Set(), mark = (c, r) => occ.add(K(Math.floor(c), Math.floor(r))), // cells by their whole coordinates: buildings placed on half cells mark the cells they touch
+    free = (c, r, w, h) => { for (let i = -0; i < w; i++) for (let j = 0; j < h; j++) if (occ.has(K(c + i, r + j)) || c + i < 0 || r + j < 0 || c + i >= TOWN.c || r + j >= TOWN.r) return false; return true; };
+  const streets = STREETS.map((s, i) => ({ pts: keepClear(roundPath(jitter(s, i * 31 + 1, 0.35), 1.3, 0.25), fixedRects(), 0.9), w: i <= 1 ? 0.95 : 0.7 })), river = keepClear(spline(jitter(RIVER, 97, 1.6), 0.25), fixedRects(), RIVER_W + 0.5);
+  for (const st of streets) for (const end of [0, 1]) { // like a real piazza: every street that reaches it joins the ring round the fountain
+    const p = end ? st.pts[st.pts.length - 1] : st.pts[0], d = Math.hypot(p[0] - PIAZZA.c, p[1] - PIAZZA.r);
+    if (d > PIAZZA.rad + 1.5 || d <= ROUND_R + 0.05) continue;
+    const add = []; for (let k = 0.25; d - k > ROUND_R; k += 0.25) add.push([p[0] + (PIAZZA.c - p[0]) / d * k, p[1] + (PIAZZA.r - p[1]) / d * k]);
+    add.push([PIAZZA.c + (p[0] - PIAZZA.c) / d * ROUND_R, PIAZZA.r + (p[1] - PIAZZA.r) / d * ROUND_R]);
+    if (end) st.pts.push(...add); else st.pts.unshift(...add.reverse());
+  }
+  for (const s of streets) for (const [c, r] of s.pts) for (let cc = Math.floor(c - 2); cc <= c + 2; cc++) for (let rr = Math.floor(r - 2); rr <= r + 2; rr++) if (rectDist([c, r], { c: cc, r: rr, w: 1, h: 1 }) < s.w * 0.75 + 0.3) mark(cc, rr); // the road and its pavements, every cell they touch
+  for (const [c, r] of river) for (let cc = Math.floor(c - 3); cc <= c + 3; cc++) for (let rr = Math.floor(r - 3); rr <= r + 3; rr++) if (rectDist([c, r], { c: cc, r: rr, w: 1, h: 1 }) < RIVER_W + 0.3) mark(cc, rr); // every cell the water touches, and a bank
   for (let c = 0; c < TOWN.c; c++) for (let r = 0; r < TOWN.r; r++) if (Math.hypot(c + 0.5 - PIAZZA.c, (r + 0.5 - PIAZZA.r) * 1.1) < PIAZZA.rad) mark(c, r);
+  for (const st of streets) for (const q of st.pts) if (river.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) < 0.7)) for (let dc = -2; dc <= 2; dc++) for (let dr = -2; dr <= 2; dr++) mark(q[0] + dc, q[1] + dr); // room for the bridge and its approaches
   for (const q of RESERVED()) for (let c = q.c - 2; c <= q.c + q.w + 1; c++) for (let r = q.r - 2; r <= q.r + q.h + 3; r++) mark(c, r); // the story's sites and buildings-to-come
   for (let c = HOME.c - 2; c <= HOME.c + HOME.w + 2; c++) for (let r = HOME.r - 2; r <= HOME.r + HOME.h + 5; r++) mark(c, r); // room round your first factory, nothing in front of it
   for (let c = 19; c < TOWN.c; c++) { mark(c, Math.floor(RAIL_R)); mark(c, Math.floor(RAIL_R - 0.5)); }
   const access = TIERS.map((T, st) => accessRoad(st, streets)); // the lorry road to each site's warehouse, joined to the nearest street
   for (const pts of access) for (const [c, r] of pts) { mark(Math.floor(c), Math.floor(r)); mark(Math.floor(c + 0.4), Math.floor(r)); mark(Math.floor(c - 0.4), Math.floor(r)); }
-  const big = [{ kind: 'church', c: 10, r: 7, w: 4, h: 2 }, { kind: 'hall', c: 17, r: 14, w: 3, h: 2 }];
+  const big = BIG;
+  for (const q of PARKS) for (let c = q.c - 0.5; c <= q.c + q.w + 0.5; c++) for (let r = q.r - 0.5; r <= q.r + q.h + 0.5; r++) mark(c, r); // the parks stay green
   for (const b of big) for (let i = -1; i <= b.w; i++) for (let j = -1; j <= b.h; j++) mark(b.c + i, b.r + j);
-  const houses = [], sheds = [];
+  const houses = [], sheds = [], pools = [];
   const pal = ['#e8c88a', '#e0a878', '#f0dcb8', '#e8b8a8', '#c8d0a8', '#f2e2a8', '#d8b890', '#e8d0c0'], roofs = ['#b0543c', '#a04a34', '#b8623e', '#8a3a2e', '#9a5a3a'];
   streets.forEach((s, si) => { // terraced houses along both sides, tight in the old centre, looser further out
     for (let i = 0; i < s.pts.length - 1; i += 3) {
@@ -3758,12 +3951,13 @@ function townLayout() { // worked out once: what stands where
         if (ik > 0.75 || (ik > 0.3 && h % 2) || !free(hc, hr, w, hh)) continue;
         for (let a = 0; a < w; a++) for (let b = 0; b < hh; b++) mark(hc + a, hr + b);
         if (ik > 0.3) { sheds.push({ kind: 'workshop', c: hc, r: hr, w, h: hh, k: h }); continue; }
+        if (h % 4 === 1 && !centre && free(hc - 1, hr, 1, 1)) { mark(hc - 1, hr); pools.push({ c: hc - 1, r: hr }); } // a pool in the garden
         houses.push({ c: hc, r: hr, w, h: hh, wall: pal[h % pal.length], roof: roofs[(h >> 4) % roofs.length], alongR: Math.abs(dx) < Math.abs(dy), floors: centre ? 2 + ((h >> 6) % 3) : 1 + ((h >> 6) % 2) });
       }
     }
   });
   // the industrial side, laid out loosely: whatever fits, more of it the further east
-  const kinds = [['shed', 4, 3], ['brick', 4, 2], ['silos', 2, 2], ['containers', 3, 2], ['lot', 3, 2], ['workshop', 2, 2], ['tower', 1, 1], ['shed', 3, 3], ['brick', 3, 3]];
+  const kinds = [['shed', 4, 3], ['brick', 4, 2], ['silos', 2, 2], ['containers', 3, 2], ['lot', 3, 2], ['workshop', 2, 2], ['tower', 1, 1], ['shed', 3, 3], ['brick', 3, 3], ['substation', 2, 2]];
   let towers = 0;
   for (let pass = 0; pass < 260; pass++) {
     const h1 = hash(pass * 7 + 3, pass * 13 + 5), h2 = hash(pass * 11 + 1, pass * 3 + 9), h3 = hash(pass * 5 + 2, pass * 17 + 4);
@@ -3777,10 +3971,12 @@ function townLayout() { // worked out once: what stands where
     sheds.push({ kind, c, r, w, h: hh, k: h });
   }
   const trees = [];
-  for (let c = 0; c < TOWN.c; c++) for (let r = 0; r < TOWN.r; r++) { const h = hash(c * 3 + 1, r * 5 + 2); if (!occ.has(K(c, r)) && h % Math.round(4 + indK(c, r) * 26) === 0) trees.push([c + 0.3 + (h % 5) / 10, r + 0.3 + ((h >> 3) % 5) / 10]); }
-  TOWN_L = { streets, river, big, houses, sheds, trees, access }; return TOWN_L;
+  const solid = houses.concat(sheds, big, GROWTH, TIERS.map(T => T.site), PARKS); // buildings whose sprites a tree must not grow through
+  for (let c = 0; c < TOWN.c; c++) for (let r = 0; r < TOWN.r; r++) { const h = hash(c * 3 + 1, r * 5 + 2); if (!occ.has(K(c, r)) && h % Math.round(4 + indK(c, r) * 26) === 0) { const x = c + 0.3 + (h % 5) / 10, y = r + 0.3 + ((h >> 3) % 5) / 10; if (!solid.some(o => x > o.c - 1.6 && x < o.c + o.w + 0.6 && y > o.r - 1.6 && y < o.r + o.h + 0.6) && !streets.some(st => st.pts.some(q => Math.abs(q[0] - x) < 2 && Math.hypot(q[0] - x, q[1] - y) < st.w * 0.75 + 0.35))) trees.push([x, y]); } }
+  TOWN_L = { streets, river, big, houses, sheds, trees, access, pools }; return TOWN_L;
 }
 function drawChurch(b, t) { // a stone nave with a terracotta roof, a bell tower with a spire
+  if (drawBld('church', b.c, b.r - 0.5, b.w + 0.6, b.h + 0.5)) return;
   const { c, r, w, h } = b, Hh = 34, R = 16, m = r + h / 2;
   box(c, r, c + w, r + h, 0, Hh, '#e6dcc4');
   for (let i = 0; i < w; i++) { const q = qL(c + i + 0.35, c + i + 0.65, r + h, 10, 26); poly(q, '#3a4a6a', '#5a4a3a', 1); poly([q[3], q[2], [(q[2][0] + q[3][0]) / 2, q[2][1] - 4]], '#3a4a6a'); }
@@ -3796,6 +3992,7 @@ function drawChurch(b, t) { // a stone nave with a terracotta roof, a bell tower
   line(top, [top[0], top[1] - 8], '#c9a046', 2); line([top[0] - 3, top[1] - 5], [top[0] + 3, top[1] - 5], '#c9a046', 2);
 }
 function drawTownHall(b, t) { // ochre walls over an arcade, a clock tower in the middle
+  if (drawBld('hall', b.c, b.r, b.w, b.h)) return;
   const { c, r, w, h } = b, Hh = 40;
   box(c, r, c + w, r + h, 0, Hh, '#e0b070');
   for (let i = 0; i < w * 2; i++) { const q = qL(c + i / 2 + 0.08, c + i / 2 + 0.42, r + h, 0, 14); poly(q, '#5a3a22'); }
@@ -3809,6 +4006,7 @@ function drawTownHall(b, t) { // ochre walls over an arcade, a clock tower in th
 }
 function drawFountain(t) {
   const c = PIAZZA.c, r = PIAZZA.r, p = iso(c, r, 0);
+  if (drawBld('fountain', c - 0.8, r - 0.8, 1.6, 1.6)) { for (let i = 0; i < 4; i++) { const k = (t * 1.5 + i / 4) % 1; ctx.fillStyle = `rgba(200,230,255,${0.8 - k * 0.8})`; ctx.fillRect(p[0] - 1 + (i - 1.5) * 5 * k, p[1] - 30 + k * 16, 2, 2); } return; } // the statue's sprite, and a little spray
   box(c - 0.6, r - 0.6, c + 0.6, r + 0.6, 0, 5, '#c8bea8');
   poly(qT(c - 0.5, r - 0.5, c + 0.5, r + 0.5, 5), '#5a9ad0');
   box(c - 0.1, r - 0.1, c + 0.1, r + 0.1, 5, 16, '#d8cfb8');
@@ -3818,29 +4016,41 @@ function drawTown(t, opts = {}) { // opts.skip: the site not to draw (we are ins
   const L = townLayout();
   const g = ctx.createLinearGradient(0, -800, 0, 1400); g.addColorStop(0, '#3f6f2c'); g.addColorStop(1, '#4f8a33');
   ctx.fillStyle = g; ctx.fillRect(-6000, -6000, 12000, 12000);
-  poly([iso(-OUT - 4, -OUT - 4), iso(TOWN.c + OUT + 4, -OUT - 4), iso(TOWN.c + OUT + 4, TOWN.r + OUT + 4), iso(-OUT - 4, TOWN.r + OUT + 4)], '#5e9f33');
+  const gT = tex('grass');
+  if (gT) { ctx.fillStyle = gT; ctx.fillRect(-6000, -6000, 12000, 12000); }
+  else poly([iso(-OUT - 4, -OUT - 4), iso(TOWN.c + OUT + 4, -OUT - 4), iso(TOWN.c + OUT + 4, TOWN.r + OUT + 4), iso(-OUT - 4, TOWN.r + OUT + 4)], '#5e9f33');
   drawCountryGround(t);
-  for (let r = 0; r < TOWN.r; r++) for (let c = 0; c < TOWN.c; c++) {
+  if (gT) { const grp = { concrete: [], dirt: [] }; for (let r = 0; r < TOWN.r; r++) for (let c = 0; c < TOWN.c; c++) { const k = groundKind(c + 0.5, r + 0.5, indK(c, r)); if (grp[k]) grp[k].push([c, r]); } fillCellsWith(grp.dirt, tex('dirt')); fillCellsWith(grp.concrete, tex('concrete')); }
+  else for (let r = 0; r < TOWN.r; r++) for (let c = 0; c < TOWN.c; c++) {
     const h = hash(c, r), ik = indK(c, r), u = (h % 100) / 100;
     const col = u < ik * 0.85 ? ['#8a8478', '#837d71', '#908a7e', '#7d776b'][h % 4] : u < ik * 1.15 ? ['#9a8462', '#8f7a58', '#a08a68'][h % 3] : ['#6aad3d', '#64a637', '#72b745', '#5e9f33'][h % 4];
     poly(qT(c, r, c + 1, r + 1, 0), col);
   }
   const blob = (c, r, w, col) => { const p = iso(c, r, 0); ctx.beginPath(); ctx.ellipse(p[0], p[1], w * 32 * 1.1, w * 16 * 1.1, 0, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill(); };
-  for (const [c, r] of L.river) blob(c, r, 1.35, '#3f7fb8'); for (const [c, r] of L.river) blob(c, r, 1.0, '#5a9ad0');
-  { const P = iso(PIAZZA.c, PIAZZA.r, 0); ctx.beginPath(); ctx.ellipse(P[0], P[1], PIAZZA.rad * 32 * 1.4, PIAZZA.rad * 16 * 1.3, 0, 0, Math.PI * 2); ctx.fillStyle = '#b8ac94'; ctx.fill(); }
-  for (const s of L.streets) for (const [c, r] of s.pts) blob(c, r, s.w * 0.75, '#a89c86');
-  for (const pts of L.access) for (const [c, r] of pts) blob(c, r, 0.5, '#a89c86'); // the lorry roads to the factories
-  if (!CHEAP) for (const s of L.streets) for (let i = 0; i < s.pts.length; i += 2) { const [c, r] = s.pts[i], p = iso(c, r, 0), h = hash(i, Math.round(c)); ctx.fillStyle = h % 2 ? 'rgba(80,66,50,0.35)' : 'rgba(255,240,210,0.25)'; ctx.fillRect(p[0] - 6 + h % 12, p[1] - 3 + (h >> 4) % 6, 3, 2); }
-  const bridge = L.streets[2].pts.find(([c, r]) => Math.abs(r - 22.6) < 0.4);
+  const wT = tex('water'), aT = tex('asphalt'), cT = tex('cobble'), pT = tex('pave');
+  for (const [c, r] of L.river) blob(c, r, 1.35, wT ? '#8c8574' : '#3f7fb8'); for (const [c, r] of L.river) blob(c, r, 1.0, wT || '#5a9ad0'); // stone banks, then the water
+  { const P = iso(PIAZZA.c, PIAZZA.r, 0); ctx.beginPath(); ctx.ellipse(P[0], P[1], PIAZZA.rad * 32 * 1.4, PIAZZA.rad * 16 * 1.3, 0, 0, Math.PI * 2); ctx.fillStyle = cT || '#b8ac94'; ctx.fill(); if (cT) { ctx.strokeStyle = '#8a7e6a'; ctx.lineWidth = 3; ctx.stroke(); } }
+  const wet = (c, r) => L.river.some(q => Math.abs(q[0] - c) < 1.6 && Math.hypot(q[0] - c, q[1] - r) < 1.2), inPiazza = (c, r, m) => Math.hypot(c - PIAZZA.c, r - PIAZZA.r) < m; // the bridge carries the road over the water; the piazza is paved
+  if (pT) { for (const s of L.streets) for (const [c, r] of s.pts) if (!wet(c, r) && !inPiazza(c, r, PIAZZA.rad - 0.2)) blob(c, r, s.w * 0.75 + 0.22, pT); for (const pts of L.access) for (const [c, r] of pts) if (!wet(c, r)) blob(c, r, 0.68, pT); } // pavements either side
+  for (const s of L.streets) for (const [c, r] of s.pts) if (!wet(c, r) && !inPiazza(c, r, ROUND_R + 0.3)) blob(c, r, s.w * 0.75, aT || '#a89c86');
+  if (aT) { for (let a = 0; a < Math.PI * 2; a += 0.12) blob(PIAZZA.c + Math.cos(a) * ROUND_R, PIAZZA.r + Math.sin(a) * ROUND_R, 0.55, aT); const P = iso(PIAZZA.c, PIAZZA.r, 0); for (const rr of [ROUND_R - 0.5, ROUND_R + 0.5]) { ctx.beginPath(); ctx.ellipse(P[0], P[1], rr * 45.25, rr * 22.63, 0, 0, Math.PI * 2); ctx.strokeStyle = '#d8d2c0'; ctx.lineWidth = 2; ctx.stroke(); } } // the roundabout, kerbed both sides
+  for (const pts of L.access) for (const [c, r] of pts) if (!wet(c, r)) blob(c, r, 0.5, aT || '#a89c86'); // the lorry roads to the factories
+  if (aT) for (const s of L.streets) if (s.w > 0.9) for (let i = 0; i < s.pts.length - 1; i += 4) if (!wet(...s.pts[i]) && !inPiazza(s.pts[i][0], s.pts[i][1], ROUND_R + 0.6)) line(iso(s.pts[i][0], s.pts[i][1], 0.2), iso(s.pts[i + 1][0], s.pts[i + 1][1], 0.2), 'rgba(240,236,220,0.8)', 1.5); // dashes down the main road
+  if (!CHEAP && !aT) for (const s of L.streets) for (let i = 0; i < s.pts.length; i += 2) { const [c, r] = s.pts[i], p = iso(c, r, 0), h = hash(i, Math.round(c)); ctx.fillStyle = h % 2 ? 'rgba(80,66,50,0.35)' : 'rgba(255,240,210,0.25)'; ctx.fillRect(p[0] - 6 + h % 12, p[1] - 3 + (h >> 4) % 6, 3, 2); }
+  for (const pk of PARKS) drawParkGround(pk); // gravel walks, ponds and the garden pools
+  if (L.pools) for (const pl of L.pools) { poly(qT(pl.c + 0.08, pl.r + 0.1, pl.c + 0.92, pl.r + 0.9, 0.2), tex('pave') || '#c8c4b8', 'rgba(60,56,50,0.6)', 1); poly(qT(pl.c + 0.2, pl.r + 0.22, pl.c + 0.8, pl.r + 0.78, 0.3), tex('water') || '#5ac8e8'); }
   const objs = [];
   countryObjects(t, objs);
-  if (bridge) objs.push({ d: bridge[0] + bridge[1], f: () => { box(bridge[0] - 0.7, bridge[1] - 1.4, bridge[0] + 0.7, bridge[1] + 1.4, 0, 6, '#b8ac94'); box(bridge[0] - 0.75, bridge[1] - 1.4, bridge[0] - 0.6, bridge[1] + 1.4, 6, 10, '#9a8e78'); box(bridge[0] + 0.6, bridge[1] - 1.4, bridge[0] + 0.75, bridge[1] + 1.4, 6, 10, '#9a8e78'); } });
+  for (const pk of PARKS) parkObjects(pk, objs, t);
+  for (const br of townBridges()) objs.push({ d: br.c + br.r + 1.4, f: () => drawBridge(br) });
   objs.push({ d: PIAZZA.c + PIAZZA.r, f: () => drawFountain(t) });
+  if (hdImg('bench.png')) for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + 0.5, c = PIAZZA.c + Math.cos(a) * 1.25, r = PIAZZA.r + Math.sin(a) * 1.25; objs.push({ d: c + r, f: () => drawBld('bench', c - 0.3, r - 0.3, 0.6, 0.6) }); } // benches and lamps round the fountain, inside the cars' ring
   for (const b of L.big) objs.push({ d: b.c + b.r + b.w + b.h, f: () => b.kind === 'church' ? drawChurch(b, t) : drawTownHall(b, t) });
   for (const hs of L.houses) objs.push({ d: hs.c + hs.r + hs.w + hs.h, f: () => drawHouse(hs.c, hs.r, hs.w, hs.h, hs.wall, hs.roof, t, hs.alongR, hs.floors) });
-  const DRAW = { shed: o => drawShedBig(o.c, o.r, o.w, o.h, t, o.k), brick: o => drawBrickFactory(o, t), silos: o => drawSilos(o, t), containers: o => drawContainers(o, t), lot: o => drawTruckLot(o, t), workshop: o => drawWorkshop(o, t), tower: o => drawWaterTower(o, t) };
+  const px = (n, o) => drawBld(n, o.c, o.r, o.w, o.h);
+  const DRAW = { shed: o => px('shed', o) || drawShedBig(o.c, o.r, o.w, o.h, t, o.k), brick: o => px('brick', o) || drawBrickFactory(o, t), silos: o => px('silos', o) || drawSilos(o, t), containers: o => px('containers', o) || drawContainers(o, t), lot: o => px('lot', o) || drawTruckLot(o, t), workshop: o => px('workshop', o) || drawWorkshop(o, t), tower: o => px('tower', o) || drawWaterTower(o, t), substation: o => px('substation', o) || drawTruckLot(o, t) };
   for (const sh of L.sheds) objs.push({ d: sh.c + sh.r + sh.w + sh.h - (sh.kind === 'lot' ? 3 : 0), f: () => (DRAW[sh.kind || 'shed'])(sh) });
-  drawRail(t); objs.push({ d: 30 + RAIL_R, f: () => drawTrain(t) }); objs.push({ d: RAIL_E() + RAIL_R + 9, f: () => drawTunnelHill(t) });
+  drawRail(t); for (const o of trainObjs(t)) objs.push(o); if (!hdImg('tunnel.png')) objs.push({ d: RAIL_E() + RAIL_R + 9, f: () => drawTunnelHill(t) }); // with the new art there is no tunnel: the line leaves the map
   for (const [c, r] of L.trees) objs.push({ d: c + r, f: () => drawTree(c, r) });
   const tier = TIER();
   TIERS.forEach((T, i) => { const st = T.site, d = st.c + st.r + st.w + st.h;
@@ -3857,14 +4067,69 @@ function drawTown(t, opts = {}) { // opts.skip: the site not to draw (we are ins
   for (const car of townCars(L, t)) objs.push(car);
   objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
 }
+let BRIDGES = null;
+function townBridges() { // a stone bridge wherever a street or a country road crosses the river
+  if (BRIDGES && BRIDGES.seed === WSEED) return BRIDGES.list;
+  const L = townLayout(), C = countryLayout(), list = [];
+  const dRiver = q => { let m = 1e9; for (const p of L.river) m = Math.min(m, Math.hypot(p[0] - q[0], p[1] - q[1])); return m; };
+  const lines = L.streets.map(s => s.pts).concat(C.roads.map(rd => { const out = []; for (let k = -1; k < OUT + 2; k += 0.25) out.push([rd.from[0] + rd.dir[0] * k, rd.from[1] + rd.dir[1] * k]); return out; }));
+  for (const pts of lines) {
+    for (let i = 1; i < pts.length - 1; i++) {
+      const d = dRiver(pts[i]); if (d > 0.6 || d > dRiver(pts[i - 1]) || d > dRiver(pts[i + 1])) continue;
+      if (list.some(b => Math.hypot(b.c - pts[i][0], b.r - pts[i][1]) < 2.5)) continue;
+      const a = pts[Math.max(0, i - 2)], b = pts[Math.min(pts.length - 1, i + 2)];
+      list.push({ c: pts[i][0], r: pts[i][1], alongC: Math.abs(b[0] - a[0]) > Math.abs(b[1] - a[1]) });
+    }
+  }
+  BRIDGES = { seed: WSEED, list }; return list;
+}
+function drawBridge(br) { // deck and two low parapets, running the way the road runs
+  const { c, r } = br, L = hdImg('bridge.png') ? 1.75 : 1.5, W = 0.7;
+  if (drawBld('bridge', br.alongC ? c - L : c - W, br.alongC ? r - W : r - L, br.alongC ? 2 * L : 2 * W, br.alongC ? 2 * W : 2 * L)) return;
+  if (br.alongC) { box(c - L, r - W, c + L, r + W, 0, 6, '#b8ac94'); box(c - L, r - W - 0.05, c + L, r - W + 0.1, 6, 10, '#9a8e78'); box(c - L, r + W - 0.1, c + L, r + W + 0.05, 6, 10, '#9a8e78'); }
+  else { box(c - W, r - L, c + W, r + L, 0, 6, '#b8ac94'); box(c - W - 0.05, r - L, c - W + 0.1, r + L, 6, 10, '#9a8e78'); box(c + W - 0.1, r - L, c + W + 0.05, r + L, 6, 10, '#9a8e78'); }
+}
+const ROUND_R = 2.0; // the cars' ring round the fountain
+function carRoute(L, si) { // the street's points, but where it enters the piazza the car follows the ring round the fountain to where the street leaves it
+  const s = L.streets[si]; if (!s) return null;
+  if (s.route) return s.route;
+  const pts = s.pts, out = [], inside = p => Math.hypot(p[0] - PIAZZA.c, p[1] - PIAZZA.r) < ROUND_R, ang = p => Math.atan2(p[1] - PIAZZA.r, p[0] - PIAZZA.c);
+  for (let i = 0; i < pts.length; i++) {
+    if (!inside(pts[i])) { out.push(pts[i]); continue; }
+    let j = i; while (j < pts.length && inside(pts[j])) j++;
+    const a0 = ang(pts[Math.max(0, i - 1)]), a1 = j < pts.length ? ang(pts[j]) : a0 + Math.PI;
+    let da = a1 - a0; while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2;
+    if (Math.abs(da) > Math.PI * 0.97) da = Math.PI; // straight across: always round the same side
+    const n = Math.max(2, Math.ceil(Math.abs(da) * ROUND_R / 0.25));
+    for (let k = 0; k <= n; k++) { const a = a0 + da * k / n; out.push([PIAZZA.c + Math.cos(a) * ROUND_R, PIAZZA.r + Math.sin(a) * ROUND_R]); }
+    i = j - 1;
+  }
+  s.route = out; return out;
+}
+function drawParkGround(pk) { // a park: gravel walks crossing it, and a pond where it has one
+  const cx = pk.c + pk.w / 2, cy = pk.r + pk.h / 2, d = tex('dirt') || '#b89a6a';
+  if (pk.w >= pk.h) poly(qT(pk.c, cy - 0.22, pk.c + pk.w, cy + 0.22, 0.15), d); if (pk.h >= pk.w * 0.7) poly(qT(cx - 0.22, pk.r, cx + 0.22, pk.r + pk.h, 0.15), d);
+  if (pk.kind === 'fountain') { const P = iso(cx, cy, 0); ctx.beginPath(); ctx.ellipse(P[0], P[1], 1.15 * 45.25, 1.15 * 22.63, 0, 0, Math.PI * 2); ctx.fillStyle = tex('cobble') || '#b8ac94'; ctx.fill(); }
+  if (pk.kind === 'pond') { const P = iso(cx + pk.w * 0.18, cy, 0), rx = Math.min(pk.w * 0.28, 1.6), ry = Math.min(pk.h * 0.38, 0.8); ctx.beginPath(); ctx.ellipse(P[0], P[1], (rx + 0.15) * 45.25, (ry + 0.15) * 22.63, 0, 0, Math.PI * 2); ctx.fillStyle = '#8c8574'; ctx.fill(); ctx.beginPath(); ctx.ellipse(P[0], P[1], rx * 45.25, ry * 22.63, 0, 0, Math.PI * 2); ctx.fillStyle = tex('water') || '#5a9ad0'; ctx.fill(); }
+}
+function parkObjects(pk, objs, t) { // its fountain, benches along the walks and trees round the edge
+  const cx = pk.c + pk.w / 2, cy = pk.r + pk.h / 2;
+  if (pk.kind === 'fountain') objs.push({ d: cx + cy + 0.6, f: () => drawBld('fountain', cx - 0.6, cy - 0.6, 1.2, 1.2) || drawFountain(t) });
+  if (hdImg('bench.png')) for (const [dc, dr] of [[-0.9, 0.45], [0.9, -0.45], [-0.9, -0.45], [0.9, 0.45]]) { const c = cx + dc * (pk.w >= pk.h ? 1.3 : 0.6), r = cy + dr; if (c > pk.c + 0.2 && c < pk.c + pk.w - 0.2) objs.push({ d: c + r + 0.5, f: () => drawBld('bench', c - 0.25, r - 0.25, 0.5, 0.5) }); }
+  for (let i = 0; i < 2 * (pk.w + pk.h); i += 1.3) { // trees along the edge
+    const per = 2 * (pk.w + pk.h), u = i % per, [c, r] = u < pk.w ? [pk.c + u, pk.r + 0.2] : u < pk.w + pk.h ? [pk.c + pk.w - 0.2, pk.r + u - pk.w] : u < 2 * pk.w + pk.h ? [pk.c + pk.w - (u - pk.w - pk.h), pk.r + pk.h - 0.2] : [pk.c + 0.2, pk.r + pk.h - (u - 2 * pk.w - pk.h)];
+    if (Math.abs(c - cx) < 0.5 || Math.abs(r - cy) < 0.5) continue; // the walks come in here
+    if (pk.kind === 'pond' && Math.abs(c - cx - pk.w * 0.18) < Math.min(pk.w * 0.28, 1.6) + 0.4 && Math.abs(r - cy) < 1.1) continue;
+    objs.push({ d: c + r, f: () => drawTree(c, r) });
+  }
+}
 function townCars(L, t) { // little cars driving the streets: drawn in depth order, steering round the fountain in the piazza
   const out = [], cols = ['#d8433a', '#3d8fd6', '#f2c230', '#e8e2d4', '#4caf6a', '#8a5cd0'];
-  const around = (c, r) => { const dx = c - PIAZZA.c, dy = r - PIAZZA.r, d = Math.hypot(dx, dy), R = 2.0; return d < R && d > 0.01 ? [PIAZZA.c + dx / d * R, PIAZZA.r + dy / d * R] : d <= 0.01 ? [PIAZZA.c + R, PIAZZA.r] : [c, r]; };
   [[0, 3, 0.05], [1, 2, 0.04], [2, 1, 0.06]].forEach(([si, n, sp]) => {
-    const pts = L.streets[si] && L.streets[si].pts; if (!pts || pts.length < 3) return;
+    const pts = carRoute(L, si); if (!pts || pts.length < 3) return;
     for (let i = 0; i < n; i++) {
       const back = i % 2 === 1, u = ((t * sp + i / n + si * 0.17) % 1), f = (back ? 1 - u : u) * (pts.length - 2), k = Math.floor(f), w = f - k;
-      const a = around(pts[k][0], pts[k][1]), b = around(pts[k + 1][0], pts[k + 1][1]);
+      const a = pts[k], b = pts[k + 1];
       const c = a[0] + (b[0] - a[0]) * w, r = a[1] + (b[1] - a[1]) * w, side = back ? -0.18 : 0.18;
       const dc = (b[0] - a[0]) * (back ? -1 : 1), dr = (b[1] - a[1]) * (back ? -1 : 1), along = Math.abs(dc) > Math.abs(dr);
       const cc = c + (along ? 0 : side), rr = r + (along ? side : 0), col = cols[(si * 3 + i) % cols.length];
@@ -3874,6 +4139,7 @@ function townCars(L, t) { // little cars driving the streets: drawn in depth ord
   return out;
 }
 function drawCarIso(c, r, along, col) { // a small car: body, cabin with windows, wheels
+  { const n = ['car0', 'car1', 'car2', 'van'][Math.abs(hash(col.length, col.charCodeAt(1) + col.charCodeAt(3))) % 4], L = 0.36, Wd = 0.2; if (drawBld(n, along ? c - L : c - Wd, along ? r - Wd : r - L, along ? 2 * L : 2 * Wd, along ? 2 * Wd : 2 * L, 1.15)) return; }
   const hl = 0.32, hw = 0.17, [x0, x1, y0, y1] = along ? [c - hl, c + hl, r - hw, r + hw] : [c - hw, c + hw, r - hl, r + hl];
   box(x0, y0, x1, y1, 1.5, 6, col);
   const [a0, a1, b0, b1] = along ? [c - hl * 0.5, c + hl * 0.4, r - hw * 0.85, r + hw * 0.85] : [c - hw * 0.85, c + hw * 0.85, r - hl * 0.5, r + hl * 0.4];
@@ -3896,12 +4162,12 @@ const TIERS = [
 const GROWTH = [ // what the town builds as the company grows
   { min: 1, kind: 'school', c: 5, r: 18, w: 3, h: 2 },
   { min: 1, kind: 'houses', c: 2, r: 1, w: 6, h: 2 },
-  { min: 2, kind: 'station', c: 21, r: 4, w: 4, h: 2 },
-  { min: 2, kind: 'houses', c: 1, r: 27, w: 6, h: 2 },
-  { min: 3, kind: 'offices', c: 23, r: 15, w: 2, h: 2 },
-  { min: 3, kind: 'market', c: 19, r: 25, w: 4, h: 3 },
+  { min: 2, kind: 'station', c: 23.5, r: 4, w: 4, h: 2 },
+  { min: 2, kind: 'houses', c: 1, r: 28, w: 6, h: 2 },
+  { min: 3, kind: 'offices', c: 21, r: 16.5, w: 2, h: 2 },
+  { min: 3, kind: 'market', c: 21.5, r: 26, w: 4, h: 3 },
   { min: 4, kind: 'stadium', c: -14, r: 6, w: 9, h: 7 },
-  { min: 4, kind: 'houses', c: 46, r: 25, w: 6, h: 2 },
+  { min: 4, kind: 'houses', c: 51, r: 24.4, w: 6, h: 2 },
 ];
 const TIER = () => (state && state.buildings && state.buildings.length ? Math.max(...state.buildings.map(b => b.stage)) : 0); // your newest site
 function drawModern(s, t, big) { // white concrete, a band of blue glass, solar panels on a flat roof, loading bays
@@ -3916,6 +4182,7 @@ function drawModern(s, t, big) { // white concrete, a band of blue glass, solar 
   if (big) { box(c + w - 1.2, r + 0.3, c + w - 0.6, r + 0.9, Hh, Hh + 44, '#c8ccd0'); const p = iso(c + w - 0.9, r + 0.6, Hh + 50); for (let i = 0; i < 4; i++) { const q = (t * 0.4 + i / 4) % 1; ctx.fillStyle = `rgba(240,240,240,${0.5 - q * 0.45})`; ctx.fillRect(p[0] - 4 + q * 20, p[1] - q * 40, 8 + q * 8, 8 + q * 8); } }
 }
 function drawSite(s, kind, t) { // your current home, in the style of its chapter
+  if (drawBld('site' + ['barn', 'brick', 'brickBig', 'modern', 'grand'].indexOf(kind), s.c, s.r, s.w, s.h)) return;
   if (kind === 'barn') drawBuildingOut({ machines: [], lastSale: -9 }, t, rectCells(s.c, s.r, s.w, s.h));
   else if (kind === 'brick') drawBrickFactory({ c: s.c, r: s.r, w: s.w, h: s.h, k: 3 }, t);
   else if (kind === 'brickBig') { drawBrickFactory({ c: s.c, r: s.r, w: s.w, h: s.h - 1, k: 5 }, t); drawShedBig(s.c + 0.5, s.r + s.h - 1, s.w - 1, 1, t, 2); }
@@ -3930,6 +4197,7 @@ function drawCrane(c, r, t) { // a tower crane over a building site
   box(c - 1.3, r - 0.15, c - 0.9, r + 0.15, 104, 112, '#7d878f');
 }
 function drawWorksite(g, t, prog = 0) { // a fenced lot; day after day a slab, then pillars and walls rise inside scaffolding
+  if (hdImg('worksite.png')) { poly(qT(g.c, g.r, g.c + g.w, g.r + g.h, 0.2), tex('dirt') || '#9a8a6a'); const q = Math.min(g.w, g.h) * (0.55 + 0.45 * Math.min(1, prog)); drawBld('worksite', g.c + (g.w - q) / 2, g.r + (g.h - q) / 2, q * g.w / Math.min(g.w, g.h), q * g.h / Math.min(g.w, g.h)); drawBld('crane', g.c - 0.2, g.r - 0.2, 1, 1, 1.6); return; } // the site grows as the work goes on
   poly(qT(g.c, g.r, g.c + g.w, g.r + g.h, 0.2), '#9a8a6a');
   const a = { c: g.c + 0.35, r: g.r + 0.35, c1: g.c + g.w - 0.35, r1: g.r + g.h - 0.35 }, H = 26 + Math.min(g.w, g.h) * 4;
   if (prog > 0.08) box(a.c, a.r, a.c1, a.r1, 0, 3, '#b8b2a4'); // the slab
@@ -4002,10 +4270,12 @@ function townTap(sx, sy) {
 function doorIcon(x, y, out) { rrect(x - 10, y - 14, 20, 28, 3, out ? '#7a5228' : '#b07a3e', '#2b2410', 1.5); ctx.fillStyle = '#ffe08a'; ctx.fillRect(x + 4, y, 3, 3); poly(out ? [[x - 18, y], [x - 12, y - 6], [x - 12, y + 6]] : [[x + 18, y], [x + 12, y - 6], [x + 12, y + 6]], out ? '#2b2410' : '#ffe08a'); }
 function drawGrowth(g, t) {
   const { c, r, w, h } = g;
+  if ({ school: 'school', station: 'station', market: 'market', offices: 'office' }[g.kind] && drawBld({ school: 'school', station: 'station', market: 'market', offices: 'office' }[g.kind], c, r, w, h)) return;
   if (g.kind === 'school') { box(c, r, c + w, r + h, 0, 30, '#f2d27a'); for (let i = 0; i < w * 2; i++) poly(qL(c + i / 2 + 0.1, c + i / 2 + 0.4, r + h, 12, 22), '#3a5a8a'); poly(qT(c, r, c + w, r + h, 30), '#b0543c', EDGE); const p = iso(c + w + 0.3, r + 0.3, 0); line(p, [p[0], p[1] - 50], '#9aa4ad', 1.5); ctx.fillStyle = '#4caf6a'; ctx.fillRect(p[0], p[1] - 50, 10, 4); ctx.fillStyle = '#fff'; ctx.fillRect(p[0], p[1] - 46, 10, 3); ctx.fillStyle = '#d8433a'; ctx.fillRect(p[0], p[1] - 43, 10, 3); }
   else if (g.kind === 'station') { box(c, r, c + w, r + h, 0, 26, '#e0c8a0'); poly(qT(c - 0.2, r - 0.2, c + w + 0.2, r + h + 0.2, 26), '#8a3a2e', EDGE); poly(qT(c, r + h, c + w, r + h + 0.6, 14), '#5d6366', EDGE); for (let u = 0.3; u < w; u += 1) line(iso(c + u, r + h + 0.6, 0), iso(c + u, r + h + 0.6, 14), '#3a3a3a', 1.5); const cl = iso(c + w / 2, r + h, 20); ctx.beginPath(); ctx.ellipse(cl[0], cl[1], 4, 4, 0, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#2b2b2b'; ctx.stroke(); }
   else if (g.kind === 'offices') { const q = qL(c, c + w, r + h, 0, 96); box(c, r, c + w, r + h, 0, 96, '#5a8ab8'); poly(q, vgrad(q, '#bfe3ff', '#3a6a98')); for (let z = 8; z < 96; z += 8) line(iso(c, r + h, z), iso(c + w, r + h, z), 'rgba(20,40,60,0.4)', 1); for (let z = 8; z < 96; z += 8) line(iso(c + w, r, z), iso(c + w, r + h, z), 'rgba(20,40,60,0.4)', 1); poly(qT(c, r, c + w, r + h, 96), '#8ab0d8', EDGE); }
   else if (g.kind === 'market') { poly(qT(c - 1, r + h, c + w + 1, r + h + 1.6, 0.3), '#4a4744'); for (let i = 0; i < 4; i++) { const p = iso(c + i * 1.2, r + h + 0.8, 0); ctx.fillStyle = ['#d8433a', '#3d8fd6', '#e8e2d4', '#4caf6a'][i]; ctx.fillRect(p[0] - 6, p[1] - 5, 12, 5); } box(c, r, c + w, r + h, 0, 24, '#e8e2d4'); poly(qL(c + 0.3, c + w - 0.3, r + h, 4, 16), '#9ad0f0', '#2a4a6a', 1); poly(qL(c + 0.6, c + w - 0.6, r + h, 18, 23), '#4caf6a', '#2b2b2b', 1); poly(qT(c, r, c + w, r + h, 24), '#9aa4ad', EDGE); }
+  else if (g.kind === 'stadium' && drawBld('stadium', c, r, w, h)) { /* the sprite */ }
   else if (g.kind === 'stadium') { const p = iso(c + w / 2, r + h / 2, 0); ctx.beginPath(); ctx.ellipse(p[0], p[1] - 10, w * 26, h * 13, 0, 0, Math.PI * 2); ctx.fillStyle = '#c8ccd0'; ctx.fill(); ctx.strokeStyle = EDGE; ctx.stroke(); ctx.beginPath(); ctx.ellipse(p[0], p[1] - 14, w * 20, h * 10, 0, 0, Math.PI * 2); ctx.fillStyle = '#d8433a'; ctx.fill(); ctx.beginPath(); ctx.ellipse(p[0], p[1] - 14, w * 15, h * 7, 0, 0, Math.PI * 2); ctx.fillStyle = '#4caf6a'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(p[0], p[1] - 14 - h * 7); ctx.lineTo(p[0], p[1] - 14 + h * 7); ctx.stroke(); }
   else if (g.kind === 'houses') { const pal = ['#e8c88a', '#f0dcb8', '#c8d8e8', '#e8b8a8']; for (let i = 0; i < w; i += 2) drawHouse(c + i, r, 2, h, pal[(i / 2) % 4], '#b0543c', t, false, 1 + (i / 2) % 2); }
 }
@@ -4024,6 +4294,58 @@ const INTRO_KEYS = [ // time share, where the camera looks, zoom, caption
   [0.9, HOME.c + 2, HOME.r + 2.6, 3.2, ''],
   [1, HOME.c + 2, HOME.r + 2.8, 4.2, ''],
 ];
+function drawTitleArt(t) { // the main menu, cartoon style: a sunny sky, hills, a colourful factory puffing smoke, a truck, Noah welcoming you
+  const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#4fbdf5'); sky.addColorStop(0.55, '#9fdcfa'); sky.addColorStop(1, '#ffe09e');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  const circle = (x, y, r, col) => { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill(); };
+  // sun with slowly turning rays
+  ctx.save(); ctx.translate(1080, 110); ctx.rotate(t * 0.15);
+  for (let i = 0; i < 12; i++) { ctx.rotate(Math.PI / 6); ctx.fillStyle = 'rgba(255,224,110,0.55)'; ctx.beginPath(); ctx.moveTo(0, -70); ctx.lineTo(14, -118); ctx.lineTo(-14, -118); ctx.closePath(); ctx.fill(); }
+  ctx.restore(); circle(1080, 110, 82, 'rgba(255,236,140,0.55)'); circle(1080, 110, 64, '#ffd23f');
+  // drifting clouds
+  const cloud = (x, y, s) => { [[0, 14, 52], [40, 0, 44], [80, 12, 46], [36, 22, 40]].forEach(([dx, dy, r]) => circle(x + dx * s, y + dy * s, r * s, 'rgba(255,255,255,0.95)')); };
+  [[120, 120, 1, 9], [560, 70, 0.8, 6], [820, 200, 0.7, 12], [300, 240, 0.55, 7]].forEach(([x, y, s, sp]) => cloud(((x + t * sp) % (W + 300)) - 150, y, s));
+  // hills
+  const hill = (y0, col, pts) => { ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(0, y0); pts.forEach(([a, b, c, d, e, f]) => ctx.bezierCurveTo(a, b, c, d, e, f)); ctx.lineTo(W, H); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); };
+  hill(470, '#8bd36b', [[210, 380, 420, 420, 620, 455], [820, 490, 1020, 360, 1280, 420]]);
+  hill(540, '#62b545', [[260, 470, 460, 600, 700, 530], [930, 470, 1100, 560, 1280, 500]]);
+  // round trees
+  [[90, 520, 1], [190, 545, 0.8], [610, 515, 0.9], [1225, 500, 0.85]].forEach(([x, y, s]) => { rrect(x - 7 * s, y + 20 * s, 14 * s, 44 * s, 4, '#7a4b2a'); circle(x, y, 34 * s, '#2f9a44'); circle(x - 10 * s, y - 10 * s, 14 * s, 'rgba(255,255,255,0.18)'); });
+  // the yard
+  ctx.fillStyle = '#e2b977'; ctx.beginPath(); ctx.moveTo(0, 610); ctx.lineTo(W, 590); ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(160,110,60,0.25)'; for (let i = 0; i < 9; i++) rrect(60 + i * 140, 650 + (i % 2) * 18, 70, 8, 4, 'rgba(160,110,60,0.25)');
+  // the factory
+  const FX = 700, FY = 330, FW = 500, ink = '#3b1d14', lw = 6;
+  const outline = (f) => { ctx.lineWidth = lw; ctx.strokeStyle = ink; ctx.lineJoin = 'round'; f(); ctx.stroke(); };
+  // smoke puffs rising from the chimneys
+  [[FX + 70, FY - 100], [FX + 170, FY - 70]].forEach(([cx, cy], j) => { for (let k = 0; k < 4; k++) { const u = ((t * 0.25 + k / 4 + j * 0.13) % 1); circle(cx + Math.sin(u * 6 + j) * 14 + u * 40, cy - u * 170, 18 + u * 30, `rgba(255,255,255,${0.9 - u * 0.75})`); } });
+  [[FX + 45, FY - 95, 50, 150], [FX + 150, FY - 60, 44, 115]].forEach(([x, y, w, h]) => { ctx.fillStyle = '#e2533c'; outline(() => { ctx.beginPath(); ctx.roundRect(x, y, w, h, 6); ctx.fill(); }); ctx.fillStyle = '#ffd23f'; ctx.fillRect(x - 6, y, w + 12, 16); ctx.strokeRect(x - 6, y, w + 12, 16); });
+  ctx.fillStyle = '#3d4a66'; outline(() => { ctx.beginPath(); ctx.moveTo(FX - 12, FY + 70); for (let i = 0; i < 4; i++) { ctx.lineTo(FX - 12 + i * (FW + 24) / 4, FY); ctx.lineTo(FX - 12 + (i + 1) * (FW + 24) / 4, FY + 70); } ctx.lineTo(FX - 12, FY + 70); ctx.closePath(); ctx.fill(); });
+  for (let i = 0; i < 4; i++) { const x0 = FX - 12 + i * (FW + 24) / 4; ctx.fillStyle = '#a8e2fb'; ctx.beginPath(); ctx.moveTo(x0 + (FW + 24) / 4 * 0.55, FY + 66); ctx.lineTo(x0 + (FW + 24) / 4 * 0.95, FY + 66); ctx.lineTo(x0 + (FW + 24) / 4 * 0.95, FY + 14); ctx.closePath(); ctx.fill(); }
+  ctx.fillStyle = '#e8573f'; outline(() => { ctx.beginPath(); ctx.rect(FX, FY + 70, FW, 240); ctx.fill(); });
+  ctx.fillStyle = 'rgba(0,0,0,0.08)'; for (let r = 0; r < 6; r++) for (let c = 0; c < 10; c++) ctx.fillRect(FX + 6 + c * 50 + (r % 2) * 25, FY + 78 + r * 40, 40, 4); // brick lines
+  for (let row = 0; row < 2; row++) for (let i = 0; i < 6; i++) { if (row === 1 && (i === 2 || i === 3)) continue; const x = FX + 28 + i * 78, y = FY + 150 + row * 72; const lit = (Math.sin(t * 2 + i * 1.7 + row) > 0.6); ctx.fillStyle = lit ? '#fff3a8' : '#ffd23f'; outline(() => { ctx.beginPath(); ctx.roundRect(x, y, 50, 44, 8); ctx.fill(); }); ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(x + 7, y + 6, 10, 18); }
+  ctx.fillStyle = '#ffc83d'; outline(() => { ctx.beginPath(); ctx.roundRect(FX + FW / 2 - 60, FY + 210, 120, 100, [14, 14, 0, 0]); ctx.fill(); }); ctx.fillStyle = '#c99a1a'; ctx.fillRect(FX + FW / 2 - 3, FY + 216, 6, 94);
+  // the gear sign above the door, turning
+  ctx.save(); ctx.translate(FX + FW / 2, FY + 120); ctx.rotate(t * 0.6); ctx.fillStyle = '#ffd23f'; outline(() => { ctx.beginPath(); for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, r = i % 2 ? 26 : 34; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } ctx.closePath(); ctx.fill(); }); circle(0, 0, 10, ink); ctx.restore();
+  // a delivery truck rolling in and out
+  const tx = 60 + ((t * 40) % 1600) - 300, ty = 560;
+  if (tx < W) { ctx.fillStyle = '#3aa0ee'; outline(() => { ctx.beginPath(); ctx.roundRect(tx, ty, 150, 72, 10); ctx.fill(); }); ctx.fillStyle = '#ffc83d'; outline(() => { ctx.beginPath(); ctx.roundRect(tx + 150, ty + 20, 60, 52, 10); ctx.fill(); }); ctx.fillStyle = '#c9ecff'; ctx.fillRect(tx + 165, ty + 28, 34, 20);
+    [tx + 34, tx + 170].forEach(x => { circle(x, ty + 76, 18, ink); circle(x, ty + 76, 7, '#cfd6dd'); }); text('W', tx + 75, ty + 37, 30, '#fff'); }
+  // the logo: two chunky words with a thick outline, a drop shadow and a gentle bounce
+  const bob = Math.sin(t * 1.6) * 4;
+  const word = (s, y, size, fill, tilt) => { ctx.save(); ctx.translate(W / 2, y + bob); ctx.rotate(tilt); ctx.font = `900 ${size}px "Arial Black", "Trebuchet MS", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.fillStyle = 'rgba(35,40,74,0.55)'; ctx.fillText(s, 0, 9); ctx.lineWidth = size * 0.16; ctx.strokeStyle = '#23284a'; ctx.strokeText(s, 0, 0); ctx.fillStyle = fill; ctx.fillText(s, 0, 0);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.save(); ctx.beginPath(); ctx.rect(-W, -size * 0.5, 2 * W, size * 0.32); ctx.clip(); ctx.fillText(s, 0, 0); ctx.restore(); ctx.restore(); };
+  word('WORKLINE', 96, 86, '#ffffff', -0.03);
+  word('FACTORY', 182, 104, '#ffc93c', 0.02);
+  rrect(W / 2 - 170, 236 + bob, 340, 34, 17, '#23284a'); text('costruisci la tua fabbrica CNC', W / 2, 254 + bob, 16, '#ffe6a0');
+  // Noah welcoming you, bottom left
+  const nx = 170, ny = 640; ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(nx, ny, 70, 14, 0, 0, Math.PI * 2); ctx.fill();
+  if (!drawPerson('noah', 0, nx, ny, { flip: true, scale: 3.2, pose: Math.sin(t * 2.2) > 0 ? 1 : 0 })) sprite(Math.sin(t * 2.2) > 0 ? 'noahPoint' : 'noahTab', nx, ny, 11, false, NOAH_PAL);
+  const bx = 70, by = 300; rrect(bx, by, 300, 92, 18, '#ffffff', '#23284a', 4); poly([[bx + 80, by + 92], [bx + 104, by + 120], [bx + 120, by + 92]], '#ffffff', '#23284a', 4); ctx.fillStyle = '#fff'; ctx.fillRect(bx + 82, by + 86, 36, 8);
+  text('Ciao, sono Noah!', bx + 150, by + 30, 20, '#23284a'); text('Benvenuto in Workline Factory', bx + 150, by + 60, 15, '#3a5a8a');
+}
 function introCam(u) {
   const ease = x => x * x * (3 - 2 * x);
   let i = 0; while (i < INTRO_KEYS.length - 2 && u > INTRO_KEYS[i + 1][0]) i++;
@@ -4121,7 +4443,7 @@ function drawWorld(t) {
         if (m.phase < 2) { ctx.globalAlpha = moving ? 0.3 : 0.6; drawMachine(m.type, m.c, m.r, { ...mo, status: 'off', t }); ctx.globalAlpha = 1; drawScaffold(m.c, m.r, machineTopM(m.type, m.mk), fw, fh); }
         else drawMachine(m.type, m.c, m.r, { ...mo, status: m.cur ? 'work' : m.op ? 'wait' : 'off', busy: !!m.cur, t });
         if (m.mk > 1 && m.phase >= 2) { const q = iso(m.c + fw / 2, m.r + fh - 0.04, 8); rrect(q[0] - 9, q[1] - 6, 18, 11, 2, '#e0b84a', '#2b2410', 1); textW(['', 'II', 'III', 'IV', 'V'][mkOf(m) - 1], q[0], q[1], 7, '#2b2410'); } // the Mk plate
-        if (m.op && atWork && m.present !== false) { const p = iso(m.c + fw - 0.14, m.r + fh + 0.02, 0); sprite(m.cur && Math.sin(t * 9) > 0 ? 'work' : 'walk0', p[0], p[1], 2, true, OP_PAL); }
+        if (m.op && atWork && m.present !== false) { const p = iso(m.c + fw - 0.14, m.r + fh + 0.02, 0); if (!drawPerson('mach', m.id, p[0], p[1], { work: !!m.cur, t })) sprite(m.cur && Math.sin(t * 9) > 0 ? 'work' : 'walk0', p[0], p[1], 2, true, OP_PAL); }
         if (m.out) drawPiece(m.out.ops, m.c + 0.15, m.r + fh - 0.1, m.out.mat);
         if (m.inbox) drawPiece(m.inbox.ops, m.c + fw - 0.1, m.r + 0.15, m.inbox.mat);
         if (m.pop > 0) { ctx.globalAlpha = Math.min(1, m.pop * 2); drawPiece(m.popOps || '', m.c + fw / 2 - (1 - m.pop) * 0.6, m.r + fh / 2 - (1 - m.pop) * 0.6, m.popMat); ctx.globalAlpha = 1; }
@@ -4134,29 +4456,26 @@ function drawWorld(t) {
   for (const w of F.workers) if (atWork && !w.hidden) objs.push({ d: w.c + w.r, f: () => drawWorker(w, t) });
   for (const k of F.clerks || []) objs.push({ d: k.x + k.y + (k.mode === 'sit' ? 0.3 : 0), f: () => drawClerk(k, t) });
   for (const k of F.trucks || []) objs.push({ d: k.c + k.r + 0.8, f: () => drawTruck(k, t) });
-  for (const w of Object.values(F.itw || {})) if (atWork && !w.hidden) objs.push({ d: w.c + w.r + 0.01, f: () => {
+  for (const [wid, w] of Object.entries(F.itw || {})) if (atWork && !w.hidden) objs.push({ d: w.c + w.r + 0.01, f: () => {
     const p = iso(w.c, w.r, 0), moving = w.path.length > 0, step = moving ? Math.floor(w.walkT * 6) % 2 : 0;
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
-    sprite(moving ? (step ? 'walk1' : 'walk0') : (Math.sin(t * 7) > 0 ? 'work' : 'walk0'), p[0], p[1] - step, 2, w.dir < 0, IT_PAL);
+    if (!drawPerson('it', wid, p[0], p[1], { flip: w.dir > 0, moving, walkT: w.walkT, work: !moving, t })) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4); sprite(moving ? (step ? 'walk1' : 'walk0') : (Math.sin(t * 7) > 0 ? 'work' : 'walk0'), p[0], p[1] - step, 2, w.dir < 0, IT_PAL); }
     if (!moving && w.check) { const [sx, sy] = [p[0] + 10, p[1] - 44]; rrect(sx - 11, sy - 11, 22, 20, 5, '#fff', '#2f7fb0', 1.5); phaseIcon(w.check === 'mach' ? 1 : 2, sx, sy - 1, 0.7, '#2f7fb0'); }
   } });
   { const n = state.noahW; if (n && n.b === F.id) objs.push({ d: n.c + n.r + 0.02, f: () => { // ChiefTech Noah on his rounds
     const p = iso(n.c, n.r, 0), step = n.path.length ? Math.floor(n.walkT * 5) % 2 : 0;
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 10, p[1] - 2, 20, 4);
-    sprite(n.path.length ? 'noahTab' : (Math.sin(t * 2) > 0.5 ? 'noahPoint' : 'noahTab'), p[0], p[1] - step, 2.2, n.dir < 0, NOAH_PAL);
-    rrect(p[0] - 22, p[1] - 52, 44, 13, 4, '#3a4654', '#f2c230', 1); textW('Noah', p[0], p[1] - 45, 9, '#fff');
+    if (!drawPerson('noah', 0, p[0], p[1], { flip: n.dir > 0, moving: !!n.path.length, walkT: n.walkT, pose: !n.path.length && Math.sin(t * 2) > 0.5 ? 1 : 0 })) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 10, p[1] - 2, 20, 4); sprite(n.path.length ? 'noahTab' : (Math.sin(t * 2) > 0.5 ? 'noahPoint' : 'noahTab'), p[0], p[1] - step, 2.2, n.dir < 0, NOAH_PAL); }
+    const ly = hdOn() ? 66 : 52; rrect(p[0] - 22, p[1] - ly, 44, 13, 4, '#3a4654', '#f2c230', 1); textW('Noah', p[0], p[1] - ly + 7, 9, '#fff');
   } }); }
-  if (atWork) for (const w of Object.values(F.techw || {})) objs.push({ d: w.c + w.r + 0.01, f: () => { // technicians, with a wrench while checking a machine
+  if (atWork) for (const [wid, w] of Object.entries(F.techw || {})) objs.push({ d: w.c + w.r + 0.01, f: () => { // technicians, with a wrench while checking a machine
     const p = iso(w.c, w.r, 0), step = w.path.length ? Math.floor(w.walkT * 6) % 2 : 0;
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
-    sprite(w.path.length ? (step ? 'walk1' : 'walk0') : (Math.sin(t * 7) > 0 ? 'work' : 'walk0'), p[0], p[1] - step, 2, w.dir < 0, TECH_PAL);
+    if (!drawPerson('tech', wid, p[0], p[1], { flip: w.dir > 0, moving: !!w.path.length, walkT: w.walkT, work: !w.path.length, t })) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4); sprite(w.path.length ? (step ? 'walk1' : 'walk0') : (Math.sin(t * 7) > 0 ? 'work' : 'walk0'), p[0], p[1] - step, 2, w.dir < 0, TECH_PAL); }
     if (!w.path.length) { ctx.save(); ctx.translate(p[0] + 12, p[1] - 40); ctx.rotate(Math.sin(t * 6) * 0.4); toolIcon('W', 0, 0, 0.45); ctx.restore(); }
   } });
-  for (const w of Object.values(F.haul || {})) if (atWork && !w.hidden) objs.push({ d: w.c + w.r + 0.01, f: () => {
+  for (const [wid, w] of Object.entries(F.haul || {})) if (atWork && !w.hidden) objs.push({ d: w.c + w.r + 0.01, f: () => {
     const p = iso(w.c, w.r, 0), step = w.path.length ? Math.floor(w.walkT * 6) % 2 : 0;
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
-    sprite(step ? 'walk1' : 'walk0', p[0], p[1] - step, 2, w.dir < 0, MAG_PAL);
-    if (w.carry) { ctx.save(); ctx.translate(0, -30); drawPiece(w.carry.ops, w.c, w.r, w.carry.mat); ctx.restore(); }
+    const hd = drawPerson('mag', wid, p[0], p[1], { flip: w.dir > 0, moving: !!w.path.length, walkT: w.walkT });
+    if (!hd) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4); sprite(step ? 'walk1' : 'walk0', p[0], p[1] - step, 2, w.dir < 0, MAG_PAL); }
+    if (w.carry) { ctx.save(); ctx.translate(0, hd ? -26 : -30); drawPiece(w.carry.ops, w.c, w.r, w.carry.mat); ctx.restore(); }
   } });
   if (state.placing) {
     const h = hoverCell();
@@ -4240,6 +4559,7 @@ const whCap = b => whCells(b).length * barsPerCellE();
 const onOrder = b => whOf(b).orders.reduce((n, o) => n + o.n, 0) + (b.trucks || []).filter(k => k.ph !== 'out').reduce((n, k) => n + k.n, 0);
 function drawPillar(col, row) { // a load-bearing column in the style of the site: timber post, brick pier, steel column with a guard
   const c = col + 0.5, r = row + 0.5, st = F.stage, H = WALL_H + 6;
+  if (drawBld('pil' + (st <= 1 ? 0 : st === 2 ? 1 : 2), c - 0.3, r - 0.3, 0.6, 0.6, 0.8)) return;
   if (st <= 1) { box(c - 0.14, r - 0.14, c + 0.14, r + 0.14, 0, H, '#8a5a32'); box(c - 0.2, r - 0.2, c + 0.2, r + 0.2, 0, 4, '#6e675c'); for (let z = 8; z < H; z += 10) line(iso(c - 0.14, r + 0.14, z), iso(c + 0.14, r + 0.14, z + 2), 'rgba(40,20,8,0.4)', 1); }
   else if (st === 2) { box(c - 0.2, r - 0.2, c + 0.2, r + 0.2, 0, H, '#a84f3a'); for (let z = 5; z < H; z += 5) { line(iso(c - 0.2, r + 0.2, z), iso(c + 0.2, r + 0.2, z), 'rgba(60,30,20,0.4)', 1); line(iso(c + 0.2, r - 0.2, z), iso(c + 0.2, r + 0.2, z), 'rgba(60,30,20,0.4)', 1); } box(c - 0.24, r - 0.24, c + 0.24, r + 0.24, H - 4, H, '#c8bea8'); }
   else { box(c - 0.24, r - 0.24, c + 0.24, r + 0.24, 0, 10, '#f2c230'); for (let z = 2; z < 10; z += 4) line(iso(c - 0.24, r + 0.24, z), iso(c + 0.24, r + 0.24, z + 3), '#2b2b2b', 2); box(c - 0.1, r - 0.16, c + 0.1, r + 0.16, 10, H, '#5d6a78'); box(c - 0.16, r - 0.04, c + 0.16, r + 0.04, 10, H, '#6e7c8a'); }
@@ -4358,8 +4678,7 @@ function drawTruckBody(k, t) {
   if (k.ph === 'back' && Math.sin(t * 12) > 0) { const q = P(-1.66, 0); const p = iso(q[0], q[1], 10); ctx.fillStyle = '#ffb35b'; ctx.fillRect(p[0] - 2, p[1] - 2, 4, 4); } // reversing light
   if (k.ph === 'unload') { // a warehouse worker walks bundles from the back of the lorry onto the shelves
     const A = canonA(F), K0 = k.canon || k, u = (Math.sin(k.t * 2.4) + 1) / 2, [wc, wr] = MP(F, A.c1 + 0.3 - u * 1.0, K0.r + 0.5), p = iso(wc, wr, 0), carry = Math.cos(k.t * 2.4) < 0;
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4);
-    sprite(Math.floor(k.t * 6) % 2 ? 'walk1' : 'walk0', p[0], p[1], 2, !carry, MAG_PAL);
+    if (!drawPerson('mag', 'truck' + k.n, p[0], p[1], { flip: carry, moving: true, walkT: k.t })) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4); sprite(Math.floor(k.t * 6) % 2 ? 'walk1' : 'walk0', p[0], p[1], 2, !carry, MAG_PAL); }
     if (carry) box(wc - 0.18, wr - 0.06, wc + 0.18, wr + 0.06, 26, 30, '#a7b0b8');
   }
 }
@@ -4416,6 +4735,11 @@ function annexWalls() { // from every edge: walls where the building ends at the
 function drawShelf(o, t) { // a metal shelving unit; its bar bundles show how full the warehouse is
   const c = o.c + 0.5, r = o.r + 0.5, cs = whCells(F).length, pc = barsPerCellE(), per = whTotal(F) - o.i * pc, fill = Math.max(0, Math.min(1, per / pc));
   const st = whStock(F), colAt = n => { let a = 0; for (const m of MATS) { a += st[m.id] || 0; if (n < a) return m.col; } return '#a7b0b8'; }; // bundles coloured by material, shelf after shelf
+  if (drawBld('shelf' + (fill <= 0.02 ? 0 : fill < 0.6 ? 1 : 2), c - 0.42, r - 0.36, 0.84, 0.72)) { // the sprite: empty, half full or full, with a tag in the colour of the material on it
+    if (fill > 0.02) { const p = iso(c + 0.42, r + 0.36, 8); rrect(p[0] - 4, p[1] - 3, 8, 5, 1, colAt(o.i * pc), '#2b2b2b', 1); }
+    if (cs && o.i === 0 && fill <= 0 && Math.sin(t * 5) > 0) { const p = iso(c, r, 60); textW('VUOTO', p[0], p[1], 8, '#ff8a7a'); }
+    return;
+  }
   for (const [dc, dr] of [[-0.4, -0.34], [0.36, -0.34], [-0.4, 0.3], [0.36, 0.3]]) box(c + dc, r + dr, c + dc + 0.04, r + dr + 0.04, 0, 46, '#e07a2e');
   const lv = 3, slots = 3;
   for (let k = 0; k < lv; k++) {
@@ -4433,6 +4757,7 @@ function drawShelf(o, t) { // a metal shelving unit; its bar bundles show how fu
 }
 function drawOffice(col, row, t) { // a modern open-plan workstation: white bench desk on steel legs, two monitors, a mesh chair, a low screen, a plant
   const c = col + 0.5, r = row + 0.5, h = hash(col * 7 + 3, row * 5 + 1), wood = ['#d8c4a0', '#e8e4dc', '#c8a878'][h % 3];
+  if (drawBld('desk', col + 0.04, row + 0.06, 0.92, 0.88)) return;
   box(c - 0.44, r - 0.46, c + 0.44, r - 0.4, 0, 22, '#7d8a96'); poly(qT(c - 0.44, r - 0.46, c + 0.44, r - 0.4, 22), '#5bc7ff'); // acoustic screen with an accent top
   for (const [dc, dr] of [[-0.4, -0.36], [0.36, -0.36], [-0.4, 0.06], [0.36, 0.06]]) box(c + dc, r + dr, c + dc + 0.04, r + dr + 0.04, 0, 17, '#9aa4ad'); // steel legs
   box(c - 0.42, r - 0.38, c + 0.42, r + 0.12, 17, 19, wood); // desk top
@@ -5047,20 +5372,12 @@ const scenes = {
     },
     draw() {
       ui = { buttons: [], named: {} };
-      introCam(0.35 + 0.05 * Math.sin(clock.now() * 0.1)); pixelPass(() => { ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-cam.x, -cam.y); drawTown(clock.now()); ctx.restore(); }, 0.25);
-      ctx.fillStyle = 'rgba(14,20,28,0.62)'; ctx.fillRect(0, 0, W, H);
-      rrect(W / 2 - 360, 70, 720, 130, 22, 'rgba(28,36,44,0.92)', '#f2c230', 4);
-      for (let i = 0; i < 680; i += 34) { ctx.fillStyle = (i / 34) % 2 ? '#2b2b2b' : '#f2c230'; ctx.fillRect(W / 2 - 340 + i, 178, 34, 8); }
-      textO(TITLE, W / 2, 124, 72, '#f2c230', 'center', '#2b2b2b');
-      text('Compra, monta, cabla e configura le tue macchine CNC', W / 2, 232, 22, '#e6e1d3');
-      rrect(W / 2 - 440, 266, 880, 148, 14, 'rgba(20,26,34,0.9)', '#3a4552', 2);
-      CONTROLS.forEach((c, i) => text(c, W / 2, 290 + i * 34, 18, '#cfd6dd'));
-      ORDER.forEach((tp, i) => machineIcon(tp, W / 2 - 400 + i * 200, 536, 0.95, { t: clock.now(), busy: true, status: 'work' }));
+      drawTitleArt(clock.now());
       const sv = hasSave();
-      button(sv ? 'Continua' : 'Gioca', W / 2 - 150, 560, 300, 70, () => startGame(true), { size: 28, name: 'play' });
-      if (sv) button(confirmNew ? 'Sicuro? Tocca ancora' : 'Nuova partita (N)', W / 2 - 150, 642, 300, 50, () => startGame(false), { size: 18, color: '#9aa4ad', name: 'new' });
+      button(sv ? 'Continua' : 'Gioca', W / 2 - 150, 300, 300, 74, () => startGame(true), { size: 30, color: '#7ef0a0', name: 'play' });
+      if (sv) button(confirmNew ? 'Sicuro? Tocca ancora' : 'Nuova partita (N)', W / 2 - 130, 388, 260, 50, () => startGame(false), { size: 18, color: '#ffffff', name: 'new' });
       button('Partita di prova: tutto sbloccato', W - 330, H - 70, 310, 50, startSandbox, { size: 15, color: '#5bc7ff', name: 'sandbox' }); // its own save: the real game is not touched
-      text(sv ? 'Invio: continua' : 'Invio o tocca per iniziare', W / 2, 708, 15, '#9aa4ad');
+      text(sv ? 'Invio: continua' : 'Invio o tocca per iniziare', W / 2, 708, 15, '#7a4b2a');
     },
   },
   play: {
