@@ -232,6 +232,11 @@ window.CONFIG = {
   panSpeed: { value: 420, min: 50, max: 2000, step: 10 },    // px/s con le frecce
   workerSpeed: { value: 1.3, min: 0.2, max: 5, step: 0.1 },  // celle al secondo
   dayLength: { value: 525, min: 50, max: 3000, step: 5 },   // s reali di una giornata a x1: il turno di 8 ore (08-16) ne è l'80% = 7 minuti; a fine turno il tempo si ferma
+  machMaxH: { value: 120, min: 60, max: 260, step: 5 },      // altezza massima di una macchina sullo schermo (a zoom 1)
+  machMaxW: { value: 150, min: 60, max: 260, step: 5 },      // larghezza massima di una macchina sullo schermo (a zoom 1)
+  machLevelStep: { value: 0.1, min: 0, max: 0.2, step: 0.01 },  // ogni livello in meno la macchina è disegnata il 10% più piccola
+  shadowLen: { value: 0.6, min: 0.2, max: 1.2, step: 0.05 },     // lunghezza delle ombre delle macchine rispetto alla loro altezza
+  pillars: { value: 0, min: 0, max: 1, step: 1 },            // 1 = pilastri portanti messi a caso nel capannone
   machSpriteFit: { value: 0.96, min: 0.6, max: 1.2, step: 0.01 }, // larghezza degli sprite delle macchine rispetto all'ingombro sullo schermo
   backdropScale: { value: 2.5, min: 1, max: 6, step: 0.1 }, // celle di fabbrica per ogni cella della mappa: quanto è ingrandito il quartiere intorno
   perkSpeed: { value: 0.8, min: 0.3, max: 1, step: 0.05 },   // abilità 'più veloce': tempo per pezzo moltiplicato per questo
@@ -241,9 +246,11 @@ window.CONFIG = {
   hdTreeH: { value: 78, min: 30, max: 140, step: 1 },        // altezza degli alberi 3D
   hdTexCells: { value: 2, min: 1, max: 8, step: 1 },
   facesPerJob: { value: 2, min: 1, max: 4, step: 1 },
-  sitC: { value: 0.36, min: 0, max: 1, step: 0.01 },         // dove sta la sedia di chi lavora al pc, lungo la colonna della scrivania
-  sitR: { value: 0.78, min: 0, max: 1, step: 0.01 },         // e lungo la riga
-  sitH: { value: 0.74, min: 0.4, max: 1.4, step: 0.01 },     // altezza di chi è seduto rispetto a chi è in piedi        // facce diverse per mestiere (2 hanno la camminata animata)
+  hideAreaSigns: { value: 1, min: 0, max: 1, step: 1 },     // 1 = niente cartelli Ufficio, Magazzino, Ingresso personale
+  quietShiftEnd: { value: 0, min: 0, max: 1, step: 1 },     // 1 = nessun suono di fine turno nemmeno giocando (nelle simulazioni non suona mai)
+  sitC: { value: 0.40, min: 0, max: 1, step: 0.01 },         // dove sta la sedia di chi lavora al pc, lungo la colonna della scrivania
+  sitR: { value: 0.72, min: 0, max: 1, step: 0.01 },         // e lungo la riga
+  sitH: { value: 1.0, min: 0.4, max: 1.4, step: 0.01 },     // altezza di chi è seduto rispetto a chi è in piedi        // facce diverse per mestiere (2 hanno la camminata animata)
   walkFps: { value: 9, min: 4, max: 16, step: 1 },          // velocità dei fotogrammi della camminata
   walkAnim: { value: 1, min: 0, max: 1, step: 1 },           // camminata con le gambe che si muovono (1) o dondolio (0)
   walkSwing: { value: 0.32, min: 0.05, max: 0.7, step: 0.01 }, // quanto oscillano le gambe a ogni passo

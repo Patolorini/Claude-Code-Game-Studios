@@ -110,6 +110,12 @@ After play: la galleria non piace: prolungare i binari fino alla fine della mapp
 After play: (screenshot) bug dei container che rimangono sotto; bug della board negli uffici; negli uffici non c'è spazio per passare tra una scrivania e l'altra; animazione di camminata per gli operatori
 After play: (screenshot) la strada del magazzino non si unisce bene al resto; togliere la pavimentazione a quadratini grigi più piccoli sotto la fabbrica e continuare con quella dei dintorni; ancora roba buggata sotto gli uffici; piante in ufficio buggate nella parete e diverse dal resto; rifare la camminata di tutti con SpriteCook (sembravano zoppi). Scelta: 2 facce per mestiere con camminata animata
 After play: nei personaggi c'è qualche bug visivo; fare anche il retro così si possono girare e camminare guardando nella direzione giusta; quando si siedono al pc il corpo sparisce e si vede solo la testa
+After play: rendere scrivanie e sedie fisiche così non ci passano più attraverso; quando gli operatori si siedono la sedia vola e si vede attraverso il vetro
+After play: dallo screenshot sembrano ancora sospesi leggermente sopra la scrivania; togliere le scritte Ufficio, Magazzino e Ingresso dipendenti; nelle simulazioni togliere il suono di fine turno
+After play: le sedie non devono muoversi quando sono seduti; stanno ancora sospesi in aria; sotto di loro resta una sedia grigia chiara come un fantasma; ci sono ancora alberi buggati sotto l'ufficio: non mettere niente di fianco agli uffici
+After play: (foto) con SpriteCook creare la seduta alla scrivania come in foto e fixare il casco dell'operatrice (casco doppio nella camminata)
+After play: prima del 3d completo del personale sistemare la grandezza dei macchinari (al livello massimo coprono quasi 1/4 di schermo): macchine più piccole, massimo grandezza 4x4, tenendo le creazioni di SpriteCook; togliere i pilastri generati a caso, troppo ingombranti
+After play: rivedere le ombre e anche i macchinari degli altri livelli e adeguarli; poter girare le macchine di 90 gradi per sfruttare anche il lato sinistro della fabbrica, non solo posizionarle che guardino a sud
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 

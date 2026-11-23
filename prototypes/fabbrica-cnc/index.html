@@ -534,6 +534,10 @@ function shadowOf(c0, r0, c1, r1, h) {
   for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
   return lo.slice(0, -1).concat(up.slice(0, -1));
 }
+function machShadowBox(m) { // the machine's shadow: the drawn machine's base, not the whole footprint, and its drawn height
+  const [w, h] = fpOf(m), k = machShrink(m.type, m.mk || 1, w, h), cc = m.c + w / 2, cr = m.r + h / 2, hw = (w / 2 - 0.12) * k, hh = (h / 2 - 0.12) * k;
+  return [cc - hw, cr - hh, cc + hw, cr + hh, machineTopM(m.type, m.mk) * tune.shadowLen];
+}
 function drawShadows(list, alpha = 0.26) {
   ctx.beginPath();
   for (const [c0, r0, c1, r1, h] of list) { const hull = shadowOf(c0, r0, c1, r1, h); ctx.moveTo(hull[0][0], hull[0][1]); for (const p of hull.slice(1)) ctx.lineTo(p[0], p[1]); ctx.closePath(); }
@@ -683,7 +687,7 @@ function drawPerson(role, seed, x, y, o = {}) { // one of the realistic people, 
   ctx.restore(); return true;
 }
 // where each building sprite's front corner sits across its width (0..1): over a half, the art is longer along c; it is mirrored when the footprint runs the other way
-const PX_FOOT = { hA0: 0.48, hA1: 0.52, hA2: 0.52, hA3: 0.43, hB0: 0.73, hB1: 0.71, hB2: 0.72, hB3: 0.71, church: 0.42, hall: 0.69, school: 0.55, market: 0.62, shed: 0.38, brick: 0.31, silos: 0.67, tower: 0.49, containers: 0.49, workshop: 0.53, lot: 0.40, station: 0.56, site0: 0.49, site1: 0.45, site2: 0.57, site3: 0.46, site4: 0.40, car0: 0.43, car1: 0.32, car2: 0.44, van: 0.38, office: 0.31, hedge: 0.49, shelf0: 0.28, shelf1: 0.28, shelf2: 0.28, forklift: 0.16, pil0: 0.50, pil1: 0.50, pil2: 0.51, desk: 0.69, rack1: 0.54, rack2: 0.51, rack3: 0.54, power: 0.42, bridge: 0.66, fountain: 0.50, barn: 0.39, tunnel: 0.19, stadium: 0.59, loco: 0.80, boxcar: 0.75, flatcar: 0.77, crane: 0.26, worksite: 0.46, bench: 0.53, substation: 0.53, plant: 0.47 };
+const PX_FOOT = { hA0: 0.48, hA1: 0.52, hA2: 0.52, hA3: 0.43, hB0: 0.73, hB1: 0.71, hB2: 0.72, hB3: 0.71, church: 0.42, hall: 0.69, school: 0.55, market: 0.62, shed: 0.38, brick: 0.31, silos: 0.67, tower: 0.49, containers: 0.49, workshop: 0.53, lot: 0.40, station: 0.56, site0: 0.49, site1: 0.45, site2: 0.57, site3: 0.46, site4: 0.40, car0: 0.43, car1: 0.32, car2: 0.44, van: 0.38, office: 0.31, hedge: 0.49, shelf0: 0.28, shelf1: 0.28, shelf2: 0.28, forklift: 0.16, pil0: 0.50, pil1: 0.50, pil2: 0.51, desk: 0.69, rack1: 0.54, rack2: 0.51, rack3: 0.54, power: 0.42, bridge: 0.66, fountain: 0.50, barn: 0.39, tunnel: 0.19, stadium: 0.59, loco: 0.80, boxcar: 0.75, flatcar: 0.77, crane: 0.26, worksite: 0.46, bench: 0.53, substation: 0.53, plant: 0.47, desk_free: 0.69, desk_sit0: 0.69, desk_sit1: 0.69 };
 function drawBld(name, c, r, w, h, fit = 1) { // a building sprite standing on its footprint, its front corner on the footprint's front corner; false when it is not there
   const im = hdImg(name + '.png'); if (!im) return false;
   let f = PX_FOOT[name] ?? 0.5; const want = w / (w + h), flip = Math.abs(f - 0.5) > 0.04 && Math.abs(want - 0.5) > 0.04 && (f - 0.5) * (want - 0.5) < 0;
@@ -715,18 +719,24 @@ function machImg(type, mk) { // the loaded sprite, or null while it loads or if 
   if (!im) { im = MACH_IMG[k] = new Image(); im.onerror = () => { im.bad = true; }; im.src = 'assets/mach_' + k + '.png'; }
   return !im.bad && im.complete && im.naturalWidth ? im : null;
 }
-function spriteTop(im, w, h) { const dh = im.naturalHeight * (w + h) * TW / 2 * tune.machSpriteFit / im.naturalWidth; return Math.max(20, Math.round(dh - (w + h) * TH / 2 + 2)); } // height of the sprite's top above the footprint centre
-function machineTopM(type, mk = 1) { const im = machImg(type, mk), [w, h] = fpDims(mk, 0, type); return im ? spriteTop(im, w, h) : machineTopV(type, mk); }
-function drawMachineSprite(im, col, row, w, h, dir, st, t, busy) {
-  const dw = (w + h) * TW / 2 * tune.machSpriteFit, dh = im.naturalHeight * dw / im.naturalWidth;
-  const cx = (iso(col, row + h)[0] + iso(col + w, row)[0]) / 2, by = iso(col + w, row + h)[1] - 1;
+function machDrawSize(im, w, h, mk = 5) { // the sprite's size on screen: fitted to the footprint, then shrunk so no machine is taller or wider than its level allows (machMaxH / machMaxW at level 5, less below)
+  let dw = (w + h) * TW / 2 * tune.machSpriteFit, dh = im.naturalHeight * dw / im.naturalWidth;
+  const g = 1 - (5 - Math.max(1, Math.min(5, mk))) * tune.machLevelStep; // each level down a little smaller: the generations grow as you upgrade
+  const k = Math.min(1, tune.machMaxH * g / dh, tune.machMaxW * g / dw); return [dw * k, dh * k];
+}
+function machShrink(type, mk, w, h) { const im = machImg(type, mk); return im ? machDrawSize(im, w, h, mk)[0] / ((w + h) * TW / 2 * tune.machSpriteFit) : 1; } // how much smaller than its footprint a machine is drawn
+function spriteTop(im, w, h, mk = 5) { const dh = machDrawSize(im, w, h, mk)[1]; return Math.max(20, Math.round(dh - (w + h) * TH / 2 + 2)); } // height of the sprite's top above the footprint centre
+function machineTopM(type, mk = 1) { const im = machImg(type, mk), [w, h] = fpDims(mk, 0, type); return im ? spriteTop(im, w, h, mk) : machineTopV(type, mk); }
+function drawMachineSprite(im, col, row, w, h, dir, st, t, busy, mk = 5) {
+  const [dw, dh] = machDrawSize(im, w, h, mk), k = dw / ((w + h) * TW / 2 * tune.machSpriteFit); // k < 1: a big machine drawn smaller
+  const cx = (iso(col, row + h)[0] + iso(col + w, row)[0]) / 2, cy = iso(col + w / 2, row + h / 2)[1], by = cy + (iso(col + w, row + h)[1] - 1 - cy) * k; // shrunk round the footprint's centre
   const flip = w > h || (w === h && dir % 2 === 1); // the art runs its long side to the lower left: mirror it when the long side runs to the lower right
   const shake = busy ? Math.round(Math.sin(t * 40)) * 0.5 : 0;
   ctx.save(); ctx.translate(cx + shake, by); if (flip) ctx.scale(-1, 1);
   ctx.imageSmoothingEnabled = Math.abs(ctx.getTransform().a) * dw / im.naturalWidth < 1;
   ctx.drawImage(im, -dw / 2, -dh, dw, dh); ctx.restore();
-  const top = spriteTop(im, w, h);
-  const lc = col + 0.14, lr = row + h - 0.14; // the status light: an andon pole standing on the floor at the front-left corner, not floating over the art
+  const top = spriteTop(im, w, h, mk);
+  const lc = col + w / 2 + (0.14 - w / 2) * k, lr = row + h / 2 + (h / 2 - 0.14) * k; // at the front-left corner of the machine as drawn // the status light: an andon pole standing on the floor at the front-left corner, not floating over the art
   line(iso(lc, lr, 0), iso(lc, lr, 16), '#555c63', 2); stackLight(lc, lr, 14, st, t);
   return top;
 }
@@ -829,7 +839,7 @@ function drawMachine(type, col, row, o = {}) {
   const frontQ = (za, zb, a = 0.1, b = 0.1) => longC ? qL(c0 + (c1 - c0) * a, c1 - (c1 - c0) * b, r1, za, zb) : qR(c1, r0 + (r1 - r0) * a, r1 - (r1 - r0) * b, za, zb); // the long face toward the camera
   const frontAt = (u, z) => longC ? [c0 + (c1 - c0) * u, r1, z] : [c1, r0 + (r1 - r0) * u, z];
   const im = o.vector ? null : machImg(type, mk);
-  if (im) return drawMachineSprite(im, col, row, w, h, dir, st, t, busy);
+  if (im) return drawMachineSprite(im, col, row, w, h, dir, st, t, busy, mk);
   let top;
   if (mk === 1) { // an old hand-cranked machine: cast iron on a wooden plinth, a belt to the motor, brass plate, handwheels
     box(c0, r0, c1, r1, 0, 5, '#7a5230'); line(iso(c0 + 0.3, r1, 0), iso(c0 + 0.3, r1, 5), '#4a2f1d', 1); line(iso(c1, r0 + 0.3, 0), iso(c1, r0 + 0.3, 5), '#4a2f1d', 1);
@@ -912,8 +922,10 @@ function surroundings() { // worked out once per site: ground colour of every ce
     lots.push({ c, r, w, h: hh, k: kindOf, s: h });
   }
   { const near = o => o.c < bb.c1 + 7 && o.r < bb.r1 + 7 && (o.r + o.h > bb.r1 - 0.5 || o.c + o.w > bb.c1 - 0.5); for (let i = lots.length - 1; i >= 0; i--) if (lots[i].k !== 'trees' && near(lots[i]) && lots[i].c + lots[i].w > bb.c0 - 4 && lots[i].r + lots[i].h > bb.r0 - 4) lots[i].k = 'trees'; } // in front of the factory only trees: a building there is drawn under the factory and looks buried
+  { const O = F.officeBox, keepOut = []; if (O) keepOut.push({ c0: O.c0 - 6, r0: O.r0 - 6, c1: O.c1 + 7, r1: O.r1 + 7 }); for (const o of Object.values(F.grid)) if (o.kind === 'entry' || o.kind === 'pz') keepOut.push({ c0: o.c - 6, r0: o.r - 6, c1: o.c + 7, r1: o.r + 7 });
+    const clash = (c0, r0, c1, r1) => keepOut.some(z => c0 < z.c1 && c1 > z.c0 && r0 < z.r1 && r1 > z.r0); for (let i = lots.length - 1; i >= 0; i--) if (clash(lots[i].c, lots[i].r, lots[i].c + lots[i].w, lots[i].r + lots[i].h)) lots.splice(i, 1); F._keepOut = keepOut; } // nothing at all beside the offices
   const built = lots.filter(o => o.k !== 'trees'), clearOf = (x, y, list, back, front) => !list.some(o => x > o.c - back && x < o.c + o.w + front && y > o.r - back && y < o.r + o.h + front); // the sprites reach over their lots: keep trees off the walls and out from behind the roofs
-  const trees = cells.filter(([c, r, , k]) => k === 'land' && !taken.has(K(c, r)) && hash(c + 77, r + 33) % 9 === 0).map(([c, r]) => [c + 0.5, r + 0.5]).filter(([x, y]) => clearOf(x, y, built, 2.2, 0.9));
+  const trees = cells.filter(([c, r, , k]) => k === 'land' && !taken.has(K(c, r)) && hash(c + 77, r + 33) % 9 === 0).map(([c, r]) => [c + 0.5, r + 0.5]).filter(([x, y]) => clearOf(x, y, built, 2.2, 0.9) && !(F._keepOut || []).some(z => x > z.c0 && x < z.c1 && y > z.r0 && y < z.r1));
   const railR = fromTown(0, RAIL_R)[1], railC = [fromTown(RAIL_W - 0.4, 0)[0], fromTown(RAIL_E() + 1.5, 0)[0]];
   F._sur = { key, cells, lots, trees, railR, railC }; return F._sur;
 }
@@ -1012,7 +1024,7 @@ function drawStaffRoom(cs, t) { // the staff room: tiled floor, lockers and a be
     if (!has(o.c, o.r + 1)) { const street = side === 'front' && o.along === 0; poly([iso(o.c, o.r + 1, 0), iso(o.c + 1, o.r + 1, 0), iso(o.c + 1, o.r + 1, H), iso(o.c, o.r + 1, H)], street ? (busy ? 'rgba(255,214,120,0.45)' : 'rgba(205,215,224,0.25)') : 'rgba(205,215,224,0.35)', '#8a96a0', 1); if (street) { line(iso(o.c + 0.2, o.r + 1, 0), iso(o.c + 0.2, o.r + 1, 50), '#5d4632', 3); line(iso(o.c + 0.8, o.r + 1, 0), iso(o.c + 0.8, o.r + 1, 50), '#5d4632', 3); line(iso(o.c + 0.15, o.r + 1, 50), iso(o.c + 0.85, o.r + 1, 50), '#5d4632', 4); } }
     if (!has(o.c + 1, o.r)) { const street = side === 'right' && o.along === 0; poly([iso(o.c + 1, o.r, 0), iso(o.c + 1, o.r + 1, 0), iso(o.c + 1, o.r + 1, H), iso(o.c + 1, o.r, H)], street ? (busy ? 'rgba(255,214,120,0.45)' : 'rgba(205,215,224,0.25)') : 'rgba(205,215,224,0.35)', '#8a96a0', 1); if (street) { line(iso(o.c + 1, o.r + 0.2, 0), iso(o.c + 1, o.r + 0.2, 50), '#5d4632', 3); line(iso(o.c + 1, o.r + 0.8, 0), iso(o.c + 1, o.r + 0.8, 50), '#5d4632', 3); line(iso(o.c + 1, o.r + 0.15, 50), iso(o.c + 1, o.r + 0.85, 50), '#5d4632', 4); } }
   }
-  const sg = iso((c0 + c1) / 2, (r0 + r1) / 2, 74); rrect(sg[0] - 54, sg[1] - 9, 108, 18, 3, '#2f7f4a', '#fff', 1); textW('INGRESSO PERSONALE', sg[0], sg[1] + 1, 8, '#fff');
+  if (!tune.hideAreaSigns) { const sg = iso((c0 + c1) / 2, (r0 + r1) / 2, 74); rrect(sg[0] - 54, sg[1] - 9, 108, 18, 3, '#2f7f4a', '#fff', 1); textW('INGRESSO PERSONALE', sg[0], sg[1] + 1, 8, '#fff'); }
 }
 function drawEntryRoom(o, t) { // the staff room: tiled floor, lockers, a bench, partition walls with a doorway to the hall, the outer door with the badge reader
   const c = o.c, r = o.r, front = o.side === 'front', busy = (F.commute || []).length > 0, first = o.i === 0;
@@ -1031,7 +1043,7 @@ function drawEntryRoom(o, t) { // the staff room: tiled floor, lockers, a bench,
   poly([P(0.15, 0), P(0.85, 0), P(0.85, 48), P(0.15, 48)], busy ? 'rgba(255,214,120,0.6)' : 'rgba(40,46,52,0.75)');
   line(P(0.12, 0), P(0.12, 52), '#5d4632', 4); line(P(0.88, 0), P(0.88, 52), '#5d4632', 4); line(P(0.08, 52), P(0.92, 52), '#5d4632', 5);
   const bd = P(1.02, 30); rrect(bd[0] - 4, bd[1] - 8, 8, 14, 2, '#262c33', '#9aa4ad', 1); ctx.fillStyle = busy && Math.sin(t * 10) > 0 ? '#7ef0a0' : '#d8433a'; ctx.fillRect(bd[0] - 2, bd[1] - 5, 4, 3);
-  const sg = front ? iso(c + 1, r + 0.5, 70) : iso(c + 0.5, r + 1, 70); rrect(sg[0] - 52, sg[1] - 9, 104, 18, 3, '#2f7f4a', '#fff', 1); textW('INGRESSO PERSONALE', sg[0], sg[1] + 1, 8, '#fff');
+  if (!tune.hideAreaSigns) { const sg = front ? iso(c + 1, r + 0.5, 70) : iso(c + 0.5, r + 1, 70); rrect(sg[0] - 52, sg[1] - 9, 104, 18, 3, '#2f7f4a', '#fff', 1); textW('INGRESSO PERSONALE', sg[0], sg[1] + 1, 8, '#fff'); }
 }
 function drawEntry(t) { // a doorway in the wall, a doormat, a sign and a badge reader that lights up when the shift changes
   const e = entryOf(F), c = e.c, r = e.r, front = e.side === 'front', busy = (F.commute || []).length > 0;
@@ -1090,7 +1102,33 @@ function drawCommuter(k, t) {
   ctx.globalAlpha = 1;
 }
 // ---- Office clerks: they walk about the office and sit at a PC now and then to do their tasks ----
-function deskSpots(b) { return Object.values(b.grid).filter(o => o.kind === 'office').map(o => ({ c: o.c, r: o.r, x: o.c + 0.46, y: o.r + 0.84 })); }
+const DESK_BOX = [0.17, 0.06, 0.66, 0.56]; // the desk sprite's footprint inside its cell
+function deskGeom(col, row) { // the desk sprite on screen: left, top, width, height (same numbers drawBld uses)
+  const [oc, orr, w, h] = DESK_BOX, dw = (w + h) * TW / 2, im = hdImg('desk.png'), dh = im ? im.naturalHeight * dw / im.naturalWidth : dw, [bx, by] = iso(col + oc + w, row + orr + h);
+  return { x: bx - 0.69 * dw, y: by + 1 - dh, w: dw, h: dh };
+}
+function drawSeated(im, col, row) { // the seated sprite put exactly where the desk's own chair was: same wheel base, same wheel point (measured on the art)
+  const g = deskGeom(col, row), sw = g.w * (68 / 200) / (68 / 90), sh = im.naturalHeight * sw / im.naturalWidth; // desk chair wheels span 68 of 200 px, the seated chair's 68 of 90
+  const wx = g.x + g.w * (66 / 200), wy = g.y + g.h * (174 / 192); // the desk chair's wheel centre and bottom
+  ctx.save(); ctx.imageSmoothingEnabled = Math.abs(ctx.getTransform().a) * sw / im.naturalWidth < 1; ctx.drawImage(im, wx - sw * (37 / 90), wy - sh, sw, sh); ctx.restore();
+}
+const deskTaken = (col, row) => (F.clerks || []).find(k => k.mode === 'sit' && k.desk && k.desk.c === col && k.desk.r === row); // the clerk working at this desk, if any
+function deskSpots(b) { return Object.values(b.grid).filter(o => o.kind === 'office').map(o => ({ c: o.c, r: o.r, x: o.c + tune.sitC, y: o.r + tune.sitR })); }
+const OFF_STEP = 0.25; // the office is walked on a fine grid: desks and their chairs are solid
+function officeSolid(b, x, y) { // inside a desk (with its chair), outside the office, or behind its walls
+  const O = b.officeBox; if (!O || x < O.c0 + 0.12 || y < O.r0 + 0.12 || x > O.c1 + (O.aisle === 'c' ? 1 : 0) - 0.12 || y > O.r1 + (O.aisle === 'c' ? 0 : 1) - 0.12) return true;
+  const c = Math.floor(x), r = Math.floor(y), o = b.grid[K(c, r)];
+  if (o && o.kind === 'office') { const u = x - c, v = y - r; if (u > 0.1 && u < 0.9 && v > 0.0 && v < 0.62) return true; } // the desk and the chair tucked under it
+  return false;
+}
+function officePath(b, from, to) { // a path between desks on the fine grid (breadth first), ending exactly on the target; a straight line if there is none
+  const S = OFF_STEP, key = (i, j) => i + ',' + j, toI = v => Math.round(v / S), a = [toI(from[0]), toI(from[1])], z = [toI(to[0]), toI(to[1])];
+  const ok = (i, j) => !officeSolid(b, i * S, j * S) || (i === z[0] && j === z[1]) || (i === a[0] && j === a[1]);
+  const prev = new Map([[key(...a), null]]), q = [a];
+  while (q.length) { const [i, j] = q.shift(); if (i === z[0] && j === z[1]) break; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const n = [i + di, j + dj], kk = key(...n); if (!prev.has(kk) && ok(...n) && prev.size < 4000) { prev.set(kk, [i, j]); q.push(n); } } }
+  if (!prev.has(key(...z))) return [to];
+  const out = []; for (let p = z; p; p = prev.get(key(...p))) out.push([p[0] * S, p[1] * S]); out.reverse(); out.shift(); out[out.length - 1] = to.slice(); return out;
+}
 function updateClerks(b, dt) {
   const O = b.officeBox; if (!O) return;
   if (!onShift()) { b.clerks = []; return; }
@@ -1099,23 +1137,27 @@ function updateClerks(b, dt) {
   while (b.clerks.length < want) b.clerks.push({ x: O.c0 + 0.5, y: O.r0 + 0.3, tx: null, ty: null, mode: 'idle', t: 0.5 + rng() * 2, desk: null, walkT: 0, dir: 1, pal: b.clerks.length });
   for (const k of b.clerks) {
     if (k.mode === 'walk') {
-      const dx = k.tx - k.x, dy = k.ty - k.y, d = Math.hypot(dx, dy), step = dt * 1.1;
+      if (!k.path || !k.path.length) k.path = [[k.tx, k.ty]];
+      const [wx, wy] = k.path[0], dx = wx - k.x, dy = wy - k.y, d = Math.hypot(dx, dy), step = dt * 1.1;
       k.walkT += dt; if (Math.abs(dx - dy) > 0.01) k.dir = dx - dy > 0 ? 1 : -1;
-      if (d <= step) { k.x = k.tx; k.y = k.ty; if (k.desk) { k.mode = 'sit'; k.t = 4 + rng() * 6; } else { k.mode = 'idle'; k.t = 1 + rng() * 2.5; } }
+      if (d <= step) { k.x = wx; k.y = wy; k.path.shift(); if (!k.path.length) { if (k.desk) { k.mode = 'sit'; k.t = 4 + rng() * 6; } else { k.mode = 'idle'; k.t = 1 + rng() * 2.5; } } }
       else { k.x += dx / d * step; k.y += dy / d * step; }
     } else {
       k.t -= dt; if (k.t > 0) continue;
       k.desk = null;
       const free = desks.filter(ds => !b.clerks.some(o => o !== k && o.desk && o.desk.c === ds.c && o.desk.r === ds.r));
       if (free.length && rng() < 0.6) { const ds = free[Math.floor(rng() * free.length)]; k.desk = ds; k.tx = ds.x; k.ty = ds.y; }
-      else { k.tx = O.c0 + 0.25 + rng() * (O.c1 - O.c0 - 0.5); k.ty = O.r0 + 0.35 + rng() * (O.r1 - O.r0 - 0.5); }
+      else { for (let tries = 0; tries < 12; tries++) { k.tx = O.c0 + 0.25 + rng() * (O.c1 - O.c0 - 0.5); k.ty = O.r0 + 0.35 + rng() * (O.r1 - O.r0 - 0.5); if (!officeSolid(b, k.tx, k.ty)) break; } } // somewhere free, never inside a desk
+      if (officeSolid(b, k.x, k.y) && !k.desk) { const S = OFF_STEP; let best = null; for (let i = -4; i <= 4; i++) for (let j = -4; j <= 4; j++) { const x = Math.round(k.x / S) * S + i * S, y = Math.round(k.y / S) * S + j * S; if (!officeSolid(b, x, y) && (!best || Math.hypot(x - k.x, y - k.y) < best[2])) best = [x, y, Math.hypot(x - k.x, y - k.y)]; } if (best) { k.x = best[0]; k.y = best[1]; } } // someone left standing in a desk steps out first
+      k.path = officePath(b, [k.x, k.y], [k.tx, k.ty]);
       k.mode = 'walk';
     }
   }
 }
 function drawClerk(k, t) {
   const p = iso(k.x, k.y, k.mode === 'sit' ? 6 : 0), pal = CLERK_PALS[k.pal % CLERK_PALS.length];
-  if (k.mode === 'sit' && hdOn()) { const im = hdImg('sit' + (idSeed(k.pal) % tune.facesPerJob) + '.png'); if (im) { const q = iso(k.desk.c + tune.sitC, k.desk.r + tune.sitR, 0), ty = Math.sin(t * 9 + k.pal) > 0 ? 0.6 : 0; drawHdSprite(im, q[0], q[1] - ty, tune.hdWorkerH * tune.sitH, false); return; } } // seated at the desk, seen from behind, typing
+  if (k.mode === 'sit' && hdOn() && hdImg('desk_sit' + (idSeed(k.pal) % tune.facesPerJob) + '.png')) return; // drawn with the desk: the person sits at it, as one picture
+  if (k.mode === 'sit' && hdOn()) { const im = hdImg('sit' + (idSeed(k.pal) % tune.facesPerJob) + '.png'); if (im) { drawSeated(im, k.desk.c, k.desk.r); return; /* still on the chair: no bobbing */ } } // seated at the desk, seen from behind, typing
   if (drawPerson('clerk', k.pal, p[0], p[1], { flip: k.mode === 'sit' ? false : k.dir > 0, moving: k.mode === 'walk', walkT: k.walkT, sit: k.mode === 'sit', work: k.mode === 'sit', t })) { if (k.mode === 'sit' && Math.sin(t * 9 + k.pal) > 0) { const q = iso(k.desk.c + 0.55, k.desk.r + 0.42, 29); ctx.fillStyle = 'rgba(126,240,160,0.85)'; ctx.fillRect(q[0] - 1, q[1], 3, 1); } return; }
   if (k.mode !== 'sit') { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 8, p[1] - 2, 16, 4); }
   if (k.mode === 'sit') {
@@ -1832,7 +1874,13 @@ function canPlaceAt(c, r, P) {
   const o = cellAt(c, r);
   return !o || (!!P.m && o.kind === 'mach' && o.m === P.m);
 }
-function rotatePlacing() { if (!state.placing) return; state.placing.dir = (state.placing.dir + 1) % 4; state.placing.rotated = true; sfx.click(); }
+function rotateMachine(m) { // turn a built machine where it stands, if the turned footprint fits
+  const nd = ((m.dir || 0) + 1) % 2; clearMachineCells(m);
+  if (fitsAt(m.c, m.r, m.mk || 1, nd, m, m.type)) { m.dir = nd; placeMachineCells(m); sfx.clack(); save(); return toast('Macchina ruotata', '#bfe3ff'); }
+  placeMachineCells(m); sfx.wrong(); toast('Non c\'è spazio per ruotarla qui: usa Sposta e poi Ruota', '#ffb35b');
+}
+function rotatePlacing() { if (!state.placing) return; state.placing.dir = ((state.placing.dir || 0) + 1) % 2; // two ways round: along the rows or along the columns (the art is mirrored)
+  state.placing.rotated = true; sfx.click(); }
 function placeAt(c, r) {
   const P = state.placing;
   if (!canPlaceAt(c, r, P)) { sfx.wrong(); return toast(P.kind === 'mach' ? `Qui non ci sta: serve lo spazio della macchina più ${tune.machGap === 1 ? 'una casella libera' : tune.machGap + ' caselle libere'} intorno, lontano dalle altre macchine` : 'Qui non c\'è spazio: scegli una cella libera', '#ffb35b'); }
@@ -3105,11 +3153,13 @@ function drawMachinePanel(t) {
     ['Ricalibra (minigioco)', () => { state.mpMore = false; startBuild(m, true); }, '#7ef0a0', 'recal'],
     [netLab, () => { state.mpMore = false; if (state.level < tune.rackLvl) return toast(`Il Rack di rete si sblocca al livello ${tune.rackLvl}`, '#ffb35b'); if (F.netFault) return startBugs(F); openNetPick([m.id]); }, '#5bc7ff', 'net'],
   ] : [
-    ['Sposta', () => { state.panel = null; state.placing = { kind: 'mach', m, dir: m.dir, rotated: true }; toast('Tocca una cella libera', '#bfe3ff'); }, '#9ad0ff', 'move'],
+    ['Sposta', () => { state.panel = null; state.placing = { kind: 'mach', m, dir: m.dir, rotated: true }; toast('Tocca una cella libera: con Ruota la giri di 90°', '#bfe3ff'); }, '#9ad0ff', 'move'],
+    ['Ruota 90°', () => rotateMachine(m), '#ffd36a', 'turn'],
     ['Ricalibra', () => startBuild(m, true), '#7ef0a0', 'recal'],
     [`Vendi +${fmt(Math.round(mcfg('cost', m.type) * MK_COST[mkOf(m) - 1] * tune.sellRefund))}`, () => sellMachine(m), '#ff8a7a', 'sell'],
   ];
-  B.forEach(([lab, fn, col, nm], i) => button(lab, P.x + 24 + i * 226, P.y + (m.broken ? 474 : 404), 216, 58, fn, { color: col, name: nm, size: lab.length > 14 ? 15 : 17, enabled: !(nm === 'net' && state.level < tune.rackLvl) }));
+  const bw = Math.floor((720 - 48 - (B.length - 1) * 10) / B.length); // the buttons share the panel's width
+  B.forEach(([lab, fn, col, nm], i) => button(lab, P.x + 24 + i * (bw + 10), P.y + (m.broken ? 474 : 404), bw, 58, fn, { color: col, name: nm, size: lab.length > 12 ? 14 : 16, enabled: !(nm === 'net' && state.level < tune.rackLvl) }));
 }
 function drawMinigame(t) {
   if (state.mg.bug) return drawBugGame(t);
@@ -4455,7 +4505,7 @@ function drawWorld(t) {
   drawBackdrop(t); drawFloor(); drawCables();
   const cells = Object.values(F.grid);
   drawCellMarks(t); drawAnnexFloor();
-  if (!CHEAP) drawShadows(cells.filter(o => o.kind !== 'belt' && !(o.kind === 'mach' && !o.main)).map(o => o.kind === 'mach' ? [o.c + 0.12, o.r + 0.12, o.c + fpOf(o.m)[0] - 0.12, o.r + fpOf(o.m)[1] - 0.12, machineTopM(o.m.type, o.m.mk)] : [o.c + 0.12, o.r + 0.12, o.c + 0.88, o.r + 0.88, o.kind === 'mach' ? (o.main ? machineTopM(o.m.type, o.m.mk) : 0) : o.kind === 'rack' ? 60 : o.kind === 'pillar' ? WALL_H + 6 : o.kind === 'wh' ? 48 : o.kind === 'pc' || o.kind === 'office' ? 30 : 22]));
+  if (!CHEAP) drawShadows(cells.filter(o => o.kind !== 'belt' && !(o.kind === 'mach' && !o.main)).map(o => o.kind === 'mach' ? machShadowBox(o.m) : [o.c + 0.12, o.r + 0.12, o.c + 0.88, o.r + 0.88, o.kind === 'mach' ? (o.main ? machineTopM(o.m.type, o.m.mk) : 0) : o.kind === 'rack' ? 60 : o.kind === 'pillar' ? WALL_H + 6 : o.kind === 'wh' ? 48 : o.kind === 'pc' || o.kind === 'office' ? 30 : 22]));
   const objs = wallSegs().concat(annexWalls());
   for (const o of cells) {
     const d = o.c + o.r + 1;
@@ -4475,7 +4525,7 @@ function drawWorld(t) {
         if (m.phase < 2) { ctx.globalAlpha = moving ? 0.3 : 0.6; drawMachine(m.type, m.c, m.r, { ...mo, status: 'off', t }); ctx.globalAlpha = 1; drawScaffold(m.c, m.r, machineTopM(m.type, m.mk), fw, fh); }
         else drawMachine(m.type, m.c, m.r, { ...mo, status: m.cur ? 'work' : m.op ? 'wait' : 'off', busy: !!m.cur, t });
         if (m.mk > 1 && m.phase >= 2) { const q = iso(m.c + fw / 2, m.r + fh - 0.04, 8); rrect(q[0] - 9, q[1] - 6, 18, 11, 2, '#e0b84a', '#2b2410', 1); textW(['', 'II', 'III', 'IV', 'V'][mkOf(m) - 1], q[0], q[1], 7, '#2b2410'); } // the Mk plate
-        if (m.op && atWork && m.present !== false) { const p = iso(m.c + fw - 0.14, m.r + fh + 0.02, 0); if (!drawPerson('mach', m.id, p[0], p[1], { work: !!m.cur, t })) sprite(m.cur && Math.sin(t * 9) > 0 ? 'work' : 'walk0', p[0], p[1], 2, true, OP_PAL); }
+        if (m.op && atWork && m.present !== false) { const mk = machShrink(m.type, m.mk || 1, fw, fh), p = iso(m.c + fw / 2 + (fw / 2 - 0.14) * mk, m.r + fh / 2 + (fh / 2 + 0.02) * mk + (mk < 1 ? 0.25 : 0), 0); /* by the machine as drawn, even when a big one is drawn smaller */ if (!drawPerson('mach', m.id, p[0], p[1], { work: !!m.cur, t })) sprite(m.cur && Math.sin(t * 9) > 0 ? 'work' : 'walk0', p[0], p[1], 2, true, OP_PAL); }
         if (m.out) drawPiece(m.out.ops, m.c + 0.15, m.r + fh - 0.1, m.out.mat);
         if (m.inbox) drawPiece(m.inbox.ops, m.c + fw - 0.1, m.r + 0.15, m.inbox.mat);
         if (m.pop > 0) { ctx.globalAlpha = Math.min(1, m.pop * 2); drawPiece(m.popOps || '', m.c + fw / 2 - (1 - m.pop) * 0.6, m.r + fh / 2 - (1 - m.pop) * 0.6, m.popMat); ctx.globalAlpha = 1; }
@@ -4486,7 +4536,7 @@ function drawWorld(t) {
   const atWork = onShift();
   for (const k of F.commute || []) objs.push({ d: k.x + k.y, f: () => drawCommuter(k, t) });
   for (const w of F.workers) if (atWork && !w.hidden) objs.push({ d: w.c + w.r, f: () => drawWorker(w, t) });
-  for (const k of F.clerks || []) objs.push({ d: k.x + k.y + (k.mode === 'sit' ? 0.3 : 0), f: () => drawClerk(k, t) });
+  for (const k of F.clerks || []) objs.push({ d: k.mode === 'sit' && k.desk ? k.desk.c + k.desk.r + 1.05 : k.x + k.y, f: () => drawClerk(k, t) }); // seated: just after the desk, before the glass in front of it
   for (const k of F.trucks || []) objs.push({ d: k.c + k.r + 0.8, f: () => drawTruck(k, t) });
   for (const [wid, w] of Object.entries(F.itw || {})) if (atWork && !w.hidden) objs.push({ d: w.c + w.r + 0.01, f: () => {
     const p = iso(w.c, w.r, 0), moving = w.path.length > 0, step = moving ? Math.floor(w.walkT * 6) % 2 : 0;
@@ -4610,7 +4660,7 @@ function layoutZones(b) { // the warehouse wing beside the floor and the office 
     if (v.notch > 0 && nw > 0 && nh > 0) { const back = v.notch !== 2; for (let r = 0; r < nh; r++) for (let c = 0; c < nw; c++) { const cc = back ? c : c, rr = back ? r : R - 1 - r; if (!cellAt(cc, rr)) b.cells.delete(K(cc, rr)); } }
   }
   for (const o of Object.values(b.grid)) if (o.kind === 'pillar') clearCell(o.c, o.r);
-  if (v.pil >= 0) { // load-bearing columns standing in the hall, on a grid that changes from site to site, never in the way of the door
+  if (v.pil >= 0 && tune.pillars) { // load-bearing columns standing in the hall, on a grid that changes from site to site, never in the way of the door
     const step = [4, 3, 4][v.pil], off = [1, 2, 2][v.pil], want = [0, 1, 2, 4, 6][b.stage] + (v.pil === 1 ? 1 : 0);
     let n = 0;
     for (let r = off; r < R - 1 && n < want; r += step) for (let c = off + ((r / step) % 2 ? 1 : 0); c < C - 1 && n < want; c += step) {
@@ -4757,9 +4807,9 @@ function annexWalls() { // from every edge: walls where the building ends at the
     }
   }
   const sign = (c, r, z, label, col) => { const p = iso(c, r, z); ctx.font = `bold 12px ${FONT}`; const tw = ctx.measureText(label).width + 14; rrect(p[0] - tw / 2, p[1] - 10, tw, 19, 3, '#3a2416', col, 1.5); textW(label, p[0], p[1] + 1, 12, col); };
-  if (whDoor) { const [c, r, dc, dr] = whDoor, x = c + 0.5 + dc * 0.5, y = r + 0.5 + dr * 0.5; out.push({ d: A.c1 + A.r1 + 2, f: () => { line(iso(x, y, 58), iso(x, y, 22), '#2b2b2b', 1); sign(x, y, 62, 'MAGAZZINO', '#f2c230'); } }); }
+  if (whDoor && !tune.hideAreaSigns) { const [c, r, dc, dr] = whDoor, x = c + 0.5 + dc * 0.5, y = r + 0.5 + dr * 0.5; out.push({ d: A.c1 + A.r1 + 2, f: () => { line(iso(x, y, 58), iso(x, y, 22), '#2b2b2b', 1); sign(x, y, 62, 'MAGAZZINO', '#f2c230'); } }); }
   if (O) {
-    out.push({ d: O.c1 + O.r1 + 2, f: () => sign((O.c0 + O.c1) / 2, (O.r0 + O.r1) / 2, 46, 'UFFICIO', '#ffe8b0') });
+    if (!tune.hideAreaSigns) out.push({ d: O.c1 + O.r1 + 2, f: () => sign((O.c0 + O.c1) / 2, (O.r0 + O.r1) / 2, 46, 'UFFICIO', '#ffe8b0') });
     for (const o of officeDecor(O, state.t)) out.push(o.d === O.c0 + O.r0 + 0.05 ? { d: O.c0 + O.r1 + 0.3, f: o.f } : o);
   }
   return out;
@@ -4789,7 +4839,8 @@ function drawShelf(o, t) { // a metal shelving unit; its bar bundles show how fu
 }
 function drawOffice(col, row, t) { // a modern open-plan workstation: white bench desk on steel legs, two monitors, a mesh chair, a low screen, a plant
   const c = col + 0.5, r = row + 0.5, h = hash(col * 7 + 3, row * 5 + 1), wood = ['#d8c4a0', '#e8e4dc', '#c8a878'][h % 3];
-  if (drawBld('desk', col + 0.17, row + 0.06, 0.66, 0.56)) return; // the back of the cell: room to walk in front of the row and between desks
+  const sitter = deskTaken(col, row), sitImg = sitter ? 'desk_sit' + (idSeed(sitter.pal) % tune.facesPerJob) : null;
+  if (drawBld(sitter && hdImg(sitImg + '.png') ? sitImg : sitter && hdImg('desk_free.png') ? 'desk_free' : 'desk', col + DESK_BOX[0], row + DESK_BOX[1], DESK_BOX[2], DESK_BOX[3])) return; // with someone seated, the desk without its own chair: the seated sprite brings it // the back of the cell: room to walk in front of the row and between desks
   box(c - 0.44, r - 0.46, c + 0.44, r - 0.4, 0, 22, '#7d8a96'); poly(qT(c - 0.44, r - 0.46, c + 0.44, r - 0.4, 22), '#5bc7ff'); // acoustic screen with an accent top
   for (const [dc, dr] of [[-0.4, -0.36], [0.36, -0.36], [-0.4, 0.06], [0.36, 0.06]]) box(c + dc, r + dr, c + dc + 0.04, r + dr + 0.04, 0, 17, '#9aa4ad'); // steel legs
   box(c - 0.42, r - 0.38, c + 0.42, r + 0.12, 17, 19, wood); // desk top
@@ -5150,7 +5201,7 @@ function onWorkHour() {
   }
 }
 function endShift() {
-  sfx.level(); showBanner('Fine turno: sono le 16:00', 'Le macchine si fermano fino alle 08: niente produzione e niente guasti', '#e8b45a');
+  if (!state.skip && !tune.quietShiftEnd) sfx.level(); showBanner('Fine turno: sono le 16:00', 'Le macchine si fermano fino alle 08: niente produzione e niente guasti', '#e8b45a');
   events.push({ type: 'endShift', day: dayNum() }); save();
 }
 // ---- Calendar: pick a day and the factory runs on its own until that morning; machines break more often meanwhile
@@ -5322,7 +5373,8 @@ function drawTopLayer(t, part = 'all') {
   if (state.placing) {
     const P = state.placing, name = P.kind === 'mach' ? MACH[P.m ? P.m.type : P.type].name : LOGI[P.kind].name;
     hint(`${P.m ? 'Sposta' : 'Piazza'}: ${name}  ·  tocca una cella libera del capannone`);
-    button('Annulla', W / 2 - 80, 168, 160, 46, () => { state.placing = null; }, { color: '#9aa4ad', size: 18, name: 'cancel' });
+    button('Annulla', W / 2 - 170, 168, 160, 46, () => { state.placing = null; }, { color: '#9aa4ad', size: 18, name: 'cancel' });
+    button('Ruota 90° (R)', W / 2 + 10, 168, 170, 46, rotatePlacing, { color: '#ffd36a', size: 17, name: 'rotate' });
   } else if (state.tool === 'op') hint(`Operatore: tocca una macchina per metterci o toglierci un Operatore macchina (${opsFree()} liberi)`);
   else if (state.tool === 'demo') hint('Demolisci: tocca due volte una macchina, un magazzino o una cassa per venderli');
   else if (!F && state.wtool === 'draw') hint(`Capannone: trascina un rettangolo sul prato per disegnarne le pareti (${tune.cellCost} monete a cella)`);
@@ -5420,7 +5472,7 @@ const scenes = {
       if (pressed('Escape')) { if (state.mg && state.mg.step === 'intro') state.mg = null; state.panel = null; state.placing = null; state.tool = null; state.demo = null; state.wtool = null; state.wplacing = null; }
       if (!state.mg) {
         if (pressed('KeyB')) { openPanel(F ? 'shop' : 'wshop'); state.shopTab = 0; }
-        if (pressed('KeyR')) openPanel('recipes');
+        if (pressed('KeyR')) { if (state.placing) rotatePlacing(); else openPanel('recipes'); }
         if (pressed('KeyT')) openPanel('tools');
         if (pressed('KeyQ')) openPanel('crew');
         if (pressed('KeyU') && F) openPanel('office');

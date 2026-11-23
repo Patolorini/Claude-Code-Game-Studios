@@ -1,6 +1,6 @@
 # active-memory handoff: Workline Factory (ex Fabbrica CNC)
 
-**Handoff #2** · 2026-11-22 · Lineage: #1 (2026-11-22): iterazioni 1-81 di Fabbrica CNC, tutte salvate (artifact versione 20); #2 (2026-11-22/23): iterazioni 82-88: menu "Workline Factory", grafica in pixel art realistica con SpriteCook (personaggi, città, interni, terreni, strutture), bug della città, piazza con rotatoria, ponti, città a quartieri (anteprima 87, gioco 88), binari fino al bordo; SALVATE (artifact versione 21); #2b (2026-11-23): iterazioni 89-91: fix container/ufficio/strada del magazzino, camminate SpriteCook (2 facce per mestiere + Noah), impiegati seduti di spalle; SALVATE (artifact versione 22)
+**Handoff #2** · 2026-11-22 · Lineage: #1 (2026-11-22): iterazioni 1-81 di Fabbrica CNC, tutte salvate (artifact versione 20); #2 (2026-11-22/23): iterazioni 82-88: menu "Workline Factory", grafica in pixel art realistica con SpriteCook (personaggi, città, interni, terreni, strutture), bug della città, piazza con rotatoria, ponti, città a quartieri (anteprima 87, gioco 88), binari fino al bordo; SALVATE (artifact versione 21); #2b (2026-11-23): iterazioni 89-91: fix container/ufficio/strada del magazzino, camminate SpriteCook (2 facce per mestiere + Noah), impiegati seduti di spalle; SALVATE (artifact versione 22); #2c (2026-11-23): iterazioni 92-97: scrivanie solide, seduti alla scrivania come in foto (desk_sit0/1), niente scritte d'area, niente accanto agli uffici, casco operatrice, macchine più piccole e crescenti col livello, ombre, rotazione 90°, niente pilastri; SALVATE (artifact versione 23)
 
 ## 0. Instructions for Claude (read first)
 
@@ -60,6 +60,9 @@ You are continuing work from a previous chat. That chat is gone; this file is th
 | 13 | Galleria con portale (iter. 86) | "la galleria non mi piace prolunga i binari fino alla fine della mappa" |
 | 15 | Camminata finta (gambe tagliate e piegate) | "falla con spritecook ti è uscita male e sembrano tutti zoppi" |
 | 16 | Impiegati seduti: si vedeva solo la testa | seduti sulla sedia con tutto il corpo (sprite di spalle) |
+| 17 | Seduti sospesi, sedia fantasma, sedia che si muove | scrivania occupata = un'unica immagine SpriteCook con la persona seduta (come la foto dell'utente) |
+| 18 | Alberi/oggetti accanto agli uffici | "non mettere niente di fianco agli uffici" |
+| 19 | Macchine enormi al livello massimo | più piccole (tetto di grandezza) e crescenti col livello |
 | 14 | Città con strade curve casuali | "crea diversi quartieri così come quello che mi hai fatto, ovviamente varia un po' la disposizione" (pianta vista dall'alto data dall'utente) |
 
 ## 6. Decisions
@@ -102,7 +105,9 @@ You are continuing work from a previous chat. That chat is gone; this file is th
 | guideFullSec / tipEverySec | 18 / 70 |
 | hdArt / hdWorkerH / hdTreeH / hdTexCells / texInside | 1 / 50 / 78 / 2 / 0.75 |
 | facesPerJob / walkFps / walkAnim / walkSwing / walkHip | 2 / 9 / 1 / 0.32 / 0.44 |
-| sitC / sitR / sitH | 0.36 / 0.78 / 0.74 |
+| sitC / sitR / sitH | 0.40 / 0.72 / 1.0 |
+| machMaxH / machMaxW / machLevelStep / shadowLen | 120 / 150 / 0.1 / 0.6 |
+| pillars / hideAreaSigns / quietShiftEnd | 0 / 1 / 0 |
 | pixelInside / pixelTown / machSpriteFit | 1 / 2 / 0.96 |
 
 | Costante in index.html (nuove) | Valore |
@@ -114,10 +119,10 @@ You are continuing work from a previous chat. That chat is gone; this file is th
 | GROWTH spostati | station 23.5,4 · houses 1,28 · offices 21,16.5 · market 21.5,26 · houses 51,24.4 |
 
 - SpriteCook: crediti rimasti 318; modello usato `gpt-image-2.5-flare`; le uscite pixel a volte si schiacciano (32 px): usare sempre il `raw_url` (check_job_status verbose) e ritagliare con lo script `split.py`.
-- Artifact: https://claude.ai/artifact/JE1Fkh7S5umczMBtZT4YXo (versione 22, con le iterazioni 82-91; pubblicata con config.js + assets/mach_*.png + assets/px/*.png nella mappa files)
+- Artifact: https://claude.ai/artifact/JE1Fkh7S5umczMBtZT4YXo (versione 23, con le iterazioni 82-97; pubblicata con config.js + assets/mach_*.png + assets/px/*.png nella mappa files)
 - Ultimo commit: vedi git log (iterazioni 82-88)
-- Ultima iterazione registrata: 91
-- SpriteCook: crediti rimasti 12. Camminate = animate_game_art da sprite caricato (create_asset_upload + PUT + finalize), sprite allargato a 1:2, 20 crediti l'una, una alla volta; strip 8 fotogrammi in assets/px/walk_<ruolo><faccia>.png (script strip.py: ritaglio comune + rimozione puntini)
+- Ultima iterazione registrata: 97
+- SpriteCook: crediti rimasti 2444 (l'utente ha ricaricato). Camminate = animate_game_art da sprite caricato (create_asset_upload + PUT + finalize), sprite allargato a 1:2, 20 crediti l'una, una alla volta; strip 8 fotogrammi in assets/px/walk_<ruolo><faccia>.png (script strip.py: ritaglio comune + rimozione puntini)
 - Anteprima separata (per provare prima di salvare): https://claude.ai/artifact/QA2C3su7Bj12ZuLDcUP2cc
 
 ## 9. People, terms & names
@@ -129,18 +134,18 @@ You are continuing work from a previous chat. That chat is gone; this file is th
 ## 10. Work state
 | Item | Status | Version / location | Notes |
 |---|---|---|---|
-| Gioco | salvato | `prototypes/fabbrica-cnc/index.html` + `config.js` | iterazioni 1-91 |
+| Gioco | salvato | `prototypes/fabbrica-cnc/index.html` + `config.js` | iterazioni 1-97 |
 | Asset nuovi | salvati | `prototypes/fabbrica-cnc/assets/px/` + `provenance.yaml` | tutti registrati |
 | Anteprima città | solo nello scratchpad | `evidence/iter87-city-preview.png` | la pagina HTML dell'anteprima non è nel repo |
 | Prova 3D | da togliere (chiedere) | `assets/hd/` | non usata; il comando rm era stato bloccato |
 | Brief | aggiornato | `design/game-brief.md` = `prototypes/fabbrica-cnc/brief.md` | righe "After play:" fino alla 86 |
-| Registro | aggiornato | `evidence/changes.tsv` | iterazioni 82-91 |
+| Registro | aggiornato | `evidence/changes.tsv` | iterazioni 82-97 |
 | Screenshot | salvati | `evidence/iter82-*.png` … `iter88-*.png` | |
-| Build condivisa | pubblicata (v22) | `bash .claude/scripts/one-shot-share.sh prototypes/fabbrica-cnc` → `dist/` | poi Artifact publish file_path `.../dist/index.html`, files {"config.js": "prototypes/fabbrica-cnc/dist/config.js"}, url sopra |
+| Build condivisa | pubblicata (v23) | `bash .claude/scripts/one-shot-share.sh prototypes/fabbrica-cnc` → `dist/` | poi Artifact publish file_path `.../dist/index.html`, files {"config.js": "prototypes/fabbrica-cnc/dist/config.js"}, url sopra |
 | Controlli | — | `bash .claude/scripts/one-shot-check.sh prototypes/fabbrica-cnc --keep` (ultima riga attesa "keep lines 0 pinned 0") | qa.js, qa2.js, town.t.js, vis.t.js, walls.t.js erano nello scratchpad (non nel repo): vanno ricreati se servono |
 
 ## 11. Next steps
-1. **Next action:** chiedere all'utente se ha ricaricato SpriteCook (servono circa 400-450 crediti) per fare il retro dei personaggi: figura vista da dietro + camminata vista da dietro per i 13 personaggi animati, poi usarli quando camminano verso l'alto dello schermo.
+1. **Next action:** l'utente ha detto "prima di fare il 3d completo del personale": il prossimo lavoro è il retro dei personaggi (crediti disponibili): figura vista da dietro + camminata vista da dietro per i 13 personaggi animati, poi usarli quando camminano verso l'alto dello schermo.
 2. Chiedere se togliere `assets/hd/` e gli sprite non usati.
 3. Proposte possibili (solo se l'utente vuole): menu in pixel art realistica; la locomotiva guarda sempre a est; meno cemento intorno al Grande stabilimento; sprite tunnel.png serve ancora solo come segnale per il nuovo disegno dei binari (drawRail controlla hdImg('tunnel.png')).
 
@@ -152,4 +157,4 @@ You are continuing work from a previous chat. That chat is gone; this file is th
 - Nothing to attach (tutto è nel repository, branch `claude/epic-brahmagupta-b2evcr`).
 
 ---
-<sub>Audit: 13/13 sections · 9 rules · 16 corrections · 40 data points · secrets removed: none found · generated by active-memory</sub>
+<sub>Audit: 13/13 sections · 9 rules · 19 corrections · 40 data points · secrets removed: none found · generated by active-memory</sub>
