@@ -1,6 +1,6 @@
 # active-memory handoff: Workline Factory (ex Fabbrica CNC)
 
-**Handoff #2** · 2026-11-22 · Lineage: #1 (2026-11-22): iterazioni 1-81 di Fabbrica CNC, tutte salvate (artifact versione 20); #2 (2026-11-22/23): iterazioni 82-88: menu "Workline Factory", grafica in pixel art realistica con SpriteCook (personaggi, città, interni, terreni, strutture), bug della città, piazza con rotatoria, ponti, città a quartieri (anteprima 87, gioco 88), binari fino al bordo; SALVATE (artifact versione 21); #2b (2026-11-23): iterazioni 89-91: fix container/ufficio/strada del magazzino, camminate SpriteCook (2 facce per mestiere + Noah), impiegati seduti di spalle; SALVATE (artifact versione 22); #2c (2026-11-23): iterazioni 92-97: scrivanie solide, seduti alla scrivania come in foto (desk_sit0/1), niente scritte d'area, niente accanto agli uffici, casco operatrice, macchine più piccole e crescenti col livello, ombre, rotazione 90°, niente pilastri; SALVATE (artifact versione 23)
+**Handoff #2** · 2026-11-22 · Lineage: #1 (2026-11-22): iterazioni 1-81 di Fabbrica CNC, tutte salvate (artifact versione 20); #2 (2026-11-22/23): iterazioni 82-88: menu "Workline Factory", grafica in pixel art realistica con SpriteCook (personaggi, città, interni, terreni, strutture), bug della città, piazza con rotatoria, ponti, città a quartieri (anteprima 87, gioco 88), binari fino al bordo; SALVATE (artifact versione 21); #2b (2026-11-23): iterazioni 89-91: fix container/ufficio/strada del magazzino, camminate SpriteCook (2 facce per mestiere + Noah), impiegati seduti di spalle; SALVATE (artifact versione 22); #2c (2026-11-23): iterazioni 92-97: scrivanie solide, seduti alla scrivania come in foto (desk_sit0/1), niente scritte d'area, niente accanto agli uffici, casco operatrice, macchine più piccole e crescenti col livello, ombre, rotazione 90°, niente pilastri; SALVATE (artifact versione 23); #2d (2026-11-23): iterazioni 98-104: viste di spalle e camminate di spalle per tutti (direzione reale), Noah pelato, lotti della centrale e ingresso personale SpriteCook agganciati alla griglia (drawPlot), persone senza macchina visibili (idlew), Squadra con i personaggi nuovi, volto per genere del nome, menu con foto della città e del capannone, precaricamento di tutte le immagini; SALVATE (artifact versione 24)
 
 ## 0. Instructions for Claude (read first)
 
@@ -119,9 +119,9 @@ You are continuing work from a previous chat. That chat is gone; this file is th
 | GROWTH spostati | station 23.5,4 · houses 1,28 · offices 21,16.5 · market 21.5,26 · houses 51,24.4 |
 
 - SpriteCook: crediti rimasti 318; modello usato `gpt-image-2.5-flare`; le uscite pixel a volte si schiacciano (32 px): usare sempre il `raw_url` (check_job_status verbose) e ritagliare con lo script `split.py`.
-- Artifact: https://claude.ai/artifact/JE1Fkh7S5umczMBtZT4YXo (versione 23, con le iterazioni 82-97; pubblicata con config.js + assets/mach_*.png + assets/px/*.png nella mappa files)
+- Artifact: https://claude.ai/artifact/JE1Fkh7S5umczMBtZT4YXo (versione 24, con le iterazioni 82-104; pubblicata con config.js + assets/mach_*.png + assets/px/*.png nella mappa files)
 - Ultimo commit: vedi git log (iterazioni 82-88)
-- Ultima iterazione registrata: 97
+- Ultima iterazione registrata: 104
 - SpriteCook: crediti rimasti 2444 (l'utente ha ricaricato). Camminate = animate_game_art da sprite caricato (create_asset_upload + PUT + finalize), sprite allargato a 1:2, 20 crediti l'una, una alla volta; strip 8 fotogrammi in assets/px/walk_<ruolo><faccia>.png (script strip.py: ritaglio comune + rimozione puntini)
 - Anteprima separata (per provare prima di salvare): https://claude.ai/artifact/QA2C3su7Bj12ZuLDcUP2cc
 

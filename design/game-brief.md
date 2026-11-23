@@ -116,6 +116,13 @@ After play: le sedie non devono muoversi quando sono seduti; stanno ancora sospe
 After play: (foto) con SpriteCook creare la seduta alla scrivania come in foto e fixare il casco dell'operatrice (casco doppio nella camminata)
 After play: prima del 3d completo del personale sistemare la grandezza dei macchinari (al livello massimo coprono quasi 1/4 di schermo): macchine più piccole, massimo grandezza 4x4, tenendo le creazioni di SpriteCook; togliere i pilastri generati a caso, troppo ingombranti
 After play: rivedere le ombre e anche i macchinari degli altri livelli e adeguarli; poter girare le macchine di 90 gradi per sfruttare anche il lato sinistro della fabbrica, non solo posizionarle che guardino a sud
+After play: fare il 3d completo del personale, così possono camminare liberamente anche in diagonale guardando effettivamente dove stanno camminando
+After play: sempre con SpriteCook fare Noah pelato; rielaborare la zona in costruzione e l'entrata rendendole più simili al resto delle costruzioni fatte con SpriteCook; se trasporti gli operatori da uno stabile all'altro e/o li assumi non compaiono tutti a schermo nello stabile
+After play (screenshot del cantiere): cosa dovrebbe essere? deve combaciare con le dimensioni del resto e non rimanere in diagonale tutta storta
+After play: l'entrata è in diagonale rispetto al resto delle stanze e al terreno della fabbrica, sistemarla
+After play: sistemare la casella Squadra perché sono rimasti i modelli vecchi anche all'interno
+After play: attento ad attestare i nomi corretti: se il nome è femminile avrà la skin femminile, sistemare i nomi; poi rifare il menu principale con un'anteprima della città e dell'interno fabbrica
+After play: le anteprime del menu principale non sono come quelle del gioco reale, rifare le foto; nelle foto è rimasto qualche bug visivo tipo la fabbrica che galleggia sull'acqua, probabilmente perché il gioco non carica le texture istantaneamente
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 

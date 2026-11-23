@@ -387,20 +387,6 @@
   source: {vendor: "SpriteCook", product: "build3", url: "https://spritecook.ai"}
   date: 2026-11-22
   ships: true
-- path: assets/px/noah0.png
-  origin: ai
-  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 33678a88-04c6-496d-b729-a1b6be8e89ce)"
-  model: "gpt-image-2.5-flare"
-  source: {vendor: "SpriteCook", product: "noah0", url: "https://spritecook.ai"}
-  date: 2026-11-22
-  ships: true
-- path: assets/px/noah1.png
-  origin: ai
-  tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset 33678a88-04c6-496d-b729-a1b6be8e89ce)"
-  model: "gpt-image-2.5-flare"
-  source: {vendor: "SpriteCook", product: "noah1", url: "https://spritecook.ai"}
-  date: 2026-11-22
-  ships: true
 - path: assets/px/clerk0.png
   origin: ai
   tool: "SpriteCook generate_game_art (realistic pixel art sheet, raw render cut by connected alpha and resized with Pillow; sheet asset b529e12d-47cb-482f-b447-693b4849c867)"
@@ -961,13 +947,6 @@
   source: {vendor: "SpriteCook", product: "clerk1 walk cycle", url: "https://spritecook.ai"}
   date: 2026-11-23
   ships: true
-- path: assets/px/walk_noah0.png
-  origin: ai
-  tool: "SpriteCook animate_game_art (8-frame walk from the uploaded noah0.png sprite, padded to 1:2), frames cropped to one shared box with Pillow (animation asset 28659542-928f-4a69-8eec-9693a20ee7c4)"
-  model: "pixel-engine (SpriteCook default)"
-  source: {vendor: "SpriteCook", product: "noah0 walk cycle", url: "https://spritecook.ai"}
-  date: 2026-11-23
-  ships: true
 - path: assets/px/plant.png
   origin: ai
   tool: "SpriteCook generate_game_art (pixel art), trimmed with Pillow (asset 42dd806a-32c1-435f-b5d8-708ca33a8a03)"
@@ -1022,5 +1001,248 @@
   tool: "SpriteCook generate_game_art, edit of the uploaded desk.png (asset ae8497e9) with a seated worker; cropped and background haze removed with Pillow (asset ed3c082c-c2ef-42cf-a733-0e0168924e00)"
   model: "gpt-image-2.5-flare"
   source: {vendor: "SpriteCook", product: "desk with a man (curly hair) seated typing", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_op0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded op0.png (asset 9e32dd4d) seen from behind; cropped with Pillow (asset 3a500896)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "op0 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_op0.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_op0 (asset 3a500896), 8 frames; frames cropped to one box and specks removed with Pillow (asset 1a5e57a8)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "op0 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_op1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded op1.png (asset 3b71b9db) seen from behind; cropped with Pillow (asset d28c6c12)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "op1 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_op1.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_op1 (asset d28c6c12), 8 frames; frames cropped to one box and specks removed with Pillow (asset 0e726827)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "op1 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_mag0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded mag0.png (asset b6d160ef) seen from behind; cropped with Pillow (asset 93d869ab)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "mag0 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_mag0.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_mag0 (asset 93d869ab), 8 frames; frames cropped to one box and specks removed with Pillow (asset ff647bfe)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "mag0 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_mag1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded mag1.png (asset 0e5fbb17) seen from behind; cropped with Pillow (asset 72efca58)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "mag1 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_mag1.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_mag1 (asset 72efca58), 8 frames; frames cropped to one box and specks removed with Pillow (asset b6e9d27b)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "mag1 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_it0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded it0.png (asset 0c7411fe) seen from behind; cropped with Pillow (asset 3316ccae)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "it0 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_it0.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_it0 (asset 3316ccae), 8 frames; frames cropped to one box and specks removed with Pillow (asset 2c27a98a)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "it0 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_it1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded it1.png (asset e60e9eb1) seen from behind; cropped with Pillow (asset f93629b2)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "it1 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_it1.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_it1 (asset f93629b2), 8 frames; frames cropped to one box and specks removed with Pillow (asset a05734e4)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "it1 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_tech0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded tech0.png (asset b2b47dbe) seen from behind; cropped with Pillow (asset 33840b3d)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "tech0 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_tech0.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_tech0 (asset 33840b3d), 8 frames; frames cropped to one box and specks removed with Pillow (asset 6d94358d)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "tech0 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_tech1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded tech1.png (asset aaff4621) seen from behind; cropped with Pillow (asset 87f80c2e)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "tech1 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_tech1.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_tech1 (asset 87f80c2e), 8 frames; frames cropped to one box and specks removed with Pillow (asset 181c7a66)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "tech1 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_build0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded build0.png (asset 997737dc) seen from behind; cropped with Pillow (asset bea23896)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "build0 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_build0.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_build0 (asset bea23896), 8 frames; frames cropped to one box and specks removed with Pillow (asset 622bfcb3)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "build0 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_build1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded build1.png (asset 210498ee) seen from behind; cropped with Pillow (asset 117778d4)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "build1 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_build1.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_build1 (asset 117778d4), 8 frames; frames cropped to one box and specks removed with Pillow (asset 37822aa1)"
+  model: "pixel-engine-v1.5"
+  source: {vendor: "SpriteCook", product: "build1 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_clerk0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded clerk0.png (asset c8f76c05) seen from behind; cropped with Pillow (asset 45c0a4bf)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "clerk0 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_clerk0.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_clerk0 (asset 45c0a4bf), 8 frames; frames cropped to one box and specks removed with Pillow (asset 59004c95)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "clerk0 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_clerk1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded clerk1.png (asset d6e9de85) seen from behind; cropped with Pillow (asset 66b1bb2a)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "clerk1 back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_clerk1.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_clerk1 (asset 66b1bb2a), 8 frames; frames cropped to one box and specks removed with Pillow (asset eb54df9b)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "clerk1 back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/noah0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the padded noah0 (asset b73fd02c) made bald; cropped with Pillow (asset 7f2c4c19-8672-4e44-99ae-9bee3335ecf6)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Noah bald, standing with tablet", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/noah1.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the uploaded padded noah1 (asset be04ecbe) made bald, bald noah0 as style; cropped with Pillow (asset 576903e8-c401-46c6-bab2-b9b5abc6b43d)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "Noah bald, pointing", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walk_noah0.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of bald noah0 (asset 7f2c4c19), 8 frames; cropped to one box with Pillow (asset 4e2ec1ed-4009-41e9-baf5-54dd80c0160c)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "bald Noah walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/back_noah0.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of bald noah0 (asset 7f2c4c19) seen from behind; cropped with Pillow (asset c0ab1139-aaa0-4414-bbb6-c30fa7308050)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "bald Noah back view", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/walkb_noah0.png
+  origin: ai
+  tool: "SpriteCook animate_game_art of back_noah0 (asset c0ab1139), 8 frames; cropped to one box with Pillow (asset 372a1772-3759-4b33-a533-9d8ca16bddb1)"
+  model: "pixel-engine-v1.1"
+  source: {vendor: "SpriteCook", product: "bald Noah back walk cycle", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/pz_next.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, fenced building plot with bricks, sand and cones; cropped with Pillow (asset 787279d8-dca5-417b-b78b-b42e19f8d727)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "power-station plot, next section", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/pz_empty.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of pz_next emptied; baked background haze removed by flood fill with Pillow (asset ad800d98-f704-4674-8911-4a86511547b1)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "power-station plot, later section", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/pz_build.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of pz_next with scaffolding and a half-built transformer; cropped with Pillow (asset c4ce0b81-8b21-4c4a-b034-9d52642d0c86)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "power-station plot under construction", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/staffroom.png
+  origin: ai
+  tool: "SpriteCook generate_game_art, edit of the first annex (asset e33616e8) redrawn in strict 2:1 isometric; raw output, light background flood-filled out, cropped and scaled to 240 px with Pillow (asset 6456e4b6-f01f-4549-86bf-7df3dce1888b)"
+  model: "gpt-image-2.5-flare"
+  source: {vendor: "SpriteCook", product: "staff entrance annex, 2:1 isometric", url: "https://spritecook.ai"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/menu_town.jpg
+  origin: code
+  tool: "rendered by the game itself at double resolution once every picture had loaded (drawTown of a sandbox world, town camera on a site, no HUD) with Playwright; saved as JPEG with Pillow"
+  source: {vendor: "this project", product: "town view for the main menu", url: "prototypes/fabbrica-cnc/index.html"}
+  date: 2026-11-23
+  ships: true
+- path: assets/px/menu_factory.jpg
+  origin: code
+  tool: "rendered by the game itself at double resolution once every picture had loaded (drawWorld of a sandbox site with machines and crew, no HUD) with Playwright; saved as JPEG with Pillow"
+  source: {vendor: "this project", product: "factory interior view for the main menu", url: "prototypes/fabbrica-cnc/index.html"}
   date: 2026-11-23
   ships: true

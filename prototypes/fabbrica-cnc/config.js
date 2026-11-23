@@ -251,7 +251,11 @@ window.CONFIG = {
   sitC: { value: 0.40, min: 0, max: 1, step: 0.01 },         // dove sta la sedia di chi lavora al pc, lungo la colonna della scrivania
   sitR: { value: 0.72, min: 0, max: 1, step: 0.01 },         // e lungo la riga
   sitH: { value: 1.0, min: 0.4, max: 1.4, step: 0.01 },     // altezza di chi è seduto rispetto a chi è in piedi        // facce diverse per mestiere (2 hanno la camminata animata)
+  menuSlide: { value: 8, min: 3, max: 20, step: 1 },        // secondi per ogni vista del menu (città, fabbrica)
   walkFps: { value: 9, min: 4, max: 16, step: 1 },          // velocità dei fotogrammi della camminata
+  idleSpeed: { value: 1.2, min: 0.3, max: 3, step: 0.1 }, // celle al secondo di chi non ha una macchina e passeggia
+  idleWaitMin: { value: 3, min: 0, max: 20, step: 1 }, // secondi fermo tra una passeggiata e l'altra
+  idleWaitMax: { value: 9, min: 1, max: 40, step: 1 },
   walkAnim: { value: 1, min: 0, max: 1, step: 1 },           // camminata con le gambe che si muovono (1) o dondolio (0)
   walkSwing: { value: 0.32, min: 0.05, max: 0.7, step: 0.01 }, // quanto oscillano le gambe a ogni passo
   walkHip: { value: 0.44, min: 0.3, max: 0.6, step: 0.01 },   // altezza dei fianchi rispetto al personaggio

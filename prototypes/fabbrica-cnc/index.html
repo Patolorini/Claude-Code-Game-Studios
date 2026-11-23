@@ -561,6 +561,11 @@ const OP_PAL = { Y: '#f4f4f4', y: '#c9c9c9', B: '#e07a2e', b: '#a8541c', O: '#f2
 const MAG_PAL = { B: '#3a8a4a', b: '#28603a', O: '#f2e35a' };
 const IT_PAL = { Y: '#3b3f45', y: '#24272b', B: '#5bc7ff', b: '#2f7fb0', O: '#ffffff' };
 const TECH_PAL = { Y: '#f2c230', y: '#c99a1a', B: '#7a4fb0', b: '#54357c', O: '#f2c230' }; // technicians: purple overalls, yellow helmet
+function personIcon(role, seed, x, y, h, flip = false) { // a realistic person standing on (x, y), h pixels tall, for menus and buttons; false when the art is not there
+  return drawPerson(role, seed, x, y, { fixed: true, flip, scale: h / tune.hdWorkerH });
+}
+const jobRole = j => j === 'mag' || j === 'it' || j === 'tech' ? j : 'mach'; // the sprite set for a job; free people wear the operator's overalls
+const crewSeed = cw => cw.job === 'mag' || cw.job === 'it' || cw.job === 'tech' ? cw.id : 'crew' + cw.id; // the same face they have in the hall
 function sprite(name, x, y, px, flip, pal) { // x, y: bottom centre; pal swaps colours (operators)
   const rows = SPR[name], w = rows[0].length, h = rows.length, o = Math.max(1, Math.round(px / 2));
   ctx.fillStyle = 'rgba(43,24,14,0.9)';
@@ -661,11 +666,29 @@ function legGap(im) { // the column (0..1 across the sprite) of the gap between 
   } catch (e) { /* a tainted canvas (opened from disk): keep the middle */ }
   return im._gap;
 }
+const PX_FILES = ["back_build0.png", "back_build1.png", "back_clerk0.png", "back_clerk1.png", "back_it0.png", "back_it1.png", "back_mag0.png", "back_mag1.png", "back_noah0.png", "back_op0.png", "back_op1.png", "back_tech0.png", "back_tech1.png", "barn.png", "bench.png", "boxcar.png", "brick.png", "bridge.png", "build0.png", "build1.png", "build2.png", "build3.png", "car0.png", "car1.png", "car2.png", "church.png", "clerk0.png", "clerk1.png", "clerk2.png", "clerk3.png", "containers.png", "crane.png", "desk.png", "desk_free.png", "desk_sit0.png", "desk_sit1.png", "flatcar.png", "forklift.png", "fountain.png", "hA0.png", "hA1.png", "hA2.png", "hA3.png", "hB0.png", "hB1.png", "hB2.png", "hB3.png", "hall.png", "hedge.png", "it0.png", "it1.png", "it2.png", "it3.png", "loco.png", "lot.png", "mag0.png", "mag1.png", "mag2.png", "mag3.png", "market.png", "menu_factory.jpg", "menu_town.jpg", "noah0.png", "noah1.png", "office.png", "op0.png", "op1.png", "op2.png", "op3.png", "pil0.png", "pil1.png", "pil2.png", "plant.png", "power.png", "pz_build.png", "pz_empty.png", "pz_next.png", "rack1.png", "rack2.png", "rack3.png", "school.png", "shed.png", "shelf0.png", "shelf1.png", "shelf2.png", "silos.png", "sit0.png", "sit1.png", "sit2.png", "sit3.png", "site0.png", "site1.png", "site2.png", "site3.png", "site4.png", "stadium.png", "staffroom.png", "station.png", "substation.png", "t_asphalt.png", "t_cobble.png", "t_concrete.png", "t_dirt.png", "t_grass.png", "t_lavender.png", "t_pave.png", "t_plough.png", "t_veg.png", "t_water.png", "t_wheat.png", "tech0.png", "tech1.png", "tech2.png", "tech3.png", "tower.png", "tree.png", "tunnel.png", "van.png", "walk_build0.png", "walk_build1.png", "walk_clerk0.png", "walk_clerk1.png", "walk_it0.png", "walk_it1.png", "walk_mag0.png", "walk_mag1.png", "walk_noah0.png", "walk_op0.png", "walk_op1.png", "walk_tech0.png", "walk_tech1.png", "walkb_build0.png", "walkb_build1.png", "walkb_clerk0.png", "walkb_clerk1.png", "walkb_it0.png", "walkb_it1.png", "walkb_mag0.png", "walkb_mag1.png", "walkb_noah0.png", "walkb_op0.png", "walkb_op1.png", "walkb_tech0.png", "walkb_tech1.png", "worker.png", "workshop.png", "worksite.png"]; // every picture in assets/px, asked for while the menu is up so the game never shows a half-loaded world
+function preloadPx() { for (const n of PX_FILES) hdImg(n); }
+const PERSON_MEM = {}; // last position and heading of every person on screen
+const FEMALE_FACE = { op: 1, mag: 0, it: 0, tech: 1, clerk: 0, build: 1 }; // which of the two faces of each job is a woman
+const FEMALE_NAMES = new Set(['Giulia', 'Sara', 'Elena', 'Chiara', 'Anna', 'Irene', 'Rita']);
+function crewFemale(role, seed) { // the crew member a drawn person stands for, by the seed the hall uses for them: true for a woman's name, false for a man's, null when it is nobody in the crew
+  if (typeof state === 'undefined' || !state || !state.crew) return null;
+  let cw = null; const sv = String(seed);
+  if (sv.startsWith('crew')) cw = state.crew.find(c => c.id === +sv.slice(4));
+  else if (/^\d+$/.test(sv)) cw = role === 'mach' ? state.crew.find(c => c.m === +sv) : role === 'mag' || role === 'it' || role === 'tech' ? state.crew.find(c => c.id === +sv) : null;
+  return cw ? FEMALE_NAMES.has(cw.name) : null;
+}
 function drawPerson(role, seed, x, y, o = {}) { // one of the realistic people, standing on (x, y): o.flip faces right, o.moving/o.walkT walk, o.work sways, o.sit shows them from the waist up behind a desk; false when the sprite is not there
   const pre = PEOPLE[role]; if (!pre) return false;
-  const face = role === 'noah' ? 0 : idSeed(seed) % tune.facesPerJob, key = pre + (role === 'noah' ? (o.pose || 0) : face);
-  const im = hdImg(key + '.png'); if (!im) return false;
-  const wk = o.moving && !o.sit ? hdImg('walk_' + pre + face + '.png') : null; // a walk drawn by SpriteCook: a strip of frames
+  const fem = role === 'noah' ? null : o.female ?? crewFemale(role, seed);
+  const face = role === 'noah' ? 0 : fem != null && pre in FEMALE_FACE ? (fem ? FEMALE_FACE[pre] : 1 - FEMALE_FACE[pre]) : idSeed(seed) % tune.facesPerJob, key = pre + (role === 'noah' ? (o.pose || 0) : face);
+  // which way the person faces: worked out from how they actually moved (in map pixels), kept while they stand still
+  const mem = PERSON_MEM[role + ':' + seed] || (PERSON_MEM[role + ':' + seed] = { x, y, vx: o.flip ? 1 : -1, vy: 1 });
+  if (!o.sit && !o.fixed) { const dx = x - mem.x, dy = y - mem.y; if (Math.hypot(dx, dy) > 0.25 && Math.hypot(dx, dy) < 40) { mem.vx = mem.vx * 0.5 + dx * 0.5; mem.vy = mem.vy * 0.5 + dy * 0.5; } mem.x = x; mem.y = y; }
+  const back = !o.sit && !o.fixed && mem.vy < -0.02 && hdImg('back_' + pre + face + '.png'); // walking away from the camera: the back views
+  o.flip = back ? mem.vx < 0 : (o.fixed ? o.flip : mem.vx > 0); // front art looks to the lower left, back art to the upper right; mirrored for the other side
+  const im = hdImg((back ? 'back_' + pre + face : key) + '.png'); if (!im) return false;
+  const wk = o.moving && !o.sit ? hdImg((back ? 'walkb_' : 'walk_') + pre + face + '.png') : null; // a walk drawn by SpriteCook: a strip of frames
   const h = tune.hdWorkerH * (role === 'noah' ? 1.06 : 1) * (o.scale || 1);
   if (!o.sit) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(x, y, 9, 4, 0, 0, Math.PI * 2); ctx.fill(); }
   const ph = o.walkT || 0, legs = o.moving && tune.walkAnim, step = o.moving && !legs ? Math.abs(Math.sin(ph * 9)) * 2 : 0, tilt = o.moving && !legs ? Math.sin(ph * 9) * 0.05 : o.work ? Math.sin((o.t || 0) * 9) * 0.03 : 0;
@@ -687,10 +710,20 @@ function drawPerson(role, seed, x, y, o = {}) { // one of the realistic people, 
   ctx.restore(); return true;
 }
 // where each building sprite's front corner sits across its width (0..1): over a half, the art is longer along c; it is mirrored when the footprint runs the other way
-const PX_FOOT = { hA0: 0.48, hA1: 0.52, hA2: 0.52, hA3: 0.43, hB0: 0.73, hB1: 0.71, hB2: 0.72, hB3: 0.71, church: 0.42, hall: 0.69, school: 0.55, market: 0.62, shed: 0.38, brick: 0.31, silos: 0.67, tower: 0.49, containers: 0.49, workshop: 0.53, lot: 0.40, station: 0.56, site0: 0.49, site1: 0.45, site2: 0.57, site3: 0.46, site4: 0.40, car0: 0.43, car1: 0.32, car2: 0.44, van: 0.38, office: 0.31, hedge: 0.49, shelf0: 0.28, shelf1: 0.28, shelf2: 0.28, forklift: 0.16, pil0: 0.50, pil1: 0.50, pil2: 0.51, desk: 0.69, rack1: 0.54, rack2: 0.51, rack3: 0.54, power: 0.42, bridge: 0.66, fountain: 0.50, barn: 0.39, tunnel: 0.19, stadium: 0.59, loco: 0.80, boxcar: 0.75, flatcar: 0.77, crane: 0.26, worksite: 0.46, bench: 0.53, substation: 0.53, plant: 0.47, desk_free: 0.69, desk_sit0: 0.69, desk_sit1: 0.69 };
-function drawBld(name, c, r, w, h, fit = 1) { // a building sprite standing on its footprint, its front corner on the footprint's front corner; false when it is not there
+const PX_FOOT = { hA0: 0.48, hA1: 0.52, hA2: 0.52, hA3: 0.43, hB0: 0.73, hB1: 0.71, hB2: 0.72, hB3: 0.71, church: 0.42, hall: 0.69, school: 0.55, market: 0.62, shed: 0.38, brick: 0.31, silos: 0.67, tower: 0.49, containers: 0.49, workshop: 0.53, lot: 0.40, station: 0.56, site0: 0.49, site1: 0.45, site2: 0.57, site3: 0.46, site4: 0.40, car0: 0.43, car1: 0.32, car2: 0.44, van: 0.38, office: 0.31, hedge: 0.49, shelf0: 0.28, shelf1: 0.28, shelf2: 0.28, forklift: 0.16, pil0: 0.50, pil1: 0.50, pil2: 0.51, desk: 0.69, rack1: 0.54, rack2: 0.51, rack3: 0.54, power: 0.42, staffroom: 0.59, pz_next: 0.50, pz_empty: 0.50, pz_build: 0.50, bridge: 0.66, fountain: 0.50, barn: 0.39, tunnel: 0.19, stadium: 0.59, loco: 0.80, boxcar: 0.75, flatcar: 0.77, crane: 0.26, worksite: 0.46, bench: 0.53, substation: 0.53, plant: 0.47, desk_free: 0.69, desk_sit0: 0.69, desk_sit1: 0.69 };
+const PX_DIAM = { pz_next: [4, 104, 143.6, 182, 284, 104], pz_empty: [4, 95, 127.3, 163, 251, 94], pz_build: [4, 107, 148.7, 186, 294, 106], staffroom: [3, 153, 119, 206, 236, 157] }; // ground corners of a flat plot sprite: left, front, right (image pixels)
+function drawPlot(name, c, r, w = 1, h = 1, mirror = false) { // a sprite laid exactly on its footprint: its left, front and right ground corners pinned to the footprint's, so it follows the grid instead of leaning
+  const im = hdImg(name + '.png'), D0 = PX_DIAM[name]; if (!im || !D0) return false;
+  const W = im.naturalWidth, D = mirror ? [W - D0[4], D0[5], W - D0[2], D0[3], W - D0[0], D0[1]] : D0;
+  const [lx, ly, bx, by, rx, ry] = D, L = iso(c, r + h), B = iso(c + w, r + h), R = iso(c + w, r);
+  const ux = bx - lx, uy = by - ly, vx = rx - bx, vy = ry - by, det = ux * vy - uy * vx; // sprite edges
+  const Ax = B[0] - L[0], Ay = B[1] - L[1], Bx = R[0] - B[0], By = R[1] - B[1]; // the same edges on screen
+  const a = (Ax * vy - Bx * uy) / det, cc = (Bx * ux - Ax * vx) / det, b = (Ay * vy - By * uy) / det, d = (By * ux - Ay * vx) / det;
+  ctx.save(); ctx.transform(a, b, cc, d, L[0] - a * lx - cc * ly, L[1] - b * lx - d * ly); ctx.imageSmoothingEnabled = true; if (mirror) { ctx.translate(W, 0); ctx.scale(-1, 1); } ctx.drawImage(im, 0, 0); ctx.restore(); return true;
+}
+function drawBld(name, c, r, w, h, fit = 1, mirror = false) { // a building sprite standing on its footprint, its front corner on the footprint's front corner; false when it is not there
   const im = hdImg(name + '.png'); if (!im) return false;
-  let f = PX_FOOT[name] ?? 0.5; const want = w / (w + h), flip = Math.abs(f - 0.5) > 0.04 && Math.abs(want - 0.5) > 0.04 && (f - 0.5) * (want - 0.5) < 0;
+  let f = PX_FOOT[name] ?? 0.5; const want = w / (w + h), flip = mirror || (Math.abs(f - 0.5) > 0.04 && Math.abs(want - 0.5) > 0.04 && (f - 0.5) * (want - 0.5) < 0);
   if (flip) f = 1 - f;
   const dw = (w + h) * TW / 2 * fit, dh = im.naturalHeight * dw / im.naturalWidth, [bx, by] = iso(c + w, r + h);
   ctx.save(); ctx.translate(bx, by + 1); if (flip) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = Math.abs(ctx.getTransform().a) * dw / im.naturalWidth < 1;
@@ -1072,6 +1105,7 @@ function shiftStartFor(b) { // everyone walks in from the street to their place;
   const floorNear = (x, y) => { const keep = F; F = b; const ok = walkable(Math.floor(x), Math.floor(y)), to = ok ? [x, y] : (walkCells().sort((a, q) => Math.hypot(a[0] + 0.5 - x, a[1] + 0.5 - y) - Math.hypot(q[0] + 0.5 - x, q[1] + 0.5 - y))[0] || [x, y]).map((v, i) => ok ? v : v + 0.5); F = keep; return to; };
   for (const [id, w] of Object.entries(b.haul || {})) { w.hidden = true; [w.c, w.r] = floorNear(w.c, w.r); add(MAG_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; const keep = F; F = b; if (w.task) routeTo(w, w.carry ? w.task.to : w.task.from); else w.path = []; F = keep; }, id); } // back at work: the way to the job is worked out again from where they arrive
   for (const [id, w] of Object.entries(b.itw || {})) { w.hidden = true; [w.c, w.r] = floorNear(w.c, w.r); add(IT_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }, id); }
+  for (const [id, w] of Object.entries(b.idlew || {})) { w.hidden = true; w.path = []; [w.c, w.r] = floorNear(w.c, w.r); add(OP_PAL, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }, 'crew' + id); }
   b.workers.forEach((w, i) => { w.hidden = true; add(null, [w.c, w.r], k => { w.hidden = false; w.c = k.x; w.r = k.y; }, i); });
 }
 function shiftEndFor(b) { // the machines stop, everyone walks to the door and out to the street
@@ -1080,6 +1114,7 @@ function shiftEndFor(b) { // the machines stop, everyone walks to the door and o
   for (const m of b.machines) if (m.op) { m.present = false; add(OP_PAL, opSpot(m), m.id); }
   for (const [id, w] of Object.entries(b.haul || {})) { w.hidden = true; add(MAG_PAL, [w.c, w.r], id); }
   for (const [id, w] of Object.entries(b.itw || {})) { w.hidden = true; add(IT_PAL, [w.c, w.r], id); }
+  for (const [id, w] of Object.entries(b.idlew || {})) { w.hidden = true; add(OP_PAL, [w.c, w.r], 'crew' + id); }
   b.workers.forEach((w, i) => { w.hidden = true; add(null, [w.c, w.r], i); });
 }
 function updateCommute(b, dt) {
@@ -1391,7 +1426,7 @@ function hireOne(b) { // a new person on a monthly wage, who joins the site you 
   if (state.crew.length >= staffRoom()) return toast('Tutte le sedi sono al completo: compra una sede più grande per assumere ancora', '#ffb35b');
   state.hired = (state.hired || 0) + 1; crewSync();
   const cw = state.crew[state.crew.length - 1]; if (b && crewOf(b).length < staffCap(b) && cw.b !== b.id) cw.b = b.id;
-  sfx.ding(); save(); toast(`${cw.name} assunto: ${fmt(wage())} monete al mese`, '#7ef0a0');
+  sfx.ding(); save(); toast(`${cw.name} ${FEMALE_NAMES.has(cw.name) ? 'assunta' : 'assunto'}: ${fmt(wage())} monete al mese`, '#7ef0a0');
 }
 function fireOne(b) { // the last hired person goes, preferably one with nothing to do
   const pool = state.crew.filter(c => c.hired); if (!pool.length) return;
@@ -1556,6 +1591,23 @@ function updateIT(dt) { // IT staff wander: a machine to check its link, now and
     routeTo(w, tgt); w.going = kind; w.check = null;
   }
 }
+function updateIdle(dt) { // people here with no machine to run (more operators than machines, or free): they stroll the hall and stop for a while, so everyone in the site is on screen
+  const mine = state.crew.filter(cw => crewB(cw) === F && (cw.job === 'none' || (cw.job === 'mach' && cw.m == null))); F.idlew = F.idlew || {};
+  for (const id of Object.keys(F.idlew)) if (!mine.some(cw => String(cw.id) === id)) delete F.idlew[id];
+  for (const cw of mine) {
+    let w = F.idlew[cw.id];
+    if (!w) { const cells = walkCells(), p = cells[Math.floor(rng() * cells.length)] || [0, 0]; w = F.idlew[cw.id] = { c: p[0] + 0.5, r: p[1] + 0.5, path: [], dir: 1, walkT: 0, wait: rng() * tune.idleWaitMax }; }
+    if (w.hidden) continue;
+    if (w.path.length) {
+      const [tc, tr] = w.path[0], dx = tc - w.c, dy = tr - w.r, d = Math.hypot(dx, dy), sp = tune.idleSpeed * dt;
+      if (d <= sp) { w.c = tc; w.r = tr; w.path.shift(); } else { w.c += dx / d * sp; w.r += dy / d * sp; }
+      const sx = dx - dy; if (Math.abs(sx) > 0.01) w.dir = sx > 0 ? 1 : -1; w.walkT += dt; continue;
+    }
+    if (w.wait > 0) { w.wait -= dt; continue; }
+    const cells = walkCells(); if (!cells.length) { w.wait = 2; continue; }
+    const p = cells[Math.floor(rng() * cells.length)]; routeTo(w, { c: p[0], r: p[1] }); w.wait = tune.idleWaitMin + rng() * (tune.idleWaitMax - tune.idleWaitMin);
+  }
+}
 function updateFactory(dt) {
   for (const o of Object.values(F.grid)) {
     if (o.kind === 'src') { o.stock = o.stock || []; o.t -= dt; if (o.t <= 0) { if (o.stock.length < tune.stockCap) { if (whTake(F, o.mat || 'acc')) o.stock.push(newItem(o.mat || 'acc')); else warnEmpty(F, o.mat || 'acc'); } o.t = spawnGapE(); } }
@@ -1571,7 +1623,7 @@ function updateFactory(dt) {
     }
   }
   updateHaulers(dt);
-  updateIT(dt);
+  updateIT(dt); updateIdle(dt);
 }
 function sell(it, crate) {
   const mat = it.mat || 'acc', rec = recipeOf(it.ops, mat), q = it.qs.length ? avg(it.qs) : 0, key = pieceKey(it.ops, mat);
@@ -1709,8 +1761,8 @@ function perkIcon(n, x, y, s = 1) { // a drawn icon for each kind of node
   else if (n.icon === 'truck') { rrect(-16, -6, 20, 12, 2, '#a7b0b8', '#2b2b2b', 1); rrect(4, -3, 10, 9, 2, '#2f7fb0', '#2b2b2b', 1); ctx.fillStyle = '#1b1b1b'; ctx.fillRect(-12, 6, 5, 4); ctx.fillRect(6, 6, 5, 4); bolt(-6, -14, '#ffe08a'); }
   else if (n.icon === 'shelf') { for (const yy of [-10, -2, 6]) { rrect(-14, yy, 28, 3, 1, '#8a949c'); rrect(-11, yy - 4, 22, 4, 1, '#a7b0b8'); } rrect(-15, -12, 3, 24, 1, '#e07a2e'); rrect(12, -12, 3, 24, 1, '#e07a2e'); }
   else if (n.icon === 'bench') { rrect(-14, -2, 28, 6, 2, '#4a525a'); for (let i = 0; i < 3; i++) rrect(-11, -9 + i * 2, 22, 2, 1, '#a7b0b8'); bolt(12, -10, '#ffe08a'); }
-  else if (n.icon === 'mag' || n.icon === 'cart') { sprite('walk0', -2, 14, 1.6, false, MAG_PAL); if (n.icon === 'cart') { rrect(4, 4, 14, 7, 1, '#e07a2e', '#2b2b2b', 1); ctx.fillStyle = '#1b1b1b'; ctx.fillRect(6, 11, 3, 3); ctx.fillRect(13, 11, 3, 3); } else bolt(12, -10, '#ffe08a'); }
-  else if (n.icon === 'net') { sprite('walk0', -6, 14, 1.6, false, IT_PAL); rrect(4, -12, 12, 24, 2, '#262c33', '#5bc7ff', 1); ctx.fillStyle = '#4fdc7a'; for (let k = 0; k < 4; k++) ctx.fillRect(7, -9 + k * 5, 2, 2); }
+  else if (n.icon === 'mag' || n.icon === 'cart') { if (!personIcon('mag', 0, -2, 16, 32)) sprite('walk0', -2, 14, 1.6, false, MAG_PAL); if (n.icon === 'cart') { rrect(4, 4, 14, 7, 1, '#e07a2e', '#2b2b2b', 1); ctx.fillStyle = '#1b1b1b'; ctx.fillRect(6, 11, 3, 3); ctx.fillRect(13, 11, 3, 3); } else bolt(12, -10, '#ffe08a'); }
+  else if (n.icon === 'net') { if (!personIcon('it', 0, -6, 16, 32)) sprite('walk0', -6, 14, 1.6, false, IT_PAL); rrect(4, -12, 12, 24, 2, '#262c33', '#5bc7ff', 1); ctx.fillStyle = '#4fdc7a'; for (let k = 0; k < 4; k++) ctx.fillRect(7, -9 + k * 5, 2, 2); }
   else if (n.icon === 'care' || n.icon === 'care2') { toolIcon('W', 0, -2, 0.7); if (n.icon === 'care2') star(12, -10, 7, '#ffe08a'); }
   else if (n.icon === 'age') { ctx.beginPath(); ctx.ellipse(0, 0, 12, 12, 0, 0, Math.PI * 2); ctx.fillStyle = '#f4f1e6'; ctx.fill(); ctx.strokeStyle = '#2b2410'; ctx.lineWidth = 2; ctx.stroke(); line([0, 0], [0, -8], '#2b2410', 2); line([0, 0], [6, 2], '#2b2410', 2); }
   ctx.restore();
@@ -2415,6 +2467,7 @@ function pzBuy(b, k) {
 function pzTick() { // a section under construction is finished when its time is up
   for (const b of state.buildings) { const P = pzOf(b); if (P.building && state.t >= P.building.until) { P.built++; P.building = null; showBanner(`Centrale di ${b.name}: sezione ${P.built} accesa!`, `+${pzKw(b)} kW · ora la corrente arriva a ${powerCap(b)} kW`, '#f2c230'); events.push({ type: 'pz', b: b.id, n: P.built }); save(); } }
 }
+const PZ_SIGNS = []; // the power-plot sign is drawn after everything else, so the staff annex never hides it
 function drawPzCell(o, t) { // locked: a fenced building site; being built: scaffolding; built: a transformer with its fence and warning sign
   const b = F, P = pzOf(b), k = o.k, c = o.c, r = o.r, built = k < P.built, building = P.building && P.building.k === k, open = state.level >= pzLvl(k);
   if (built && hdImg('power.png')) { poly(qT(c + 0.04, r + 0.04, c + 0.96, r + 0.96, 0.5), '#a9adb0', '#7d8287', 1); drawBld('power', c + 0.12, r + 0.12, 0.76, 0.76); const l = iso(c + 0.5, r + 0.5, 50); ctx.fillStyle = Math.sin(t * 4 + k) > 0 ? '#7ef0a0' : '#2f6b44'; ctx.beginPath(); ctx.arc(l[0], l[1], 3, 0, Math.PI * 2); ctx.fill(); }
@@ -2425,6 +2478,8 @@ function drawPzCell(o, t) { // locked: a fenced building site; being built: scaf
     box(c + 0.32, r + 0.34, c + 0.4, r + 0.42, 34, 50, '#d9d2c3'); box(c + 0.6, r + 0.34, c + 0.68, r + 0.42, 34, 50, '#d9d2c3');
     const s = iso(c + 0.5, r + 0.82, 22); poly([[s[0], s[1] - 8], [s[0] - 7, s[1] + 5], [s[0] + 7, s[1] + 5]], '#f2c230', '#2b2b2b', 1); textW('⚡', s[0], s[1] + 1, 7, '#2b2b2b');
     const l = iso(c + 0.5, r + 0.5, 56); ctx.fillStyle = Math.sin(t * 4 + k) > 0 ? '#7ef0a0' : '#2f6b44'; ctx.beginPath(); ctx.arc(l[0], l[1], 3, 0, Math.PI * 2); ctx.fill();
+  } else if (hdImg('pz_next.png')) { // SpriteCook building plots: the next section with bricks and cones, a later one bare, one under way with scaffolding
+    drawPlot(building ? 'pz_build' : k > P.built ? 'pz_empty' : 'pz_next', c, r);
   } else {
     poly(qT(c + 0.04, r + 0.04, c + 0.96, r + 0.96, 0.5), tex('dirt') || '#8f7a5c', '#6b5a43', 1); // dirt
     if (building) { // scaffolding rising with the work done
@@ -2436,9 +2491,12 @@ function drawPzCell(o, t) { // locked: a fenced building site; being built: scaf
     for (const [a, z] of [[[c + 0.05, r + 0.95], [c + 0.95, r + 0.95]], [[c + 0.95, r + 0.05], [c + 0.95, r + 0.95]]]) { // red-white barrier on the front edges
       for (let i = 0; i < 4; i++) { const u0 = i / 4, u1 = (i + 1) / 4, A = [a[0] + (z[0] - a[0]) * u0, a[1] + (z[1] - a[1]) * u0], B = [a[0] + (z[0] - a[0]) * u1, a[1] + (z[1] - a[1]) * u1]; line(iso(A[0], A[1], 10), iso(B[0], B[1], 10), i % 2 ? '#d8433a' : '#f4f4f4', 3); }
     }
-    if (o.first && (building || k === P.built)) { const sg = iso(c + 0.5, r + 0.5, 30); /* one sign, on the section you can build next */ const lab = building ? `cantiere ${Math.round(100 * (1 - Math.max(0, (P.building.until - state.t) / (tune.pzDays * tune.dayLength))))}%` : open ? 'tocca: costruisci' : `dal liv. ${pzLvl(k)}`; ctx.font = `bold 8px ${FONT}`; const w = ctx.measureText(lab).width + 10; rrect(sg[0] - w / 2, sg[1] - 8, w, 15, 3, building ? '#c99a1a' : open ? '#2f7f4a' : '#5a4632', '#fff', 1); textW(lab, sg[0], sg[1], 8, '#fff'); }
+  }
+  if (!built) {
+    if (o.first && (building || k === P.built)) PZ_SIGNS.push(() => { const sg = iso(c + 0.5, r + 0.5, 30); /* one sign, on the section you can build next */ const lab = building ? `centrale in costruzione ${Math.round(100 * (1 - Math.max(0, (P.building.until - state.t) / (tune.pzDays * tune.dayLength))))}%` : open ? 'centrale elettrica: tocca' : `dal liv. ${pzLvl(k)}`; ctx.font = `bold 8px ${FONT}`; const w = ctx.measureText(lab).width + 10; rrect(sg[0] - w / 2, sg[1] - 8, w, 15, 3, building ? '#c99a1a' : open ? '#2f7f4a' : '#5a4632', '#fff', 1); textW(lab, sg[0], sg[1], 8, '#fff'); });
   }
 }
+
 function drawPowerPanel(t) {
   const b = F, P = pzOf(b), n = pzSections(b);
   const PP = panelFrame(`Centrale elettrica · ${b.name}`, 900, 560, () => { state.panel = null; });
@@ -2586,7 +2644,7 @@ function schemaIcon(x, y) { // three boxes joined by arrows: the flow diagram
 function toolbarIcon(id, x, y) {
   ctx.save(); ctx.translate(x, y);
   if (id === 'op') {
-    ctx.restore(); sprite('work', x, y + 20, 3, false, OP_PAL); ctx.save(); ctx.translate(x, y); ctx.restore(); return;
+    ctx.restore(); if (!personIcon('mach', 0, x, y + 24, 50)) sprite('work', x, y + 20, 3, false, OP_PAL); ctx.save(); ctx.translate(x, y); ctx.restore(); return;
   } else { // sledgehammer
     ctx.rotate(-0.6); rrect(-3, -6, 6, 30, 2, '#a7773c', '#5a3c1c', 1.5);
     rrect(-14, -18, 28, 14, 3, '#7d878f', '#3a4148', 2); ctx.fillStyle = '#d8433a'; ctx.fillRect(-14, -18, 5, 14);
@@ -2644,7 +2702,7 @@ function drawBottomBar(t) {
   let x = 120;
   if (!town) { // working on the floor: the five panels first, then the demolish tool
     const nd = jobNeeds(F).length, low = whTotal(F) < whCap(F) * tune.autoBelow && !onOrder(F);
-    [['crew', 'Squadra', 'Q', (cx, cy) => { sprite('walk0', cx - 18, cy + 18, 2, false, OP_PAL); sprite('walk0', cx, cy + 18, 2, false, MAG_PAL); sprite('walk0', cx + 18, cy + 18, 2, false, IT_PAL); }, nd ? '!' : ''],
+    [['crew', 'Squadra', 'Q', (cx, cy) => { if (!personIcon('mag', 1, cx - 18, cy + 20, 38, true) || !personIcon('it', 0, cx + 18, cy + 20, 38) || !personIcon('mach', 0, cx, cy + 22, 40)) { sprite('walk0', cx - 18, cy + 18, 2, false, OP_PAL); sprite('walk0', cx, cy + 18, 2, false, MAG_PAL); sprite('walk0', cx + 18, cy + 18, 2, false, IT_PAL); } }, nd ? '!' : ''],
      ['office', 'Ufficio', 'U', (cx, cy) => officeIcon(cx, cy), low ? '!' : jobsOf().offers.some(o => !o.locked) && !jobsOf().seen ? String(jobsOf().offers.filter(o => !o.locked).length) : ''],
      ['recipes', 'Ricette', 'R', (cx, cy) => { rrect(cx - 17, cy - 20, 34, 38, 4, '#b0543c', '#5a2a1e', 2); rrect(cx - 13, cy - 17, 26, 32, 2, '#f4f1e8'); ctx.fillStyle = '#5a2a1e'; for (let k = 0; k < 4; k++) ctx.fillRect(cx - 9, cy - 11 + k * 6, 18, 2); }, ''],
      ['skills', 'Abilità', 'K', (cx, cy) => perkIcon({ icon: 'core' }, cx, cy - 2, 1.1), perksToBuy() ? String(state.tokens) : '']].forEach(([id, lab, k, ic, badge]) => {
@@ -2852,7 +2910,7 @@ function drawCrew(t) { // the crew, site by site: tabs for every site, a job for
     const k = i % per, col = k % 2, row = Math.floor(k / 2), x = P.x + 24 + col * 530, y = P.y + 196 + row * 64;
     const J = JOBS[cw.job];
     rrect(x, y, 514, 56, 10, HT().card, cw.job === 'none' ? '#59626b' : '#f2c230', 2);
-    sprite(cw.job === 'mach' ? 'work' : 'walk0', x + 30, y + 50, 2.6, false, J.pal());
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 4, y + 2, 50, 52); ctx.clip(); const okP = personIcon(jobRole(cw.job), crewSeed(cw), x + 30, y + 72, 66); ctx.restore(); if (!okP) sprite(cw.job === 'mach' ? 'work' : 'walk0', x + 30, y + 50, 2.6, false, J.pal()); /* head and chest, like a badge photo */
     text(cw.name, x + 58, y + 28, 17, '#fff', 'left');
     button(J.short, x + 150, y + 8, 150, 40, () => cycleJob(cw), { color: cw.job === 'mach' ? '#e07a2e' : cw.job === 'mag' ? '#7ed08a' : cw.job === 'it' ? '#5bc7ff' : cw.job === 'tech' ? '#b38be0' : '#9aa4ad', size: 15, name: 'job' + cw.id });
     const right = others.length ? 400 : 506;
@@ -2872,7 +2930,7 @@ function drawCrew(t) { // the crew, site by site: tabs for every site, a job for
     JOB_ORDER.forEach((j, i) => {
       const x = px + 16 + i * 174, y = py + 58, on = jp.job === j, n = list.filter(cw => cw.job === j).length, open = jobOpen(j);
       rrect(x, y, 166, 150, 12, on ? COL[j] : open ? HT().card : 'rgba(0,0,0,0.3)', open ? COL[j] : '#59626b', on ? 3 : 2);
-      ctx.globalAlpha = open ? 1 : 0.4; sprite(j === 'mach' ? 'work' : 'walk0', x + 83, y + 62, 3, false, JOBS[j].pal()); ctx.globalAlpha = 1;
+      ctx.globalAlpha = open ? 1 : 0.4; if (!personIcon(jobRole(j), 0, x + 83, y + 70, 58)) sprite(j === 'mach' ? 'work' : 'walk0', x + 83, y + 62, 3, false, JOBS[j].pal()); ctx.globalAlpha = 1;
       text(JOBS[j].short, x + 83, y + 84, 16, on ? '#1b1b1b' : open ? '#fff' : '#7d8790');
       text(open ? DESC[j] : `si sblocca al livello ${tune.techLvl}`, x + 83, y + 108, 10, on ? '#2b2410' : open ? '#cfd6dd' : '#ffb35b');
       if (open) text(`qui: ${n}`, x + 83, y + 132, 12, on ? '#2b2410' : '#ffe08a');
@@ -3660,7 +3718,7 @@ function drawNarrator(t, msg, quiet) { // ChiefTech Noah, bottom left: his advic
   if (fresh && !quiet && !state.guideHidden) { state.guideSeen = msg; state.noahOpenUntil = now + tune.guideFullSec; } // something new: open it whole
   const open = now < (state.noahOpenUntil || 0), unseen = fresh; // a new tip not read yet while closed: the ! bubble
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x, y + 2, 22, 5, 0, 0, Math.PI * 2); ctx.fill();
-  if (!drawPerson('noah', 0, x, y, { flip: true, scale: 1.3, pose: open && Math.sin(t * 2.5) > 0.3 ? 1 : 0 })) sprite(open && Math.sin(t * 2.5) > 0.3 ? 'noahPoint' : 'noahTab', x, y, 4, false, NOAH_PAL);
+  if (!drawPerson('noah', 'portrait', x, y, { flip: true, fixed: true, scale: 1.3, pose: open && Math.sin(t * 2.5) > 0.3 ? 1 : 0 })) sprite(open && Math.sin(t * 2.5) > 0.3 ? 'noahPoint' : 'noahTab', x, y, 4, false, NOAH_PAL);
   if (open && Math.sin(t * 3) > 0) { ctx.fillStyle = '#7ef0a0'; ctx.fillRect(x + 22, y - 26, 3, 2); } // the tablet blinks
   btn(x - 34, y - 72, 68, 76, () => { if (open) state.noahOpenUntil = 0; else { state.noahOpenUntil = clock.now() + tune.guideFullSec; state.guideSeen = msg; state.guideHidden = false; } sfx.click(); }, 'guide'); // tap Noah: open or close
   if (!open) { // closed: a small bubble, ! when he has something new
@@ -4376,7 +4434,28 @@ const INTRO_KEYS = [ // time share, where the camera looks, zoom, caption
   [0.9, HOME.c + 2, HOME.r + 2.6, 3.2, ''],
   [1, HOME.c + 2, HOME.r + 2.8, 4.2, ''],
 ];
-function drawTitleArt(t) { // the main menu, cartoon style: a sunny sky, hills, a colourful factory puffing smoke, a truck, Noah welcoming you
+function drawTitleArt(t) { // the main menu: the town and the inside of a factory, taken from the game itself, fading into each other with a slow pan; the logo and Noah on top
+  const A = hdImg('menu_town.jpg'), B = hdImg('menu_factory.jpg');
+  if (!A || !B) return drawTitleCartoon(t);
+  const per = tune.menuSlide, u = (t % (2 * per)) / per, first = u < 1, k = first ? u : u - 1; // which view, and how far through it
+  const view = (im, f, alpha) => { const z = 1.04 + 0.06 * f, w = W * z, h = H * z; ctx.globalAlpha = alpha; ctx.drawImage(im, (W - w) / 2 + (f - 0.5) * 40, (H - h) / 2 - (f - 0.5) * 18, w, h); ctx.globalAlpha = 1; };
+  const fade = Math.max(0, (k - 0.85) / 0.15); // the last moments cross into the other view
+  view(first ? A : B, k, 1); if (fade > 0) view(first ? B : A, 0, fade);
+  // darker top and bottom so the logo and the buttons read on the picture
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(14,18,30,0.78)'); g.addColorStop(0.42, 'rgba(14,18,30,0.25)'); g.addColorStop(0.7, 'rgba(14,18,30,0.15)'); g.addColorStop(1, 'rgba(14,18,30,0.8)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  { const lab = (fade > 0.5 ? !first : first) ? 'La città' : 'Dentro la fabbrica'; rrect(W - 236, H - 132, 212, 34, 17, 'rgba(14,18,30,0.7)', '#f2c230', 2); text(lab, W - 130, H - 115, 16, '#ffe6a0'); }
+  const bob = Math.sin(t * 1.6) * 3;
+  const word = (s, y, size, fill) => { ctx.save(); ctx.translate(W / 2, y + bob); ctx.font = `900 ${size}px "Arial Black", "Trebuchet MS", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillText(s, 0, 7); ctx.lineWidth = size * 0.15; ctx.strokeStyle = '#141a2e'; ctx.strokeText(s, 0, 0); ctx.fillStyle = fill; ctx.fillText(s, 0, 0); ctx.restore(); };
+  word('WORKLINE', 92, 78, '#ffffff'); word('FACTORY', 172, 96, '#ffc93c');
+  rrect(W / 2 - 170, 226 + bob, 340, 34, 17, 'rgba(20,26,46,0.9)', '#f2c230', 2); text('costruisci la tua fabbrica CNC', W / 2, 244 + bob, 16, '#ffe6a0');
+  const nx = 150, ny = 650; ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(nx, ny, 60, 12, 0, 0, Math.PI * 2); ctx.fill();
+  if (!drawPerson('noah', 'menu', nx, ny, { flip: true, fixed: true, scale: 3.0, pose: Math.sin(t * 2.2) > 0 ? 1 : 0 })) sprite(Math.sin(t * 2.2) > 0 ? 'noahPoint' : 'noahTab', nx, ny, 11, false, NOAH_PAL);
+  const bx = 60, by = 330; rrect(bx, by, 290, 84, 16, '#ffffff', '#23284a', 3); poly([[bx + 70, by + 84], [bx + 92, by + 110], [bx + 108, by + 84]], '#ffffff', '#23284a', 3); ctx.fillStyle = '#fff'; ctx.fillRect(bx + 72, by + 79, 34, 8);
+  text('Ciao, sono Noah!', bx + 145, by + 28, 19, '#23284a'); text('Benvenuto in Workline Factory', bx + 145, by + 56, 14, '#3a5a8a');
+}
+function drawTitleCartoon(t) { // the old cartoon menu, kept for when the menu pictures are missing: a sunny sky, hills, a colourful factory puffing smoke, a truck, Noah welcoming you
   const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#4fbdf5'); sky.addColorStop(0.55, '#9fdcfa'); sky.addColorStop(1, '#ffe09e');
   ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
   const circle = (x, y, r, col) => { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill(); };
@@ -4424,7 +4503,7 @@ function drawTitleArt(t) { // the main menu, cartoon style: a sunny sky, hills, 
   rrect(W / 2 - 170, 236 + bob, 340, 34, 17, '#23284a'); text('costruisci la tua fabbrica CNC', W / 2, 254 + bob, 16, '#ffe6a0');
   // Noah welcoming you, bottom left
   const nx = 170, ny = 640; ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(nx, ny, 70, 14, 0, 0, Math.PI * 2); ctx.fill();
-  if (!drawPerson('noah', 0, nx, ny, { flip: true, scale: 3.2, pose: Math.sin(t * 2.2) > 0 ? 1 : 0 })) sprite(Math.sin(t * 2.2) > 0 ? 'noahPoint' : 'noahTab', nx, ny, 11, false, NOAH_PAL);
+  if (!drawPerson('noah', 'menu', nx, ny, { flip: true, fixed: true, scale: 3.2, pose: Math.sin(t * 2.2) > 0 ? 1 : 0 })) sprite(Math.sin(t * 2.2) > 0 ? 'noahPoint' : 'noahTab', nx, ny, 11, false, NOAH_PAL);
   const bx = 70, by = 300; rrect(bx, by, 300, 92, 18, '#ffffff', '#23284a', 4); poly([[bx + 80, by + 92], [bx + 104, by + 120], [bx + 120, by + 92]], '#ffffff', '#23284a', 4); ctx.fillStyle = '#fff'; ctx.fillRect(bx + 82, by + 86, 36, 8);
   text('Ciao, sono Noah!', bx + 150, by + 30, 20, '#23284a'); text('Benvenuto in Workline Factory', bx + 150, by + 60, 15, '#3a5a8a');
 }
@@ -4517,7 +4596,7 @@ function drawWorld(t) {
     else if (o.kind === 'pillar') objs.push({ d, f: () => drawPillar(o.c, o.r) });
     else if (o.kind === 'office') objs.push({ d, f: () => drawOffice(o.c, o.r, t) });
     else if (o.kind === 'pz') objs.push({ d, f: () => drawPzCell(o, t) });
-    else if (o.kind === 'entry' && o.i === 0) { const cs = cells.filter(x => x.kind === 'entry'); objs.push({ d: Math.max(...cs.map(x => x.c + x.r)) + 1, f: () => drawStaffRoom(cs, t) }); }
+    else if (o.kind === 'entry' && o.i === 0) { const cs = cells.filter(x => x.kind === 'entry'); objs.push({ d: Math.max(...cs.map(x => x.c + x.r)) + 1, f: () => { const c0 = Math.min(...cs.map(x => x.c)), r0 = Math.min(...cs.map(x => x.r)), c1 = Math.max(...cs.map(x => x.c)) + 1, r1 = Math.max(...cs.map(x => x.r)) + 1; if (!drawPlot('staffroom', c0, r0, c1 - c0, r1 - r0, cs[0].side === 'right')) drawStaffRoom(cs, t); } }); /* the staff entrance: a SpriteCook brick annex, its door toward the street */ }
     else if (o.kind === 'mach' && o.main) {
       const m = o.m, moving = state.placing && state.placing.m === m, [fw, fh] = fpOf(m), mo = { mk: m.mk, dir: m.dir };
       objs.push({ d: m.c + m.r + fw + fh - 1, f: () => {
@@ -4553,6 +4632,10 @@ function drawWorld(t) {
     if (!drawPerson('tech', wid, p[0], p[1], { flip: w.dir > 0, moving: !!w.path.length, walkT: w.walkT, work: !w.path.length, t })) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4); sprite(w.path.length ? (step ? 'walk1' : 'walk0') : (Math.sin(t * 7) > 0 ? 'work' : 'walk0'), p[0], p[1] - step, 2, w.dir < 0, TECH_PAL); }
     if (!w.path.length) { ctx.save(); ctx.translate(p[0] + 12, p[1] - 40); ctx.rotate(Math.sin(t * 6) * 0.4); toolIcon('W', 0, 0, 0.45); ctx.restore(); }
   } });
+  for (const [wid, w] of Object.entries(F.idlew || {})) if (atWork && !w.hidden) objs.push({ d: w.c + w.r + 0.01, f: () => { // the people with no machine just now
+    const p = iso(w.c, w.r, 0), cw = state.crew.find(x => String(x.id) === wid), role = cw && cw.job !== 'none' ? cw.job : 'mach';
+    if (!drawPerson(role, 'crew' + wid, p[0], p[1], { flip: w.dir > 0, moving: !!w.path.length, walkT: w.walkT })) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 9, p[1] - 2, 18, 4); sprite('walk0', p[0], p[1], 2, w.dir < 0, OP_PAL); }
+  } });
   for (const [wid, w] of Object.entries(F.haul || {})) if (atWork && !w.hidden) objs.push({ d: w.c + w.r + 0.01, f: () => {
     const p = iso(w.c, w.r, 0), step = w.path.length ? Math.floor(w.walkT * 6) % 2 : 0;
     const hd = drawPerson('mag', wid, p[0], p[1], { flip: w.dir > 0, moving: !!w.path.length, walkT: w.walkT });
@@ -4566,7 +4649,9 @@ function drawWorld(t) {
       const gw = P.kind === 'mach' ? fpDims(P.m ? P.m.mk : P.mk, P.dir, P.m ? P.m.type : P.type) : [1, 1]; objs.push({ d: h[0] + h[1] + gw[0] + gw[1] - 0.5, f: () => drawGhost(P, h[0], h[1], t) });
     }
   }
+  PZ_SIGNS.length = 0;
   objs.sort((a, b) => a.d - b.d).forEach(o => o.f());
+  PZ_SIGNS.forEach(f => f());
   ctx.restore();
 }
 function drawOverlaysWorld(t) {
@@ -4887,14 +4972,14 @@ function officeDecor(O, t) { // around the desks: carpet tiles, plants, a water 
 const CLERK_PALS = [{ Y: '#6b4527', y: '#4a2f1d', B: '#e8eef4', b: '#9fb0c4', O: '#2f7fb0' }, { Y: '#e8c070', y: '#b89040', B: '#c0392b', b: '#8a2a20', O: '#ffffff' }, { Y: '#2b2b2b', y: '#1b1b1b', B: '#7ed08a', b: '#4a8a5a', O: '#ffffff' }];
 function drawStatusStrip(needs) { // under the clock, one strip for this site: crew, bars on the shelves, power; each part opens what it is about
   const x = 262, y = 58, w = 544, h = 32, T = HT();
-  if (!F) { rrect(x, y, 270, h, 10, T.panel, T.edge, 2); sprite('walk0', x + 20, y + 27, 1.4, false, OP_PAL); text(`Squadra ${state.crew.length}`, x + 150, y + 16, 15, '#ffe8d0'); btn(x, y, 270, h, () => { sfx.click(); openPanel('crew'); }, 'crewChip'); return; }
+  if (!F) { rrect(x, y, 270, h, 10, T.panel, T.edge, 2); if (!personIcon('mach', 0, x + 20, y + 30, 28)) sprite('walk0', x + 20, y + 27, 1.4, false, OP_PAL); text(`Squadra ${state.crew.length}`, x + 150, y + 16, 15, '#ffe8d0'); btn(x, y, 270, h, () => { sfx.click(); openPanel('crew'); }, 'crewChip'); return; }
   const miss = needs.length > 0, wh = whOf(F), cap = whCap(F), tot = whTotal(F), low = tot < cap * tune.autoBelow, ord = onOrder(F);
   const used = powerUsed(F), pcap = powerCap(F), pk = Math.min(1, used / Math.max(1, pcap)), hot = pk > 0.9;
   rrect(x, y, w, h, 10, T.panel, miss || low || hot ? '#ff8a7a' : T.edge, 2);
   const seg = [168, 200, 176], sx = [x, x + seg[0], x + seg[0] + seg[1]];
   ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(sx[1], y + 6, 2, h - 12); ctx.fillRect(sx[2], y + 6, 2, h - 12);
   // crew
-  sprite('walk0', sx[0] + 18, y + 28, 1.4, false, OP_PAL);
+  if (!personIcon('mach', 0, sx[0] + 18, y + 30, 28)) sprite('walk0', sx[0] + 18, y + 28, 1.4, false, OP_PAL);
   text(miss ? 'Manca un lavoro' : `Squadra ${crewOf(F).length}/${staffCap(F)}`, sx[0] + (miss ? 88 : 96), y + 16, miss ? 14 : 15, miss ? '#ffb3a8' : '#ffe8d0');
   if (miss) { rrect(sx[0] + seg[0] - 20, y + 8, 16, 16, 8, '#d8433a', '#fff', 1.5); text('!', sx[0] + seg[0] - 12, y + 16, 11, '#fff'); }
   btn(sx[0], y, seg[0], h, () => { sfx.click(); openPanel('crew'); }, 'crewChip');
@@ -5458,12 +5543,13 @@ const scenes = {
     },
     draw() {
       ui = { buttons: [], named: {} };
+      if (!PX_FILES.done) { PX_FILES.done = true; preloadPx(); }
       drawTitleArt(clock.now());
       const sv = hasSave();
       button(sv ? 'Continua' : 'Gioca', W / 2 - 150, 300, 300, 74, () => startGame(true), { size: 30, color: '#7ef0a0', name: 'play' });
       if (sv) button(confirmNew ? 'Sicuro? Tocca ancora' : 'Nuova partita (N)', W / 2 - 130, 388, 260, 50, () => startGame(false), { size: 18, color: '#ffffff', name: 'new' });
       button('Partita di prova: tutto sbloccato', W - 330, H - 70, 310, 50, startSandbox, { size: 15, color: '#5bc7ff', name: 'sandbox' }); // its own save: the real game is not touched
-      text(sv ? 'Invio: continua' : 'Invio o tocca per iniziare', W / 2, 708, 15, '#7a4b2a');
+      text(sv ? 'Invio: continua' : 'Invio o tocca per iniziare', W / 2, 708, 15, '#e8dcc0');
     },
   },
   play: {
