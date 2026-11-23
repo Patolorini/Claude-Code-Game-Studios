@@ -240,6 +240,14 @@ window.CONFIG = {
   hdWorkerH: { value: 50, min: 24, max: 80, step: 1 },       // altezza degli operatori 3D sullo schermo
   hdTreeH: { value: 78, min: 30, max: 140, step: 1 },        // altezza degli alberi 3D
   hdTexCells: { value: 2, min: 1, max: 8, step: 1 },
+  facesPerJob: { value: 2, min: 1, max: 4, step: 1 },
+  sitC: { value: 0.36, min: 0, max: 1, step: 0.01 },         // dove sta la sedia di chi lavora al pc, lungo la colonna della scrivania
+  sitR: { value: 0.78, min: 0, max: 1, step: 0.01 },         // e lungo la riga
+  sitH: { value: 0.74, min: 0.4, max: 1.4, step: 0.01 },     // altezza di chi è seduto rispetto a chi è in piedi        // facce diverse per mestiere (2 hanno la camminata animata)
+  walkFps: { value: 9, min: 4, max: 16, step: 1 },          // velocità dei fotogrammi della camminata
+  walkAnim: { value: 1, min: 0, max: 1, step: 1 },           // camminata con le gambe che si muovono (1) o dondolio (0)
+  walkSwing: { value: 0.32, min: 0.05, max: 0.7, step: 0.01 }, // quanto oscillano le gambe a ogni passo
+  walkHip: { value: 0.44, min: 0.3, max: 0.6, step: 0.01 },   // altezza dei fianchi rispetto al personaggio
   texInside: { value: 0.75, min: 0.25, max: 3, step: 0.05 },   // scala delle texture del terreno intorno alla fabbrica rispetto alla città         // caselle coperte da una ripetizione di pavimento e prato
   pixelInside: { value: 1, min: 1, max: 5, step: 1 },        // grandezza del pixel dentro la fabbrica (1 = nitido)
   pixelTown: { value: 2, min: 1, max: 5, step: 1 },          // grandezza del pixel nella vista della città

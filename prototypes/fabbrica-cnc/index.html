@@ -646,18 +646,44 @@ function drawHdSprite(im, x, y, h, flip, footFrac = 1) { // stands the image on 
 const PEOPLE = { mach: 'op', mag: 'mag', it: 'it', tech: 'tech', build: 'build', clerk: 'clerk', noah: 'noah' }; // the sprite files for each job: four faces each (Noah: standing, pointing)
 const idSeed = v => { let h = 7; for (const ch of String(v)) h = (h * 31 + ch.charCodeAt(0)) | 0; return h >>> 0; }; // the same person always gets the same face
 function palRole(pal) { return pal === OP_PAL ? 'mach' : pal === MAG_PAL ? 'mag' : pal === IT_PAL ? 'it' : pal === TECH_PAL ? 'tech' : pal === NOAH_PAL ? 'noah' : 'build'; }
+function legGap(im) { // the column (0..1 across the sprite) of the gap between the two legs, found once per sprite; the middle when it cannot be read
+  if (im._gap != null) return im._gap;
+  im._gap = 0.5;
+  try {
+    const W = im.naturalWidth, H = im.naturalHeight, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+    const y0 = Math.floor(H * 0.78), y1 = Math.floor(H * 0.94), d = g.getImageData(0, y0, W, y1 - y0).data, col = new Array(W).fill(0);
+    for (let y = 0; y < y1 - y0; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 100) col[x]++;
+    const xs = col.map((v, x) => v ? x : -1).filter(x => x >= 0); if (xs.length) { const a = xs[0], b = xs[xs.length - 1]; let best = (a + b) / 2, bv = 1e9; for (let x = Math.floor(a + (b - a) * 0.25); x <= a + (b - a) * 0.75; x++) if (col[x] < bv) { bv = col[x]; best = x; } im._gap = best / W; }
+  } catch (e) { /* a tainted canvas (opened from disk): keep the middle */ }
+  return im._gap;
+}
 function drawPerson(role, seed, x, y, o = {}) { // one of the realistic people, standing on (x, y): o.flip faces right, o.moving/o.walkT walk, o.work sways, o.sit shows them from the waist up behind a desk; false when the sprite is not there
   const pre = PEOPLE[role]; if (!pre) return false;
-  const im = hdImg(pre + (role === 'noah' ? (o.pose || 0) : idSeed(seed) % 4) + '.png'); if (!im) return false;
+  const face = role === 'noah' ? 0 : idSeed(seed) % tune.facesPerJob, key = pre + (role === 'noah' ? (o.pose || 0) : face);
+  const im = hdImg(key + '.png'); if (!im) return false;
+  const wk = o.moving && !o.sit ? hdImg('walk_' + pre + face + '.png') : null; // a walk drawn by SpriteCook: a strip of frames
   const h = tune.hdWorkerH * (role === 'noah' ? 1.06 : 1) * (o.scale || 1);
   if (!o.sit) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(x, y, 9, 4, 0, 0, Math.PI * 2); ctx.fill(); }
-  const ph = o.walkT || 0, step = o.moving ? Math.abs(Math.sin(ph * 9)) * 2 : 0, tilt = o.moving ? Math.sin(ph * 9) * 0.05 : o.work ? Math.sin((o.t || 0) * 9) * 0.03 : 0;
+  const ph = o.walkT || 0, legs = o.moving && tune.walkAnim, step = o.moving && !legs ? Math.abs(Math.sin(ph * 9)) * 2 : 0, tilt = o.moving && !legs ? Math.sin(ph * 9) * 0.05 : o.work ? Math.sin((o.t || 0) * 9) * 0.03 : 0;
   ctx.save(); ctx.translate(x, y - step); ctx.rotate(tilt);
   if (o.sit) { ctx.beginPath(); ctx.rect(-40, -h - 4, 80, h * 0.6 + 4); ctx.clip(); ctx.translate(0, h * 0.38); }
-  drawHdSprite(im, 0, 0, h, !!o.flip); ctx.restore(); return true;
+  if (wk) { // the walk frames, played as the person moves
+    const n = 8, fwid = wk.naturalWidth / n, k = Math.floor(ph * tune.walkFps) % n, dwid = fwid * h / wk.naturalHeight;
+    ctx.save(); if (o.flip) ctx.scale(-1, 1); ctx.imageSmoothingEnabled = Math.abs(ctx.getTransform().a) * h / wk.naturalHeight < 1; ctx.drawImage(wk, k * fwid, 0, fwid, wk.naturalHeight, -dwid / 2, -h, dwid, h); ctx.restore();
+  } else if (o.moving && !o.sit && tune.walkAnim) { // no frames: the legs swing in turn about the hips, the body rides on them
+    const hip = -h * tune.walkHip, sw = Math.sin(ph * 9) * tune.walkSwing, w = im.naturalWidth * h / im.naturalHeight;
+    const gx = (o.flip ? 0.5 - legGap(im) : legGap(im) - 0.5) * w; // where the gap between the legs is, in the sprite as drawn
+    for (const side of sw > 0 ? [1, -1] : [-1, 1]) { // each leg: its part of the sprite below the hips, sheared from the hip so the foot swings forward or back; the leg going back is drawn first
+      ctx.save(); ctx.transform(1, 0, sw * side, 1, -sw * side * hip, 0);
+      ctx.beginPath(); ctx.rect(side < 0 ? -w : gx, hip, side < 0 ? w + gx : w, -hip + 2); ctx.clip(); // clipped in the leg's own frame, so the whole leg moves
+      drawHdSprite(im, 0, 0, h, !!o.flip); ctx.restore();
+    }
+    ctx.save(); ctx.beginPath(); ctx.rect(-w, -h - 4, 2 * w, h + 4 + hip + 1); ctx.clip(); ctx.translate(0, -Math.abs(Math.sin(ph * 9)) * 1.2); drawHdSprite(im, 0, 0, h, !!o.flip); ctx.restore(); // the body, a little up on each step
+  } else drawHdSprite(im, 0, 0, h, !!o.flip);
+  ctx.restore(); return true;
 }
 // where each building sprite's front corner sits across its width (0..1): over a half, the art is longer along c; it is mirrored when the footprint runs the other way
-const PX_FOOT = { hA0: 0.48, hA1: 0.52, hA2: 0.52, hA3: 0.43, hB0: 0.73, hB1: 0.71, hB2: 0.72, hB3: 0.71, church: 0.42, hall: 0.69, school: 0.55, market: 0.62, shed: 0.38, brick: 0.31, silos: 0.67, tower: 0.49, containers: 0.49, workshop: 0.53, lot: 0.40, station: 0.56, site0: 0.49, site1: 0.45, site2: 0.57, site3: 0.46, site4: 0.40, car0: 0.43, car1: 0.32, car2: 0.44, van: 0.38, office: 0.31, hedge: 0.49, shelf0: 0.28, shelf1: 0.28, shelf2: 0.28, forklift: 0.16, pil0: 0.50, pil1: 0.50, pil2: 0.51, desk: 0.69, rack1: 0.54, rack2: 0.51, rack3: 0.54, power: 0.42, bridge: 0.66, fountain: 0.50, barn: 0.39, tunnel: 0.19, stadium: 0.59, loco: 0.80, boxcar: 0.75, flatcar: 0.77, crane: 0.26, worksite: 0.46, bench: 0.53, substation: 0.53 };
+const PX_FOOT = { hA0: 0.48, hA1: 0.52, hA2: 0.52, hA3: 0.43, hB0: 0.73, hB1: 0.71, hB2: 0.72, hB3: 0.71, church: 0.42, hall: 0.69, school: 0.55, market: 0.62, shed: 0.38, brick: 0.31, silos: 0.67, tower: 0.49, containers: 0.49, workshop: 0.53, lot: 0.40, station: 0.56, site0: 0.49, site1: 0.45, site2: 0.57, site3: 0.46, site4: 0.40, car0: 0.43, car1: 0.32, car2: 0.44, van: 0.38, office: 0.31, hedge: 0.49, shelf0: 0.28, shelf1: 0.28, shelf2: 0.28, forklift: 0.16, pil0: 0.50, pil1: 0.50, pil2: 0.51, desk: 0.69, rack1: 0.54, rack2: 0.51, rack3: 0.54, power: 0.42, bridge: 0.66, fountain: 0.50, barn: 0.39, tunnel: 0.19, stadium: 0.59, loco: 0.80, boxcar: 0.75, flatcar: 0.77, crane: 0.26, worksite: 0.46, bench: 0.53, substation: 0.53, plant: 0.47 };
 function drawBld(name, c, r, w, h, fit = 1) { // a building sprite standing on its footprint, its front corner on the footprint's front corner; false when it is not there
   const im = hdImg(name + '.png'); if (!im) return false;
   let f = PX_FOOT[name] ?? 0.5; const want = w / (w + h), flip = Math.abs(f - 0.5) > 0.04 && Math.abs(want - 0.5) > 0.04 && (f - 0.5) * (want - 0.5) < 0;
@@ -885,6 +911,7 @@ function surroundings() { // worked out once per site: ground colour of every ce
     const kindOf = ik > 0.55 ? ['shed', 'containers', 'workshop', 'shed', 'lot', 'silos'][roll] : ik > 0.25 ? ['workshop', 'brick', 'trees', 'house', 'containers', 'trees'][roll] : ['house', 'house', 'trees', 'house2', 'trees', 'house'][roll];
     lots.push({ c, r, w, h: hh, k: kindOf, s: h });
   }
+  { const near = o => o.c < bb.c1 + 7 && o.r < bb.r1 + 7 && (o.r + o.h > bb.r1 - 0.5 || o.c + o.w > bb.c1 - 0.5); for (let i = lots.length - 1; i >= 0; i--) if (lots[i].k !== 'trees' && near(lots[i]) && lots[i].c + lots[i].w > bb.c0 - 4 && lots[i].r + lots[i].h > bb.r0 - 4) lots[i].k = 'trees'; } // in front of the factory only trees: a building there is drawn under the factory and looks buried
   const built = lots.filter(o => o.k !== 'trees'), clearOf = (x, y, list, back, front) => !list.some(o => x > o.c - back && x < o.c + o.w + front && y > o.r - back && y < o.r + o.h + front); // the sprites reach over their lots: keep trees off the walls and out from behind the roofs
   const trees = cells.filter(([c, r, , k]) => k === 'land' && !taken.has(K(c, r)) && hash(c + 77, r + 33) % 9 === 0).map(([c, r]) => [c + 0.5, r + 0.5]).filter(([x, y]) => clearOf(x, y, built, 2.2, 0.9));
   const railR = fromTown(0, RAIL_R)[1], railC = [fromTown(RAIL_W - 0.4, 0)[0], fromTown(RAIL_E() + 1.5, 0)[0]];
@@ -913,11 +940,15 @@ function drawGround() { // the ground round the factory (like the map, but close
     for (let c = c0; c < c1; c += 0.3) poly(qT(c, r - 0.36, c + 0.12, r + 0.36, 0.3), '#4e3824');
     for (const d of [-0.2, 0.2]) { line(iso(c0, r + d, 0.8), iso(c1, r + d, 0.8), '#3a3c40', 2.5); line(iso(c0, r + d, 1.2), iso(c1, r + d, 1.2), '#c4c8cc', 1); }
   }
-  poly(qT(bb.c0 - 0.6, bb.r0 - 0.6, bb.c1 + 0.6, bb.r1 + 0.6, 0.1), tex('pave') || '#8a8478', 'rgba(60,56,50,0.6)', 1);
+  if (!tex('grass')) poly(qT(bb.c0 - 0.6, bb.r0 - 0.6, bb.c1 + 0.6, bb.r1 + 0.6, 0.1), '#8a8478', 'rgba(60,56,50,0.6)', 1); // textured: the surroundings' concrete runs right up to the walls
   if (!A) return;
   const sw = F.swap, cb = sw ? { c0: bb.r0, c1: bb.r1, r0: bb.c0, r1: bb.c1 } : bb, qT2 = (c0, r0, c1, r1, z) => sw ? qT(r0, c0, r1, c1, z) : qT(c0, r0, c1, r1, z), iso2 = (c, r, z) => sw ? iso(r, c, z) : iso(c, r, z);
   const Y = yardOf(F), lane0 = cb.r0 - 3, lane1 = cb.r1 + 3, rx = Y.lane - 0.85;
-  poly(qT2(rx - 0.12, lane0, rx + 1.82, lane1, 0.2), '#8f8370'); poly(qT2(rx, lane0, rx + 1.7, lane1, 0.3), tex('asphalt') || '#a89c86');
+  if (tex('asphalt')) { // the lorry lane is a street like the others: pavements, asphalt, and at both ends it runs on to the nearest street of the town
+    const toCell = (c, r) => sw ? [r, c] : [c, r], L = townLayout(), K = tune.backdropScale, mid = rx + 0.85, band = (a, b, R, fill) => { const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.3)); for (let i = 0; i <= n; i++) blobPx(a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n, R, fill); };
+    const ends = [toCell(mid, lane0), toCell(mid, lane1)], links = ends.map(e => { let best = null; for (const st of L.streets) for (const q of st.pts) { const p = fromTown(q[0], q[1]), d = Math.hypot(p[0] - e[0], p[1] - e[1]); if (!best || d < best.d) best = { d, p }; } return best && best.d < 30 ? [e, best.p] : null; });
+    for (const [R, fill] of [[1.07, tex('pave')], [0.85, tex('asphalt')]]) { band(ends[0], ends[1], R, fill); for (const l of links) if (l) band(l[0], l[1], R, fill); }
+  } else { poly(qT2(rx - 0.12, lane0, rx + 1.82, lane1, 0.2), '#8f8370'); poly(qT2(rx, lane0, rx + 1.7, lane1, 0.3), '#a89c86'); }
   if (!tex('asphalt')) for (let r = lane0; r < lane1; r += 0.5) for (let c = rx + 0.1; c < rx + 1.6; c += 0.5) if (hash(Math.round(c * 4), Math.round(r * 4)) % 3 === 0) poly(qT2(c, r, c + 0.35, r + 0.3, 0.35), 'rgba(80,66,50,0.25)'); // cobbles
   poly(qT2(Y.c0, Y.r0 - 0.15, Y.c1 + 0.2, Y.r1 + 0.15, 0.32), '#a8a49a');
   poly(qT2(Y.c0, Y.r0, Y.c1 + 0.2, Y.r1, 0.36), '#55524e');
@@ -1084,6 +1115,7 @@ function updateClerks(b, dt) {
 }
 function drawClerk(k, t) {
   const p = iso(k.x, k.y, k.mode === 'sit' ? 6 : 0), pal = CLERK_PALS[k.pal % CLERK_PALS.length];
+  if (k.mode === 'sit' && hdOn()) { const im = hdImg('sit' + (idSeed(k.pal) % tune.facesPerJob) + '.png'); if (im) { const q = iso(k.desk.c + tune.sitC, k.desk.r + tune.sitR, 0), ty = Math.sin(t * 9 + k.pal) > 0 ? 0.6 : 0; drawHdSprite(im, q[0], q[1] - ty, tune.hdWorkerH * tune.sitH, false); return; } } // seated at the desk, seen from behind, typing
   if (drawPerson('clerk', k.pal, p[0], p[1], { flip: k.mode === 'sit' ? false : k.dir > 0, moving: k.mode === 'walk', walkT: k.walkT, sit: k.mode === 'sit', work: k.mode === 'sit', t })) { if (k.mode === 'sit' && Math.sin(t * 9 + k.pal) > 0) { const q = iso(k.desk.c + 0.55, k.desk.r + 0.42, 29); ctx.fillStyle = 'rgba(126,240,160,0.85)'; ctx.fillRect(q[0] - 1, q[1], 3, 1); } return; }
   if (k.mode !== 'sit') { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(p[0] - 8, p[1] - 2, 16, 4); }
   if (k.mode === 'sit') {
@@ -2346,17 +2378,17 @@ function drawPzCell(o, t) { // locked: a fenced building site; being built: scaf
     const s = iso(c + 0.5, r + 0.82, 22); poly([[s[0], s[1] - 8], [s[0] - 7, s[1] + 5], [s[0] + 7, s[1] + 5]], '#f2c230', '#2b2b2b', 1); textW('⚡', s[0], s[1] + 1, 7, '#2b2b2b');
     const l = iso(c + 0.5, r + 0.5, 56); ctx.fillStyle = Math.sin(t * 4 + k) > 0 ? '#7ef0a0' : '#2f6b44'; ctx.beginPath(); ctx.arc(l[0], l[1], 3, 0, Math.PI * 2); ctx.fill();
   } else {
-    poly(qT(c + 0.04, r + 0.04, c + 0.96, r + 0.96, 0.5), '#8f7a5c', '#6b5a43', 1); // dirt
+    poly(qT(c + 0.04, r + 0.04, c + 0.96, r + 0.96, 0.5), tex('dirt') || '#8f7a5c', '#6b5a43', 1); // dirt
     if (building) { // scaffolding rising with the work done
       const f = 1 - Math.max(0, (P.building.until - state.t) / (tune.pzDays * tune.dayLength)), h = 8 + 40 * f;
       box(c + 0.25, r + 0.25, c + 0.75, r + 0.75, 0, h * 0.6, '#9aa4ad');
       for (const [x, y] of [[0.2, 0.2], [0.8, 0.2], [0.2, 0.8], [0.8, 0.8]]) line(iso(c + x, r + y, 0), iso(c + x, r + y, h), '#c99a1a', 2);
       line(iso(c + 0.2, r + 0.2, h), iso(c + 0.8, r + 0.2, h), '#c99a1a', 2); line(iso(c + 0.2, r + 0.8, h), iso(c + 0.8, r + 0.8, h), '#c99a1a', 2);
-    } else { box(c + 0.3, r + 0.35, c + 0.55, r + 0.6, 0, 8, '#b9a27a'); const cone = iso(c + 0.72, r + 0.3, 0); poly([[cone[0], cone[1] - 12], [cone[0] - 4, cone[1]], [cone[0] + 4, cone[1]]], '#f28a2e', '#2b2b2b', 1); }
+    } else if (k > P.built) { /* a later section: bare ground behind the fence, no clutter */ } else { box(c + 0.3, r + 0.35, c + 0.55, r + 0.6, 0, 8, '#b9a27a'); const cone = iso(c + 0.72, r + 0.3, 0); poly([[cone[0], cone[1] - 12], [cone[0] - 4, cone[1]], [cone[0] + 4, cone[1]]], '#f28a2e', '#2b2b2b', 1); }
     for (const [a, z] of [[[c + 0.05, r + 0.95], [c + 0.95, r + 0.95]], [[c + 0.95, r + 0.05], [c + 0.95, r + 0.95]]]) { // red-white barrier on the front edges
       for (let i = 0; i < 4; i++) { const u0 = i / 4, u1 = (i + 1) / 4, A = [a[0] + (z[0] - a[0]) * u0, a[1] + (z[1] - a[1]) * u0], B = [a[0] + (z[0] - a[0]) * u1, a[1] + (z[1] - a[1]) * u1]; line(iso(A[0], A[1], 10), iso(B[0], B[1], 10), i % 2 ? '#d8433a' : '#f4f4f4', 3); }
     }
-    if (o.first) { const sg = iso(c + 0.5, r + 0.5, 30); const lab = building ? `cantiere ${Math.round(100 * (1 - Math.max(0, (P.building.until - state.t) / (tune.pzDays * tune.dayLength))))}%` : open ? 'tocca: costruisci' : `dal liv. ${pzLvl(k)}`; ctx.font = `bold 8px ${FONT}`; const w = ctx.measureText(lab).width + 10; rrect(sg[0] - w / 2, sg[1] - 8, w, 15, 3, building ? '#c99a1a' : open ? '#2f7f4a' : '#5a4632', '#fff', 1); textW(lab, sg[0], sg[1], 8, '#fff'); }
+    if (o.first && (building || k === P.built)) { const sg = iso(c + 0.5, r + 0.5, 30); /* one sign, on the section you can build next */ const lab = building ? `cantiere ${Math.round(100 * (1 - Math.max(0, (P.building.until - state.t) / (tune.pzDays * tune.dayLength))))}%` : open ? 'tocca: costruisci' : `dal liv. ${pzLvl(k)}`; ctx.font = `bold 8px ${FONT}`; const w = ctx.measureText(lab).width + 10; rrect(sg[0] - w / 2, sg[1] - 8, w, 15, 3, building ? '#c99a1a' : open ? '#2f7f4a' : '#5a4632', '#fff', 1); textW(lab, sg[0], sg[1], 8, '#fff'); }
   }
 }
 function drawPowerPanel(t) {
@@ -4757,7 +4789,7 @@ function drawShelf(o, t) { // a metal shelving unit; its bar bundles show how fu
 }
 function drawOffice(col, row, t) { // a modern open-plan workstation: white bench desk on steel legs, two monitors, a mesh chair, a low screen, a plant
   const c = col + 0.5, r = row + 0.5, h = hash(col * 7 + 3, row * 5 + 1), wood = ['#d8c4a0', '#e8e4dc', '#c8a878'][h % 3];
-  if (drawBld('desk', col + 0.04, row + 0.06, 0.92, 0.88)) return;
+  if (drawBld('desk', col + 0.17, row + 0.06, 0.66, 0.56)) return; // the back of the cell: room to walk in front of the row and between desks
   box(c - 0.44, r - 0.46, c + 0.44, r - 0.4, 0, 22, '#7d8a96'); poly(qT(c - 0.44, r - 0.46, c + 0.44, r - 0.4, 22), '#5bc7ff'); // acoustic screen with an accent top
   for (const [dc, dr] of [[-0.4, -0.36], [0.36, -0.36], [-0.4, 0.06], [0.36, 0.06]]) box(c + dc, r + dr, c + dc + 0.04, r + dr + 0.04, 0, 17, '#9aa4ad'); // steel legs
   box(c - 0.42, r - 0.38, c + 0.42, r + 0.12, 17, 19, wood); // desk top
@@ -4783,6 +4815,8 @@ function drawOffice(col, row, t) { // a modern open-plan workstation: white benc
 }
 function officeDecor(O, t) { // around the desks: carpet tiles, plants, a water cooler, a printer, a whiteboard and a clock on the wall, a meeting corner
   const out = [], put = (d, f) => out.push({ d, f });
+  if (hdOn() && hdImg('plant.png')) { const pl = (c, r) => put(c + r, () => drawBld('plant', c - 0.2, r - 0.2, 0.4, 0.4)); pl(O.c0 + 0.3, O.r0 + 0.35); pl(O.c1 - 0.3, O.r0 + 0.35); if (O.aisle !== 'c') pl(O.c0 + 0.3, O.r1 - 0.3); return out; } // pixel plants inside the glass, away from the walls
+  if (hdOn()) return out;
   const plant = (c, r, big) => { box(c - 0.12, r - 0.12, c + 0.12, r + 0.12, 0, 9, '#e8e4dc'); for (let i = 0; i < 6; i++) { const a = i * 1.05, p = iso(c + Math.cos(a) * 0.06, r + Math.sin(a) * 0.06, 9 + (big ? 14 : 8)); ctx.beginPath(); ctx.ellipse(p[0], p[1] + 4, big ? 7 : 5, big ? 9 : 6, a, 0, Math.PI * 2); ctx.fillStyle = ['#3b8040', '#4caf6a', '#2f6b34'][i % 3]; ctx.fill(); } };
   const T = O.aisle === 'c'; // a side-wing office: plants, cooler and printer stand along its aisle column instead of its aisle row
   put(O.c0 + O.r0 + 0.6, () => plant(O.c0 + 0.22, O.r0 + 0.3, true)); // a big plant by the wall
@@ -4790,7 +4824,7 @@ function officeDecor(O, t) { // around the desks: carpet tiles, plants, a water 
   put(O.c1 + O.r0 - 0.3, () => plant(O.c1 - 0.2, O.r0 + 0.25, false));
   if (O.c1 - O.c0 >= 2) put(O.c0 + 1.2 + O.r0 + 0.4, () => { const c = O.c0 + 1.25, r = O.r0 + 0.3; box(c - 0.1, r - 0.1, c + 0.1, r + 0.1, 0, 18, '#e8e8e8'); const p = iso(c, r, 26); ctx.beginPath(); ctx.ellipse(p[0], p[1], 5, 6, 0, 0, Math.PI * 2); ctx.fillStyle = 'rgba(120,190,240,0.85)'; ctx.fill(); ctx.strokeStyle = '#2f7fb0'; ctx.stroke(); }); // water cooler
   if (O.c1 - O.c0 >= 3) put(O.c0 + 2.3 + O.r0 + 0.4, () => { const c = O.c0 + 2.3, r = O.r0 + 0.3; box(c - 0.2, r - 0.14, c + 0.2, r + 0.14, 0, 16, '#d6dade'); box(c - 0.18, r - 0.12, c + 0.18, r + 0.04, 16, 19, '#5d6366'); poly(qL(c - 0.15, c + 0.15, r + 0.14, 6, 9), '#f4f1e6'); }); // printer
-  if (!F.swap) put(O.c0 + O.r0 + 0.05, () => { // whiteboard and clock on the side wall
+  if (!F.swap && !hdOn()) put(O.c0 + O.r0 + 0.05, () => { // whiteboard and clock on the side wall
     const r0 = O.r0 + 0.25, r1 = Math.min(O.r1 - 0.25, r0 + 1.2), q = qR(O.c0 + 0.02, r0, r1, 18, 34);
     poly(q, '#f8f8f6', '#9aa4ad', 1.5);
     for (let i = 0; i < 6; i++) { const u = (i % 3 + 0.5) / 3.2, z = 22 + Math.floor(i / 3) * 6, rr = r0 + (r1 - r0) * u; box(O.c0 + 0.02, rr - 0.06, O.c0 + 0.03, rr + 0.06, z, z + 4, ['#f2c230', '#ff8a7a', '#7ef0a0', '#5bc7ff', '#f2c230', '#c49bff'][i]); }

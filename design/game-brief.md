@@ -107,6 +107,9 @@ After play: (screenshot) togliere gli alberi dentro le piccole fabbriche nei din
 After play: (foto) la strada passa nell'acqua sotto il ponte: ispirarsi alle città reali; nella piazza la strada delle auto passa in mezzo alla fontana e le altre stradine si bloccano senza senso; rifare il treno con una galleria vera
 After play: (immagine di una pianta di città vista dall'alto) riproporre la stessa disposizione con i modelli disegnati; scelta: prima un'anteprima, poi eventualmente nel gioco
 After play: la galleria non piace: prolungare i binari fino alla fine della mappa; creare diversi quartieri come quello dell'anteprima, variando un po' la disposizione
+After play: (screenshot) bug dei container che rimangono sotto; bug della board negli uffici; negli uffici non c'è spazio per passare tra una scrivania e l'altra; animazione di camminata per gli operatori
+After play: (screenshot) la strada del magazzino non si unisce bene al resto; togliere la pavimentazione a quadratini grigi più piccoli sotto la fabbrica e continuare con quella dei dintorni; ancora roba buggata sotto gli uffici; piante in ufficio buggate nella parete e diverse dal resto; rifare la camminata di tutti con SpriteCook (sembravano zoppi). Scelta: 2 facce per mestiere con camminata animata
+After play: nei personaggi c'è qualche bug visivo; fare anche il retro così si possono girare e camminare guardando nella direzione giusta; quando si siedono al pc il corpo sparisce e si vede solo la testa
 
 **Pitch:** Costruisci la tua fabbrica CNC pezzo per pezzo: monti le macchine, le cabli in rete, le configuri con tre minigiochi, poi le metti in fila nell'ordine giusto per sfornare i pezzi che rendono di più.
 
